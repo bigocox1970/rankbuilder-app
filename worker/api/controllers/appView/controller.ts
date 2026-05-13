@@ -26,7 +26,7 @@ export class AppViewController extends BaseController {
             }
             
             // Try to get user if authenticated (optional for public endpoint)
-            const user = await AppViewController.getOptionalUser(request, env);
+            const user = context.user ?? await AppViewController.getOptionalUser(request, env);
             const userId = user?.id;
 
             // Get app details with stats using app service

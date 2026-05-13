@@ -372,9 +372,9 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     
     protected async saveToDatabase() {
         this.logger().info(`Saving agent ${this.getAgentId()} to database`);
-        // Save the app to database (authenticated users only)
+        // Upsert so this is idempotent when the controller already pre-registered the record.
         const appService = new AppService(this.env);
-        await appService.createApp({
+        await appService.upsertApp({
             id: this.state.metadata.agentId,
             userId: this.state.metadata.userId,
             sessionToken: null,
@@ -385,8 +385,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             framework: this.state.blueprint.frameworks.join(','),
             visibility: 'private',
             status: 'generating',
-                createdAt: new Date(),
-            updatedAt: new Date()
+            createdAt: new Date(),
+            updatedAt: new Date(),
             });
         this.logger().info(`App saved successfully to database for agent ${this.state.metadata.agentId}`, { 
             agentId: this.state.metadata.agentId, 

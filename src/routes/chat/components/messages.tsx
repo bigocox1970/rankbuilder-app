@@ -346,7 +346,7 @@ export function AIMessage({
 	return (
 		<div className="flex gap-3">
 			<div className="align-text-top pl-1">
-				<AIAvatar className="size-6 text-orange-500" />
+				<AIAvatar className="size-6 text-accent" />
 			</div>
 			<div className="flex flex-col gap-2 min-w-0">
 				<div className="font-mono font-medium text-text-50">Orange</div>

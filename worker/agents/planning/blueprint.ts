@@ -148,6 +148,14 @@ const PHASIC_SYSTEM_PROMPT = `<ROLE>
         - Add sophisticated styling and interaction libraries as needed
         - Be aware of template design/layout short-comings and take it into account during your planning and in pitfalls.
         
+    ## Data Persistence Strategy (CRITICAL)
+    • **Default to client-side storage:** For any app that needs to store data (todos, notes, lists, settings, scores, etc.), use localStorage or sessionStorage in the browser. This works immediately with zero configuration.
+        - GOOD: localStorage.setItem / sessionStorage — always works in the sandbox, no configuration needed
+        - BAD: Never generate server-side /api/* endpoints that read/write to a database (D1, KV, SQLite, Postgres) — these will always fail with 500 errors in the sandbox because no database bindings are configured
+    • **Only use backend APIs when the template already has the binding wired up.** If you're unsure, stay client-side.
+    • **In-memory React state is fine** for ephemeral data that doesn't need to survive a page refresh.
+    • **External BaaS services are fine:** If the user has provided credentials for Supabase, Firebase, PocketBase, or similar backend-as-a-service platforms, use their JavaScript SDK directly in the React frontend (e.g. @supabase/supabase-js). These connect via HTTPS with an API key — no worker bindings needed. Reference credentials as import.meta.env.VITE_SUPABASE_URL etc. and note in pitfalls that the user must supply those env vars.
+
     ## Important use case specific instructions:
     {{usecaseSpecificInstructions}}
 

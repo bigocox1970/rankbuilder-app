@@ -61,10 +61,10 @@ export function ViewModeSwitch({
 				<button
 					onClick={() => onChange('preview')}
 					className={clsx(
-						'p-1 flex items-center justify-between h-full rounded-md transition-colors',
+						'p-1.5 flex items-center justify-center rounded-md transition-all duration-200',
 						view === 'preview' || view === 'presentation'
-							? 'bg-bg-4 text-text-primary'
-							: 'text-text-50/70 hover:text-text-primary hover:bg-accent',
+							? 'bg-bg-4 text-accent'
+							: 'text-text-primary/40 hover:text-accent hover:bg-bg-4/60',
 					)}
 					title={featureDefinition?.name ?? 'Preview'}
 				>
@@ -75,10 +75,10 @@ export function ViewModeSwitch({
 			<button
 				onClick={() => onChange('editor')}
 				className={clsx(
-					'p-1 flex items-center justify-between h-full rounded-md transition-colors',
+					'p-1.5 flex items-center justify-center rounded-md transition-all duration-200',
 					view === 'editor'
-						? 'bg-bg-4 text-text-primary'
-						: 'text-text-50/70 hover:text-text-primary hover:bg-accent',
+						? 'bg-bg-4 text-accent'
+						: 'text-text-primary/40 hover:text-accent hover:bg-bg-4/60',
 				)}
 				title="Code"
 			>
@@ -90,10 +90,10 @@ export function ViewModeSwitch({
 				<button
 					onClick={() => onChange('docs')}
 					className={clsx(
-						'p-1 flex items-center justify-between h-full rounded-md transition-colors',
+						'p-1.5 flex items-center justify-center rounded-md transition-all duration-200',
 						view === 'docs'
-							? 'bg-bg-4 text-text-primary'
-							: 'text-text-50/70 hover:text-text-primary hover:bg-accent',
+							? 'bg-bg-4 text-accent'
+							: 'text-text-primary/40 hover:text-accent hover:bg-bg-4/60',
 					)}
 					title="Docs"
 				>

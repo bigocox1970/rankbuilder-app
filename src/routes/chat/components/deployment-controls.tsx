@@ -173,7 +173,7 @@ export function DeploymentControls({
 					subtitle: "It's Free! Deploys to Cloudflare Workers for Platform",
 					buttonDisabled: false,
 					buttonVariant: "primary" as const,
-					buttonClass: "bg-accent text-white border-orange-500 dark:border-orange-600 hover:scale-105"
+					buttonClass: "bg-accent text-black border-accent/60 hover:scale-105"
 				};
 			
 			case DeploymentState.DEPLOYING:
@@ -215,8 +215,8 @@ export function DeploymentControls({
 					subtitle: "Error in deployment, please try again",
 					buttonDisabled: !isPhase1Complete,
 					buttonVariant: "primary" as const,
-					buttonClass: isPhase1Complete 
-						? "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 text-white border-orange-500 dark:border-orange-600 hover:scale-105"
+					buttonClass: isPhase1Complete
+						? "bg-accent hover:opacity-90 text-black border-accent/60 hover:scale-105"
 						: "bg-bg-3 dark:bg-bg-3 text-text-tertiary dark:text-text-tertiary border-muted dark:border-muted cursor-not-allowed"
 				};
 			

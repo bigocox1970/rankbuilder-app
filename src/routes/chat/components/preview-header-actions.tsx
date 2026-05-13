@@ -10,6 +10,7 @@ interface PreviewHeaderActionsProps {
 	isGitHubExportReady: boolean;
 	onGitHubExportClick: () => void;
 	previewRef: RefObject<HTMLIFrameElement | null>;
+	previewUrl?: string;
 }
 
 export function PreviewHeaderActions({
@@ -20,6 +21,7 @@ export function PreviewHeaderActions({
 	isGitHubExportReady,
 	onGitHubExportClick,
 	previewRef,
+	previewUrl,
 }: PreviewHeaderActionsProps) {
 	return (
 		<BaseHeaderActions
@@ -30,6 +32,7 @@ export function PreviewHeaderActions({
 			onGitCloneClick={onGitCloneClick}
 			isGitHubExportReady={isGitHubExportReady}
 			onGitHubExportClick={onGitHubExportClick}
+			fallbackUrl={previewUrl}
 		/>
 	);
 }

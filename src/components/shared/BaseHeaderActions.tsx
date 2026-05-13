@@ -12,6 +12,7 @@ export interface BaseHeaderActionsProps {
 	onGitCloneClick: () => void;
 	isGitHubExportReady: boolean;
 	onGitHubExportClick: () => void;
+	fallbackUrl?: string;
 }
 
 export function BaseHeaderActions({
@@ -22,7 +23,18 @@ export function BaseHeaderActions({
 	onGitCloneClick,
 	isGitHubExportReady,
 	onGitHubExportClick,
+	fallbackUrl,
 }: BaseHeaderActionsProps) {
+	const handleExpand = () => {
+		const el = containerRef.current;
+		if (el && el.requestFullscreen) {
+			el.requestFullscreen().catch(() => {
+				if (fallbackUrl) window.open(fallbackUrl, '_blank');
+			});
+		} else if (fallbackUrl) {
+			window.open(fallbackUrl, '_blank');
+		}
+	};
 	return (
 		<>
 			<ModelConfigInfo
@@ -46,7 +58,7 @@ export function BaseHeaderActions({
 			)}
 			<HeaderButton
 				icon={Expand}
-				onClick={() => containerRef.current?.requestFullscreen()}
+				onClick={handleExpand}
 				title="Fullscreen"
 				iconOnly
 			/>

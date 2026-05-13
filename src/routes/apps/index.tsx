@@ -1,16 +1,28 @@
+import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
+import { LayoutGrid, List, ArrowLeft } from 'lucide-react';
 import { toggleFavorite } from '@/hooks/use-apps';
 import { usePaginatedApps } from '@/hooks/use-paginated-apps';
 import { AppListContainer } from '@/components/shared/AppListContainer';
 import { AppFiltersForm } from '@/components/shared/AppFiltersForm';
 import { AppSortTabs } from '@/components/shared/AppSortTabs';
 import { VisibilityFilter } from '@/components/shared/VisibilityFilter';
+import { cn } from '@/lib/utils';
 import type { AppSortOption } from '@/api-types';
 
 export default function AppsPage() {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
+
+	const [viewMode, setViewMode] = React.useState<'grid' | 'list'>(() => {
+		try { return (localStorage.getItem('apps.viewMode') as 'grid' | 'list') || 'grid'; } catch { return 'grid'; }
+	});
+
+	const handleViewModeChange = (mode: 'grid' | 'list') => {
+		setViewMode(mode);
+		try { localStorage.setItem('apps.viewMode', mode); } catch { /* ignore */ }
+	};
 
 	// Derive initial sort from URL or localStorage, fallback to 'recent'
 	const allowedSorts: AppSortOption[] = ['recent', 'popular', 'trending', 'starred'];
@@ -73,9 +85,18 @@ export default function AppsPage() {
 				>
 					{/* Header */}
 					<div className="mb-8">
-						<h1 className="text-6xl font-bold mb-3 font-[departureMono] text-accent">
-							MY APPS
-						</h1>
+						<div className="flex items-center gap-3 mb-2">
+							<button
+								onClick={() => navigate('/')}
+								className="p-1.5 rounded-md text-text-tertiary hover:text-accent hover:bg-bg-4 transition-colors"
+								aria-label="Back to dashboard"
+							>
+								<ArrowLeft className="h-5 w-5" />
+							</button>
+							<h1 className="text-3xl font-bold tracking-tight text-accent">
+								My Apps
+							</h1>
+						</div>
 						<p className="text-text-tertiary text-lg">
 							{loading
 								? 'Loading...'
@@ -108,20 +129,37 @@ export default function AppsPage() {
 								sortBy={sortBy}
 							/>
 
-							<AppSortTabs
-								value={sortBy}
-								onValueChange={(v) => {
-									handleSortChange(v);
-									// Persist to URL and localStorage
-									try { localStorage.setItem('apps.sort', v); } catch {
-                                        console.error('Failed to persist sort to localStorage');
-									}
-									const next = new URLSearchParams(searchParams);
-									next.set('sort', v);
-									setSearchParams(next, { replace: true });
-								}}
-								availableSorts={['recent', 'popular', 'trending', 'starred']}
-							/>
+							<div className="flex items-center gap-2">
+								<AppSortTabs
+									value={sortBy}
+									onValueChange={(v) => {
+										handleSortChange(v);
+										try { localStorage.setItem('apps.sort', v); } catch {
+											console.error('Failed to persist sort to localStorage');
+										}
+										const next = new URLSearchParams(searchParams);
+										next.set('sort', v);
+										setSearchParams(next, { replace: true });
+									}}
+									availableSorts={['recent', 'popular', 'trending', 'starred']}
+								/>
+								<div className="flex items-center rounded-md border border-border/50 overflow-hidden flex-shrink-0">
+									<button
+										onClick={() => handleViewModeChange('grid')}
+										className={cn("p-1.5 transition-colors", viewMode === 'grid' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
+										aria-label="Grid view"
+									>
+										<LayoutGrid className="h-4 w-4" />
+									</button>
+									<button
+										onClick={() => handleViewModeChange('list')}
+										className={cn("p-1.5 transition-colors", viewMode === 'list' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
+										aria-label="List view"
+									>
+										<List className="h-4 w-4" />
+									</button>
+								</div>
+							</div>
 						</div>
 					</div>
 
@@ -142,6 +180,7 @@ export default function AppsPage() {
 						showStats={true}
 						showActions={true}
 						infiniteScroll={true}
+						viewMode={viewMode}
 						emptyState={
 							!searchQuery &&
 							filterFramework === 'all' &&

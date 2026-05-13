@@ -142,7 +142,7 @@ export function PromptBox({
 		return (
 			<div className={className} {...dragHandlers}>
 				<CreditsBanner limitsData={limitsData} onConnectCloudflare={onConnectCloudflare}>
-					<div className="rounded-xl bg-bg-2 border border-[#f48120]/30 focus-within:border-[#f48120]/70 transition-all duration-200">
+					<div className="rounded-xl bg-bg-2 border border-accent/30 focus-within:border-accent/70 transition-all duration-200">
 						<form ref={formRef} onSubmit={handleSubmit}>
 							<div className="relative">
 								{dragOverlay}
@@ -202,7 +202,7 @@ export function PromptBox({
 			className={clsx('w-full z-10', className)}
 			radius={borderRadius}
 		>
-			<div className="w-full rounded-[18px] bg-bg-4 dark:bg-bg-2 border border-[#f48120]/30 focus-within:border-[#f48120]/70 transition-all duration-200">
+			<div className="w-full rounded-[18px] bg-bg-4 dark:bg-bg-2 border border-accent/30 focus-within:border-accent/70 transition-all duration-200">
 				<form
 					ref={formRef}
 					onSubmit={handleSubmit}

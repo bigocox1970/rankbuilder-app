@@ -271,6 +271,11 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 phase: generatedPhases[generatedPhases.length - 1]
             });
         } else {
+            if (!this.state.blueprint) {
+                this.logger.error('Blueprint is null — AI model call failed during initialization');
+                this.broadcastError('Code generation failed', new Error('Failed to generate project blueprint. Please try again.'));
+                return;
+            }
             phaseConcept = this.state.blueprint.initialPhase;
             this.logger.info('Starting code generation from initial phase', {
                 phase: phaseConcept

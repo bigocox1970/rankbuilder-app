@@ -59,6 +59,28 @@ export class AppService extends BaseService {
             .returning();
         return app;
     }
+
+    /**
+     * Insert or update an app — used by the agent to write blueprint data after
+     * the controller has already pre-registered the record in D1.
+     */
+    async upsertApp(appData: schema.NewApp): Promise<schema.App> {
+        const [app] = await this.database
+            .insert(schema.apps)
+            .values({ ...appData })
+            .onConflictDoUpdate({
+                target: schema.apps.id,
+                set: {
+                    title: appData.title,
+                    description: appData.description,
+                    framework: appData.framework,
+                    status: appData.status,
+                    updatedAt: appData.updatedAt,
+                },
+            })
+            .returning();
+        return app;
+    }
     /**
      * Get public apps with pagination and sorting
      */

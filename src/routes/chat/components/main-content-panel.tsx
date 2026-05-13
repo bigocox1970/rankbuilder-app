@@ -255,6 +255,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				isGitHubExportReady={isGitHubExportReady}
 				onGitHubExportClick={githubExport.openModal}
 				previewRef={previewRef}
+				previewUrl={previewUrl}
 			/>
 		);
 

@@ -605,6 +605,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setIsPreviewDeploying(false);
                 const finalPreviewURL = getPreviewUrl(message.previewURL, message.tunnelURL);
                 setPreviewUrl(finalPreviewURL);
+                // Refresh the iframe after deployment so updated files are shown.
+                // 1 second delay matches the sandbox dev-server hot-reload window.
+                setTimeout(() => {
+                    setShouldRefreshPreview(true);
+                    setTimeout(() => {
+                        setShouldRefreshPreview(false);
+                    }, 100);
+                }, 1000);
                 break;
             }
 

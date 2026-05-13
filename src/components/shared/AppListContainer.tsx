@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, RefreshCw, X, Code2 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { AppCard } from './AppCard';
 import type { AppListData } from '@/hooks/use-paginated-apps';
@@ -23,6 +24,7 @@ interface AppListContainerProps {
   showStats?: boolean;
   showActions?: boolean;
   infiniteScroll?: boolean;
+  viewMode?: 'grid' | 'list';
   emptyState?: {
     title?: string;
     description?: string;
@@ -92,6 +94,7 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
   showStats = true,
   showActions = false,
   infiniteScroll = true,
+  viewMode = 'grid',
   emptyState,
   className = ""
 }) => {
@@ -149,6 +152,38 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
 
   return (
     <div className={className}>
+      {viewMode === 'list' ? (
+        <div className="flex flex-col gap-0.5 mt-4">
+          {apps.map(app => (
+            <a
+              key={app.id}
+              href={`/app/${app.id}`}
+              onClick={(e) => { e.preventDefault(); onAppClick(app.id); }}
+              className="no-underline flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-bg-4/40 transition-colors cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/20 dark:to-red-900/20">
+                {app.screenshotUrl ? (
+                  <img src={app.screenshotUrl} alt={app.title} className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Code2 className="h-4 w-4 text-red-400/50" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{app.title}</div>
+                <div className="text-xs text-text-tertiary">
+                  {'updatedAtFormatted' in app
+                    ? `Updated ${app.updatedAtFormatted}`
+                    : app.updatedAt
+                      ? `Updated ${formatDistanceToNow(new Date(app.updatedAt as unknown as string), { addSuffix: true })}`
+                      : 'Recently updated'}
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -157,8 +192,8 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
       >
         <AnimatePresence mode="popLayout">
           {apps.map(app => (
-            <AppCard 
-              key={app.id} 
+            <AppCard
+              key={app.id}
               app={app}
               onClick={onAppClick}
               onToggleFavorite={onToggleFavorite}
@@ -169,6 +204,7 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
           ))}
         </AnimatePresence>
       </motion.div>
+      )}
 
       {infiniteScroll && hasMore && (
         <div 

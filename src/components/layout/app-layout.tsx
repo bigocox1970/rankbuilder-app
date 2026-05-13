@@ -6,6 +6,8 @@ import { GlobalHeader } from './global-header';
 import { AppsDataProvider } from '@/contexts/apps-data-context';
 import clsx from 'clsx';
 
+const HEADERLESS_ROUTES = ['/chat/'];
+
 interface AppLayoutProps {
   children?: React.ReactNode;
 }
@@ -24,7 +26,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       >
         <AppSidebar />
         <SidebarInset className={clsx("bg-bg-3 flex flex-col h-screen relative", pathname !== "/" && "overflow-hidden")}>
-          <GlobalHeader />
+          {!HEADERLESS_ROUTES.some(r => pathname.startsWith(r)) && <GlobalHeader />}
           <div className={clsx("flex-1 bg-bg-3", pathname !== "/" && "min-h-0 overflow-auto")}>
             {children || <Outlet />}
           </div>

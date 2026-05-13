@@ -63,9 +63,21 @@ export function getAllowedOrigins(env: Env): string[] {
 export function isOriginAllowed(env: Env, origin: string): boolean {
     const allowedOrigins = getAllowedOrigins(env);
     if (!origin) return false;
-    
-    // Check against allowed origins
-    return allowedOrigins.includes(origin);
+
+    if (allowedOrigins.includes(origin)) return true;
+
+    // In dev mode, allow any workers.dev origin so the deployed workers.dev URL
+    // can connect via WebSocket without needing to set CUSTOM_DOMAIN to it.
+    if (isDev(env)) {
+        try {
+            const { hostname } = new URL(origin);
+            if (hostname.endsWith('.workers.dev')) return true;
+        } catch {
+            // Malformed origin — fall through to deny
+        }
+    }
+
+    return false;
 }
 
 /**

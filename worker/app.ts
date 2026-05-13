@@ -9,6 +9,9 @@ import { CsrfService } from './services/csrf/CsrfService';
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
 import { getGlobalConfigurableSettings } from './config';
 import { AuthConfig, setAuthLevel } from './middleware/auth/routeAuth';
+import { isDev } from './utils/envs';
+import { UserService } from './database/services/UserService';
+import { AuthUser } from './types/auth-types';
 // import { initHonoSentry } from './observability/sentry';
 
 export function createApp(env: Env): Hono<AppEnv> {
@@ -89,6 +92,26 @@ export function createApp(env: Env): Hono<AppEnv> {
         await RateLimitService.enforceGlobalApiRateLimit(env, c.get('config').security.rateLimit, null, c.req.raw)
         await next();
     })
+
+    // Dev bypass: when ENVIRONMENT=dev, auto-authenticate as the configured user
+    if (isDev(env)) {
+        app.use('/api/*', async (c, next) => {
+            if (!c.get('user')) {
+                try {
+                    const userService = new UserService(c.env);
+                    const devEmail = c.env.ALLOWED_EMAIL || 'perimeter.uk@gmail.com';
+                    const devUser = await userService.findUser({ email: devEmail });
+                    if (devUser) {
+                        c.set('user', { ...devUser, isAnonymous: false } as AuthUser);
+                        c.set('sessionId', 'dev-bypass-session');
+                    }
+                } catch (_e) {
+                    // Silently ignore — auth will fall through to normal checks
+                }
+            }
+            return next();
+        });
+    }
 
     // By default, all routes require authentication
     app.use('/api/*', setAuthLevel(AuthConfig.ownerOnly));

@@ -1,13 +1,15 @@
 import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { ArrowRight, Info } from 'react-feather';
-import { Loader2 } from 'lucide-react';
+import { Loader2, LayoutGrid, List, Code2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '@/contexts/auth-context';
+import { cn } from '@/lib/utils';
 import { ProjectModeSelector, type ProjectModeOption } from '../components/project-mode-selector';
 import { MAX_AGENT_QUERY_LENGTH, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType } from '@/api-types';
 import { useFeature } from '@/features';
 import { useAuthGuard } from '../hooks/useAuthGuard';
 import { usePaginatedApps } from '@/hooks/use-paginated-apps';
+import { useRecentApps } from '@/hooks/use-apps';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { AppCard } from '@/components/shared/AppCard';
 import clsx from 'clsx';
@@ -91,6 +93,26 @@ export default function Home() {
 	// Discover section should appear only when enough apps are available and loading is done
 	const discoverReady = useMemo(() => !loading && (apps?.length ?? 0) > 5, [loading, apps]);
 
+	const { apps: recentApps } = useRecentApps();
+
+	const [recentViewMode, setRecentViewMode] = useState<'grid' | 'list'>(() => {
+		try { return (localStorage.getItem('recent.viewMode') as 'grid' | 'list') || 'grid'; } catch { return 'grid'; }
+	});
+
+	const handleRecentViewModeChange = (mode: 'grid' | 'list') => {
+		setRecentViewMode(mode);
+		try { localStorage.setItem('recent.viewMode', mode); } catch { /* ignore */ }
+	};
+
+	const [discoverViewMode, setDiscoverViewMode] = useState<'grid' | 'list'>(() => {
+		try { return (localStorage.getItem('discover.viewMode') as 'grid' | 'list') || 'grid'; } catch { return 'grid'; }
+	});
+
+	const handleDiscoverViewModeChange = (mode: 'grid' | 'list') => {
+		setDiscoverViewMode(mode);
+		try { localStorage.setItem('discover.viewMode', mode); } catch { /* ignore */ }
+	};
+
 	const handleCreateApp = (query: string, mode: ProjectType) => {
 		if (query.length > MAX_AGENT_QUERY_LENGTH) {
 			toast.error(
@@ -144,31 +166,11 @@ export default function Home() {
 
 	return (
 		<div className="relative flex flex-col items-center size-full">
-			{/* Dotted background pattern - extends to full viewport */}
-			<div className="fixed inset-0 text-accent z-0 opacity-20 pointer-events-none">
-				<svg width="100%" height="100%">
-					<defs>
-						<pattern
-							id=":S2:"
-							viewBox="-6 -6 12 12"
-							patternUnits="userSpaceOnUse"
-							width="12"
-							height="12"
-						>
-							<circle
-								cx="0"
-								cy="0"
-								r="1"
-								fill="currentColor"
-							></circle>
-						</pattern>
-					</defs>
-					<rect
-						width="100%"
-						height="100%"
-						fill="url(#:S2:)"
-					></rect>
-				</svg>
+			{/* Radial glow background matching marketing site */}
+			<div className="fixed inset-0 z-0 pointer-events-none">
+				<div className="absolute inset-0" style={{
+					background: 'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,230,118,0.10) 0%, transparent 70%)'
+				}} />
 			</div>
 
 			<LayoutGroup>
@@ -178,10 +180,10 @@ export default function Home() {
 						transition={{ layout: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }}
 						className={clsx(
 							"px-6 p-8 flex flex-col items-center z-10",
-							discoverReady ? "mt-48" : "mt-[20vh] sm:mt-[24vh] md:mt-[28vh]"
+							discoverReady ? "mt-32" : "mt-[20vh] sm:mt-[24vh] md:mt-[28vh]"
 						)}>
-						<h1 className="text-shadow-sm text-shadow-red-200 dark:text-shadow-red-900 text-accent font-medium leading-[1.1] tracking-tight text-5xl w-full mb-4 bg-clip-text bg-gradient-to-r from-text-primary to-text-primary/90">
-							What should we build today?
+						<h1 className="font-bold leading-[1.1] tracking-tight text-5xl w-full mb-4 text-white">
+							What should we <span style={{ color: '#00E676' }}>build</span> today?
 						</h1>
 						<PromptBox
 							value={query}
@@ -234,6 +236,98 @@ export default function Home() {
 					)}
 				</AnimatePresence>
 
+				{/* Recent apps — shown below input when user is logged in */}
+				<AnimatePresence>
+					{user && (
+						<motion.section
+							key="recent-apps"
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: 10 }}
+							transition={{ duration: 0.3 }}
+							className={cn("px-6 mt-6 z-10 w-full", recentViewMode === 'grid' ? "max-w-4xl" : "max-w-2xl")}
+						>
+							<div className="flex items-center justify-between mb-3">
+								<h2 className="text-sm font-medium text-text-tertiary uppercase tracking-widest">Recent projects</h2>
+								<div className="flex items-center gap-3">
+									<button
+										className="text-xs text-accent hover:underline underline-offset-2"
+										onClick={() => navigate('/apps')}
+									>
+										View all
+									</button>
+									<div className="flex items-center rounded-md border border-border/50 overflow-hidden">
+										<button
+											onClick={() => handleRecentViewModeChange('grid')}
+											className={cn("p-1.5 transition-colors", recentViewMode === 'grid' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
+											aria-label="Grid view"
+										>
+											<LayoutGrid className="h-3.5 w-3.5" />
+										</button>
+										<button
+											onClick={() => handleRecentViewModeChange('list')}
+											className={cn("p-1.5 transition-colors", recentViewMode === 'list' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
+											aria-label="List view"
+										>
+											<List className="h-3.5 w-3.5" />
+										</button>
+									</div>
+								</div>
+							</div>
+							{recentViewMode === 'grid' ? (
+								<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+									{recentApps.slice(0, 4).map((app) => (
+										<AppCard
+											key={app.id}
+											app={app}
+											onClick={() => navigate(`/chat/${app.id}`)}
+											showStats={false}
+											showUser={false}
+											showActions={false}
+										/>
+									))}
+									{Array.from({ length: Math.max(0, 4 - recentApps.length) }).map((_, i) => (
+										<div
+											key={`placeholder-${i}`}
+											className="aspect-[4/3] rounded-md border border-dashed border-border/40 bg-bg-1/30 flex flex-col items-center justify-center gap-2 opacity-40"
+										>
+											<Code2 className="h-6 w-6 text-text-tertiary" />
+											<span className="text-xs text-text-tertiary">No project yet</span>
+										</div>
+									))}
+								</div>
+							) : (
+								<div className="flex flex-col gap-1">
+									{recentApps.slice(0, 4).map((app) => (
+										<button
+											key={app.id}
+											onClick={() => navigate(`/chat/${app.id}`)}
+											className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-bg-4/60 transition-colors text-left group"
+										>
+											<div className="w-2 h-2 rounded-full bg-accent/60 flex-shrink-0" />
+											<span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors truncate flex-1">
+												{app.title}
+											</span>
+											<span className="text-xs text-text-tertiary flex-shrink-0">
+												{app.updatedAtFormatted ?? 'Recently'}
+											</span>
+										</button>
+									))}
+									{Array.from({ length: Math.max(0, 4 - recentApps.length) }).map((_, i) => (
+										<div
+											key={`placeholder-${i}`}
+											className="flex items-center gap-3 px-3 py-2 rounded-lg opacity-30"
+										>
+											<div className="w-2 h-2 rounded-full border border-dashed border-text-tertiary flex-shrink-0" />
+											<span className="text-sm text-text-tertiary italic">No project yet</span>
+										</div>
+									))}
+								</div>
+							)}
+						</motion.section>
+					)}
+				</AnimatePresence>
+
 				<AnimatePresence>
 					{discoverReady && (
 						<motion.section
@@ -245,9 +339,55 @@ export default function Home() {
 							transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
 							className={clsx('max-w-6xl mx-auto px-4 z-10', images.length > 0 ? 'mt-10' : 'mt-16 mb-8')}
 						>
-							<div className='flex flex-col items-start'>
+							<div className='flex flex-col items-start w-full'>
 								<h2 className="text-2xl font-medium text-text-secondary/80">Discover Apps built by the community</h2>
-								<div ref={discoverLinkRef} className="text-md font-light mb-4 text-text-tertiary hover:underline underline-offset-4 select-text cursor-pointer" onClick={() => navigate('/discover')} >View All</div>
+								<div className="flex items-center gap-3 mb-4">
+									<div ref={discoverLinkRef} className="text-md font-light text-text-tertiary hover:underline underline-offset-4 select-text cursor-pointer" onClick={() => navigate('/discover')}>View All</div>
+									<div className="flex items-center rounded-md border border-border/50 overflow-hidden">
+										<button
+											onClick={() => handleDiscoverViewModeChange('grid')}
+											className={cn("p-1.5 transition-colors", discoverViewMode === 'grid' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
+											aria-label="Grid view"
+										>
+											<LayoutGrid className="h-4 w-4" />
+										</button>
+										<button
+											onClick={() => handleDiscoverViewModeChange('list')}
+											className={cn("p-1.5 transition-colors", discoverViewMode === 'list' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
+											aria-label="List view"
+										>
+											<List className="h-4 w-4" />
+										</button>
+									</div>
+								</div>
+								{discoverViewMode === 'list' ? (
+									<div className="flex flex-col gap-0.5 w-full">
+										{apps.map(app => (
+											<a
+												key={app.id}
+												href={`/app/${app.id}`}
+												onClick={(e) => { e.preventDefault(); navigate(`/app/${app.id}`); }}
+												className="no-underline flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-bg-4/40 transition-colors cursor-pointer group"
+											>
+												<div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/20 dark:to-red-900/20">
+													{app.screenshotUrl ? (
+														<img src={app.screenshotUrl} alt={app.title} className="w-full h-full object-cover" loading="lazy" />
+													) : (
+														<div className="w-full h-full flex items-center justify-center">
+															<Code2 className="h-4 w-4 text-red-400/50" />
+														</div>
+													)}
+												</div>
+												<div className="flex-1 min-w-0">
+													<div className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{app.title}</div>
+													{'userName' in app && app.userName && (
+														<div className="text-xs text-text-tertiary">{app.userName}</div>
+													)}
+												</div>
+											</a>
+										))}
+									</div>
+								) : (
 								<motion.div
 									layout
 									transition={{ duration: 0.4 }}
@@ -266,6 +406,7 @@ export default function Home() {
 										))}
 									</AnimatePresence>
 								</motion.div>
+								)}
 							</div>
 						</motion.section>
 					)}

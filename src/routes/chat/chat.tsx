@@ -7,6 +7,7 @@ import {
 	type FormEvent,
 } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LoaderCircle, MoreHorizontal, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
@@ -675,11 +676,20 @@ export default function Chat() {
 					layout="position"
 					className="flex-1 shrink-0 flex flex-col basis-0 max-w-lg relative z-10 h-full min-h-0"
 				>
-					<div 
+					<div className="flex items-center gap-2 px-3 py-1.5 flex-shrink-0">
+						<SidebarTrigger className="h-7 w-7 text-text-primary rounded-md hover:bg-accent/10 transition-colors flex-shrink-0" />
+						<a href="https://rankbuilder.app" className="flex items-center gap-2 no-underline">
+							<img src="/favicon-96x96.png" alt="RankBuilder" style={{ width: 24, height: 24 }} />
+							<span className="font-bold text-sm tracking-tight text-text-primary">
+								Rank<span style={{ color: '#00E676' }}>Builder</span>
+							</span>
+						</a>
+					</div>
+					<div
 					className={clsx(
 						'flex-1 overflow-y-auto min-h-0 chat-messages-scroll',
 						isDebugging && 'animate-debug-pulse'
-					)} 
+					)}
 					ref={messagesContainerRef}
 				>
 						<div className="pt-5 px-4 pb-4 text-sm flex flex-col gap-5">

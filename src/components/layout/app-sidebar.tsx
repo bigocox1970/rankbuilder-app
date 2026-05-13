@@ -9,10 +9,22 @@ import {
 	Lock,
 	Users2,
 	Bookmark,
-	// LayoutGrid,
 	Compass,
+	Sun,
+	Moon,
+	LogOut,
+	LayoutDashboard,
 } from 'lucide-react';
 import './sidebar-overrides.css';
+import { useTheme } from '@/contexts/theme-context';
+import { useAuth } from '@/contexts/auth-context';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useRecentApps, useFavoriteApps, useApps } from '@/hooks/use-apps';
 import {
 	Sidebar,
@@ -30,7 +42,6 @@ import {
 } from '@/components/ui/sidebar';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAuth } from '@/contexts/auth-context';
 import { useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
 import {
@@ -147,8 +158,18 @@ function AppMenuItem({
 }
 
 export function AppSidebar() {
-	const { user } = useAuth();
+	const { user, logout } = useAuth();
+	const { theme, setTheme } = useTheme();
 	const navigate = useNavigate();
+
+	const userInitials = user
+		? (user.displayName ?? user.email)
+				.split(' ')
+				.map((n: string) => n[0])
+				.join('')
+				.toUpperCase()
+				.slice(0, 2)
+		: '?';
 	const [searchQuery, setSearchQuery] = React.useState('');
 	const [expandedGroups, setExpandedGroups] = React.useState<string[]>([
 		'apps',
@@ -201,16 +222,25 @@ export function AppSidebar() {
 	return (
 		<>
 			<Sidebar
-				collapsible="icon"
+				collapsible="offcanvas"
 				className={cn(
 					'bg-bg-2 transition-all duration-300 ease-in-out',
 				)}
 			>
 				<SidebarContent className="mt-2">
-					{/* Build Button */}
+					{/* Dashboard + New Build */}
 					<SidebarGroup>
 						<SidebarGroupContent>
-	
+							<div className={cn(isCollapsed ? 'pr-2' : 'px-1', 'flex flex-col gap-1')}>
+								<SidebarMenuButton
+									onClick={() => { setOpen(false); navigate('/'); }}
+									tooltip="Dashboard"
+									className="group hover:opacity-80 hover:cursor-pointer hover:bg-bg-1/50 transition-all duration-200 w-full"
+								>
+									<LayoutDashboard className="h-5 w-5 text-text-primary/60 group-hover:text-primary/80 transition-colors" />
+									<span className="font-medium text-text-primary/80 group-hover:text-primary transition-colors">Dashboard</span>
+								</SidebarMenuButton>
+
 							{location.pathname !== '/' && (
 								<div
 									className={cn(
@@ -247,6 +277,7 @@ export function AppSidebar() {
 									</TooltipProvider>
 								</div>
 							)}
+							</div>
 						</SidebarGroupContent>
 					</SidebarGroup>
 
@@ -578,11 +609,9 @@ export function AppSidebar() {
 									className="group hover:opacity-80 hover:cursor-pointer hover:bg-bg-1/50 transition-all duration-200"
 								>
 									<Compass className="h-6 w-6 text-text-primary/60 group-hover:text-primary/80 transition-colors" />
-									{!isCollapsed && (
-										<span className="text-text-primary/80 font-medium group-hover:text-primary transition-colors">
-											Discover
-										</span>
-									)}
+									<span className="text-text-primary/80 font-medium group-hover:text-primary transition-colors">
+										Discover
+									</span>
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 							<SidebarMenuItem>
@@ -592,12 +621,68 @@ export function AppSidebar() {
 									className="group hover:opacity-80 hover:cursor-pointer hover:bg-bg-1/50 transition-all duration-200"
 								>
 									<Settings className="h-6 w-6 text-text-primary/60 group-hover:text-primary/80 transition-colors" />
-									{!isCollapsed && (
-										<span className="font-medium text-text-primary/80 group-hover:text-primary transition-colors">
-											Settings
-										</span>
-									)}
+									<span className="font-medium text-text-primary/80 group-hover:text-primary transition-colors">
+										Settings
+									</span>
 								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<SidebarMenuButton
+											tooltip="Theme"
+											className="group hover:opacity-80 hover:cursor-pointer hover:bg-bg-1/50 transition-all duration-200"
+										>
+											{theme === 'dark' ? (
+												<Moon className="h-6 w-6 text-text-primary/60 group-hover:text-primary/80 transition-colors" />
+											) : (
+												<Sun className="h-6 w-6 text-text-primary/60 group-hover:text-primary/80 transition-colors" />
+											)}
+											<span className="font-medium text-text-primary/80 group-hover:text-primary transition-colors capitalize">
+												{theme === 'system' ? 'System theme' : `${theme} mode`}
+											</span>
+										</SidebarMenuButton>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent side="right" align="end">
+										<DropdownMenuItem onClick={() => setTheme('light')}>
+											<Sun className="mr-2 h-4 w-4" /> Light
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => setTheme('dark')}>
+											<Moon className="mr-2 h-4 w-4" /> Dark
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => setTheme('system')}>
+											System
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<SidebarMenuButton
+											tooltip={user.displayName || user.email}
+											className="group hover:opacity-80 hover:cursor-pointer hover:bg-bg-1/50 transition-all duration-200"
+										>
+											<Avatar className="h-6 w-6 flex-shrink-0">
+												<AvatarImage src={user.avatarUrl} alt={user.displayName || user.email} />
+												<AvatarFallback className="bg-text-secondary/10 text-text-primary text-xs font-semibold">
+													{userInitials}
+												</AvatarFallback>
+											</Avatar>
+											<span className="font-medium text-text-primary/80 truncate group-hover:text-primary transition-colors">
+												{user.displayName || user.email}
+											</span>
+										</SidebarMenuButton>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent side="right" align="end" className="w-56">
+										<DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer">
+											<Settings className="mr-2 h-4 w-4" /> Settings
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => logout()} className="cursor-pointer text-destructive focus:text-destructive">
+											<LogOut className="mr-2 h-4 w-4" /> Sign out
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
 							</SidebarMenuItem>
 						</SidebarMenu>
 					)}

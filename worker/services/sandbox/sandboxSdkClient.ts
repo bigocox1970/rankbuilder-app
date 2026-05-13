@@ -1752,46 +1752,73 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             this.logger.info('Processing deployment', { instanceId });
             
-            // Step 1: Run build commands (bun run build && bunx wrangler build)
+            // Step 1: Run build (vite build with @cloudflare/vite-plugin bundles both frontend and Worker)
             this.logger.info('Building project');
             const buildResult = await this.executeCommand(instanceId, 'bun run build');
             if (buildResult.exitCode !== 0) {
-                this.logger.warn('Build step failed or not available', buildResult.stdout, buildResult.stderr);
+                this.logger.warn('Build step failed', buildResult.stdout, buildResult.stderr);
                 throw new Error(`Build failed: ${buildResult.stderr}`);
             }
-            
-            const wranglerBuildResult = await this.executeCommand(instanceId, 'bunx wrangler build');
-            if (wranglerBuildResult.exitCode !== 0) {
-                this.logger.warn('Wrangler build failed', wranglerBuildResult.stdout, wranglerBuildResult.stderr);
-                // Continue anyway - some projects might not need wrangler build
-            }
-            
+
             // Step 2: Parse wrangler config from KV
             this.logger.info('Reading wrangler configuration from KV');
             const wranglerConfigContent = await env.VibecoderStore.get(this.getWranglerKVKey(instanceId));
-            
+
             if (!wranglerConfigContent) {
-                // This should never happen unless KV itself has some issues
                 throw new Error(`Wrangler config not found in KV for ${instanceId}`);
-            } else {
-                this.logger.info('Using wrangler configuration from KV');
             }
-            
+            this.logger.info('Using wrangler configuration from KV');
+
             const config = parseWranglerConfig(wranglerConfigContent);
-            
+
             this.logger.info('Worker configuration', { scriptName: config.name });
             this.logger.info('Worker compatibility', { compatibilityDate: config.compatibility_date });
-            
-            // Step 3: Read worker script from dist
+
+            // Step 3: Read worker script from build output
+            // @cloudflare/vite-plugin outputs the Worker bundle to dist/{workerEnvName}/index.js
+            // where workerEnvName is the wrangler name with dashes replaced by underscores
             this.logger.info('Reading worker script');
             const session = await this.getInstanceSession(instanceId);
-            const workerFile = await session.readFile(`/workspace/${instanceId}/dist/index.js`);
-            if (!workerFile.success) {
-                throw new Error(`Worker script not found at /${instanceId}/dist/index.js. Please build the project first.`);
+            const workerEnvName = config.name.replaceAll('-', '_');
+            const viteWorkerPath = `/workspace/${instanceId}/dist/${workerEnvName}/index.js`;
+
+            let workerContent: string | undefined;
+            try {
+                const workerFile = await session.readFile(viteWorkerPath);
+                if (workerFile.success) {
+                    workerContent = workerFile.content;
+                    this.logger.info('Worker script loaded from vite build', { sizeKB: (workerContent.length / 1024).toFixed(2) });
+                }
+            } catch {
+                this.logger.info('Worker not at vite output path, falling back to wrangler build');
             }
-            
-            const workerContent = workerFile.content;
-            this.logger.info('Worker script loaded', { sizeKB: (workerContent.length / 1024).toFixed(2) });
+
+            // Fallback: run wrangler build standalone and find its output in .wrangler/tmp/
+            if (!workerContent) {
+                const wranglerBuildResult = await this.executeCommand(instanceId, 'bunx wrangler build');
+                if (wranglerBuildResult.exitCode === 0) {
+                    const findResult = await this.executeCommand(instanceId, 'find .wrangler/tmp -name "index.js" 2>/dev/null | sort -rn | head -1');
+                    if (findResult.exitCode === 0 && findResult.stdout.trim()) {
+                        try {
+                            const wranglerFile = await session.readFile(`/workspace/${instanceId}/${findResult.stdout.trim()}`);
+                            if (wranglerFile.success) {
+                                workerContent = wranglerFile.content;
+                                this.logger.info('Worker script loaded from wrangler build', { sizeKB: (workerContent.length / 1024).toFixed(2) });
+                            }
+                        } catch {
+                            // Not found at fallback path either
+                        }
+                    }
+                } else {
+                    this.logger.warn('Wrangler build fallback also failed', wranglerBuildResult.stdout, wranglerBuildResult.stderr);
+                }
+            }
+
+            if (!workerContent) {
+                throw new Error('Worker script not found after build. Ensure the project builds correctly.');
+            }
+
+            this.logger.info('Worker script ready', { sizeKB: (workerContent.length / 1024).toFixed(2) });
             
             // Step 3a: Check for additional worker modules (ESM imports)
             // Process them the same way as assets but as strings for the Map

@@ -299,7 +299,7 @@ const AppMetadata = ({
 		const deploymentStatus = getDeploymentStatusInfo(app);
 		return (
 			<div className='flex flex-col'>
-				<span className="truncate text-ellipsis max-w-60 font-medium group-hover:text-bg-2">
+				<span className="truncate font-medium group-hover:text-bg-2">
 					{app.title}
 				</span>
 				<div className="flex items-center gap-2.5 text-sm">
@@ -579,12 +579,12 @@ export const AppCard = React.memo<AppCardProps>(
 							)}
 					</div>
 
-					<div className="flex items-start justify-between gap-2 p-2 pb-1">
+					<div className="flex items-start justify-between gap-2 px-3 py-2">
 						<div className="flex-1 min-w-0">
 							{/* Enhanced Adaptive Metadata with GitHub integration */}
 							<div className="transition-all duration-200 ease-out ">
 								<div className="flex items-center gap-3">
-									<div className="flex-1">
+									<div className="flex-1 min-w-0">
 										<AppMetadata
 											app={app}
 											layoutConfig={layoutConfig}

@@ -1,4 +1,26 @@
-# 🧡 Cloudflare Vibe SDK
+# RankBuilder
+
+> AI website builder for UK tradespeople — built on Cloudflare VibeSDK.
+
+**Live app:** https://app.rankbuilder.app  
+**Marketing site:** https://rankbuilder.app  
+**Base SDK:** Forked from [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)
+
+## RankBuilder Quick Reference
+
+| Thing | Value |
+|-------|-------|
+| Worker | `vibesdk-production` |
+| Account ID | `12e1ea44f5e3c2904bfbc750fc716e0e` |
+| D1 database | `vibesdk-db` |
+| Test login | perimeter.uk@gmail.com / VibeSDK2024! |
+| Deploy | `PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$PATH" npm run build && npx wrangler deploy` |
+
+See `RANKBUILDER_PLAN.md` (repo root) and `TODO.md` for full build plan and current state.
+
+---
+
+# Cloudflare Vibe SDK
 
 > **An open source full-stack AI webapp generator** – Deploy your own instance of Cloudflare VibeSDK, an AI vibe coding platform that you can run and customize yourself.
 

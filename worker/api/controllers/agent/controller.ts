@@ -203,6 +203,22 @@ export class CodingAgentController extends BaseController {
             const websocketUrl = `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/api/agent/${agentId}/ws`;
             const httpStatusUrl = `${url.origin}/api/agent/${agentId}`;
 
+            // Pre-register the app in D1 before streaming the WebSocket URL so that
+            // checkAppOwnership passes as soon as the client connects.
+            // saveToDatabase() in the agent will upsert with the full blueprint data.
+            const appService = new AppService(env);
+            await appService.createApp({
+                id: agentId,
+                userId: user.id,
+                title: query.substring(0, 100),
+                originalPrompt: query,
+                visibility: 'private',
+                status: 'generating',
+                sessionToken: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+
             let uploadedImages: ProcessedImageAttachment[] = [];
             if (body.images) {
                 uploadedImages = await Promise.all(body.images.map(async (image) => {
