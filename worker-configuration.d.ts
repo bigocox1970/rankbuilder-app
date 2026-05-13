@@ -53,6 +53,7 @@ declare namespace Cloudflare {
 		GITHUB_EXPORTER_CLIENT_SECRET: string;
 		CF_ACCESS_ID: string;
 		CF_ACCESS_SECRET: string;
+		SENDGRID_API_KEY: string;
 		SENTRY_DSN: string;
 		USE_TUNNEL_FOR_PREVIEW: string;
 		USE_CLOUDFLARE_IMAGES: string;

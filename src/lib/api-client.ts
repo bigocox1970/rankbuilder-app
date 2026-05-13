@@ -1190,6 +1190,27 @@ class ApiClient {
 		});
 	}
 
+	async requestPasswordReset(email: string): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>('/api/auth/forgot-password', {
+			method: 'POST',
+			body: JSON.stringify({ email }),
+		});
+	}
+
+	async resetPassword(token: string, newPassword: string, confirmPassword: string): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>('/api/auth/reset-password', {
+			method: 'POST',
+			body: JSON.stringify({ token, newPassword, confirmPassword }),
+		});
+	}
+
+	async changePassword(currentPassword: string, newPassword: string, confirmPassword: string): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>('/api/auth/change-password', {
+			method: 'POST',
+			body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+		});
+	}
+
 	/**
 	 * Get available authentication providers
 	 */

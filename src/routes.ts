@@ -4,6 +4,7 @@ import React from 'react';
 import App from './App';
 import Home from './routes/home';
 import Chat from './routes/chat/chat';
+import ResetPassword from './routes/reset-password/index';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
 import AppsPage from './routes/apps';
@@ -43,6 +44,10 @@ const routes = [
 			{
 				path: 'discover',
 				Component: DiscoverPage,
+			},
+			{
+				path: 'reset-password',
+				Component: ResetPassword,
 			},
 		],
 	},

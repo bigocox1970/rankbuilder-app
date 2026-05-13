@@ -9,6 +9,7 @@ import { X, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useAuth } from '@/contexts/auth-context';
+import { apiClient } from '@/lib/api-client';
 // import {
 // 	validateEmail,
 // 	validatePassword,
@@ -41,7 +42,7 @@ interface LoginModalProps {
 	showCloseButton?: boolean;
 }
 
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'forgot';
 
 export function LoginModal({
 	isOpen,
@@ -59,6 +60,7 @@ export function LoginModal({
 	const [mode, setMode] = useState<AuthMode>('login');
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
+	const [forgotSent, setForgotSent] = useState(false);
 
 	// Form state
 	const [email, setEmail] = useState('');
@@ -139,6 +141,17 @@ export function LoginModal({
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 
+		if (mode === 'forgot') {
+			setIsLoading(true);
+			try {
+				await apiClient.requestPasswordReset(email);
+				setForgotSent(true);
+			} finally {
+				setIsLoading(false);
+			}
+			return;
+		}
+
 		if (!validateForm()) return;
 
 		setIsLoading(true);
@@ -148,7 +161,6 @@ export function LoginModal({
 			} else if (mode === 'register' && onRegister) {
 				await onRegister({ email, password, name: name.trim() });
 			}
-			// Don't auto-close here - let the parent handle success/error
 		} catch (err) {
 			// Error handling is done in the auth context
 		} finally {
@@ -218,16 +230,20 @@ export function LoginModal({
 										</svg>
 									</div>
 									<h2 className="text-2xl font-semibold mb-2">
-										{actionContext
+										{mode === 'forgot'
+											? 'Reset your password'
+											: actionContext
 											? `Sign in ${actionContext}`
-											: hasEmailAuth && mode === 'register'
+											: mode === 'register'
 											? 'Create an account'
 											: 'Welcome back'}
 									</h2>
 									<p className="text-text-tertiary">
-										{actionContext
+										{mode === 'forgot'
+											? "Enter your email and we'll send you a reset link"
+											: actionContext
 											? 'Authentication required for this action'
-											: hasEmailAuth && mode === 'register'
+											: mode === 'register'
 											? 'Join to start building amazing applications'
 											: 'Sign in to save your apps and access your workspace'}
 									</p>
@@ -324,8 +340,46 @@ export function LoginModal({
 									</div>
 								)}
 
+								{/* Forgot password form */}
+								{mode === 'forgot' && (
+									<form onSubmit={handleSubmit} className="space-y-4">
+										{forgotSent ? (
+											<p className="text-sm text-center text-text-secondary py-2">
+												If an account exists for that email, a reset link has been sent. Check your inbox.
+											</p>
+										) : (
+											<>
+												<input
+													type="email"
+													placeholder="Email address"
+													value={email}
+													onChange={(e) => setEmail(e.target.value)}
+													className="w-full p-3 rounded-lg border border-border bg-background transition-colors focus:border-primary"
+													disabled={isLoading}
+													required
+												/>
+												<motion.button
+													type="submit"
+													whileTap={{ scale: 0.98 }}
+													disabled={isLoading}
+													className="w-full bg-primary hover:bg-primary/90 text-primary-foreground p-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+												>
+													{isLoading ? 'Sending...' : 'Send reset link'}
+												</motion.button>
+											</>
+										)}
+										<button
+											type="button"
+											onClick={() => { setMode('login'); setForgotSent(false); resetForm(); }}
+											className="w-full text-sm text-text-tertiary hover:text-text-primary transition-colors"
+										>
+											Back to sign in
+										</button>
+									</form>
+								)}
+
 								{/* Email/Password Form */}
-								{hasEmailAuth && (
+								{hasEmailAuth && mode !== 'forgot' && (
 									<form onSubmit={handleSubmit} className="space-y-4">
 										{mode === 'register' && (
 											<div>
@@ -386,6 +440,17 @@ export function LoginModal({
 											{validationErrors.password && (
 												<p className="mt-1 text-sm text-destructive">{validationErrors.password}</p>
 											)}
+											{mode === 'login' && hasEmailAuth && (
+												<div className="text-right mt-1">
+													<button
+														type="button"
+														onClick={() => { setMode('forgot'); resetForm(); }}
+														className="text-xs text-text-tertiary hover:text-accent transition-colors"
+													>
+														Forgot password?
+													</button>
+												</div>
+											)}
 										</div>
 
 										{mode === 'register' && (
@@ -425,7 +490,7 @@ export function LoginModal({
 							{/* Footer */}
 							<div className="px-6 pb-6 space-y-4">
 								{/* Mode switching (only if registration is available) */}
-								{hasRegistration && hasEmailAuth && (
+								{hasRegistration && hasEmailAuth && mode !== 'forgot' && (
 									<div className="text-center">
 										<button
 											type="button"

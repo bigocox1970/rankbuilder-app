@@ -669,6 +669,19 @@ export default function Page() {
 - Inputs: bg-secondary text-secondary-foreground border border-input; placeholder:text-muted-foreground
 - Never place muted text over dark backgrounds; if background is dark, use paired *-foreground or text-white
 - Aim for >= 4.5:1 contrast for normal text (>= 3:1 for large)
+
+6) Mobile & PWA Baseline (non-negotiable for every project)
+- NO horizontal overflow: add \`html, body { overflow-x: hidden; max-width: 100vw; }\` to global CSS
+- Touch targets: all interactive elements must be at least 44px tall on mobile (min-h-11 / py-3 minimum)
+- Prevent double-tap zoom on buttons: add \`touch-action: manipulation\` to buttons and links
+- Always include public/manifest.json with: name, short_name, start_url, display: "standalone", background_color, theme_color, and at least one icon entry (192x192 and 512x512 using placehold.co if no real assets exist)
+- Always include in index.html <head>:
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="<brand colour>" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="/manifest.json" />
+- Every page/route must be fully usable and visually correct at 375px width (iPhone SE) — no content clipped, no elements overflowing, no horizontal scrollbar
 `,
 PROJECT_CONTEXT: `Here is everything you will need about the project:
 

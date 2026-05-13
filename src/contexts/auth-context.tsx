@@ -291,7 +291,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
       }
-      navigate('/');
+      window.location.href = 'https://rankbuilder.app';
     }
   }, [navigate]);
 

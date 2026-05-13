@@ -9,7 +9,7 @@ import {
 import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LoaderCircle, MoreHorizontal, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LoaderCircle, MoreHorizontal, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
 import { UserMessage, AIMessage } from './components/messages';
 import { PhaseTimeline } from './components/phase-timeline';
@@ -35,6 +35,7 @@ import { ChatModals } from './components/chat-modals';
 import { MainContentPanel } from './components/main-content-panel';
 import { ChatInput } from './components/chat-input';
 import { useVault } from '@/hooks/use-vault';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { VaultUnlockModal } from '@/components/vault';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { checkCanSendPrompt, getBackendLimitDialog } from '@/utils/usage-limit-checker';
@@ -284,6 +285,8 @@ export default function Chat() {
 
 	const [newMessage, setNewMessage] = useState('');
 	const [showTooltip, setShowTooltip] = useState(false);
+	const isMobile = useIsMobile();
+	const [showMobilePreview, setShowMobilePreview] = useState(false);
 
 	const { images, addImages, removeImage, clearImages, isProcessing } = useImageUpload({
 		onError: (error) => {
@@ -674,7 +677,7 @@ export default function Chat() {
 			<div className="flex-1 flex min-h-0 overflow-hidden justify-center">
 				<motion.div
 					layout="position"
-					className="flex-1 shrink-0 flex flex-col basis-0 max-w-lg relative z-10 h-full min-h-0"
+					className={clsx("flex-1 shrink-0 flex flex-col basis-0 max-w-lg relative z-10 h-full min-h-0", isMobile && showMobilePreview && "hidden")}
 				>
 					<div className="flex items-center gap-2 px-3 py-1.5 flex-shrink-0">
 						<SidebarTrigger className="h-7 w-7 text-text-primary rounded-md hover:bg-accent/10 transition-colors flex-shrink-0" />
@@ -884,13 +887,13 @@ export default function Chat() {
 				</motion.div>
 
 				<AnimatePresence mode="wait">
-					{showMainView && (
+					{showMainView && (!isMobile || showMobilePreview) && (
 						<motion.div
 							key="main-content-panel"
 							initial={{ opacity: 0 }}
 							animate={{ opacity: 1 }}
 							exit={{ opacity: 0 }}
-							className="flex-1 flex shrink-0 basis-0 p-4 pl-0 ml-2 z-30 min-h-0"
+							className={clsx("flex-1 flex shrink-0 basis-0 z-30 min-h-0", isMobile ? "p-0" : "p-4 pl-0 ml-2")}
 						>
 							<MainContentPanel
 								view={view}
@@ -927,6 +930,16 @@ export default function Chat() {
 					)}
 				</AnimatePresence>
 			</div>
+
+			{isMobile && showMainView && (
+				<button
+					onClick={() => setShowMobilePreview(v => !v)}
+					className="fixed top-1/2 -translate-y-1/2 right-0 z-50 bg-accent text-bg-1 rounded-l-full py-3 px-2 shadow-lg"
+					aria-label={showMobilePreview ? 'Show chat' : 'Show preview'}
+				>
+					{showMobilePreview ? <ChevronLeft className="size-5" /> : <ChevronRight className="size-5" />}
+				</button>
+			)}
 
 			<ChatModals
 				debugMessages={debugMessages}

@@ -6,7 +6,7 @@
 import * as schema from '../schema';
 import { eq, and, sql, or, lt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
-import { generateSecureToken } from '../../utils/cryptoUtils';
+import { generateSecureToken, sha256Hash } from '../../utils/cryptoUtils';
 import { SessionService } from './SessionService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
@@ -27,6 +27,7 @@ import { createLogger } from '../../logger';
 import { validateEmail, validatePassword } from '../../utils/validationUtils';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
+import { EmailService } from '../../services/email/EmailService';
 
 const logger = createLogger('AuthService');
 
@@ -791,5 +792,132 @@ export class AuthService extends BaseService {
                 500
             );
         }
+    }
+
+    async requestPasswordReset(email: string, appBaseUrl: string): Promise<void> {
+        const user = await this.database
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.email, email.toLowerCase()))
+            .get();
+
+        // Silently succeed if user not found or uses OAuth (don't reveal account existence)
+        if (!user || user.provider !== 'email') return;
+
+        // Remove any existing unused tokens
+        await this.database
+            .delete(schema.passwordResetTokens)
+            .where(
+                and(
+                    eq(schema.passwordResetTokens.userId, user.id),
+                    eq(schema.passwordResetTokens.used, false)
+                )
+            )
+            .run();
+
+        const token = generateSecureToken(32);
+        const tokenHash = await sha256Hash(token);
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+        await this.database
+            .insert(schema.passwordResetTokens)
+            .values({
+                id: generateId(),
+                userId: user.id,
+                tokenHash,
+                expiresAt,
+                used: false,
+            })
+            .run();
+
+        const resetUrl = `${appBaseUrl}/reset-password?token=${token}`;
+        const emailService = new EmailService(this.env);
+        await emailService.sendPasswordReset(user.email, resetUrl);
+    }
+
+    async resetPassword(token: string, newPassword: string): Promise<void> {
+        const tokenHash = await sha256Hash(token);
+
+        const record = await this.database
+            .select()
+            .from(schema.passwordResetTokens)
+            .where(
+                and(
+                    eq(schema.passwordResetTokens.tokenHash, tokenHash),
+                    eq(schema.passwordResetTokens.used, false)
+                )
+            )
+            .get();
+
+        if (!record) {
+            throw new SecurityError(SecurityErrorType.INVALID_TOKEN, 'Invalid or expired reset token', 400);
+        }
+
+        if (new Date() > record.expiresAt) {
+            throw new SecurityError(SecurityErrorType.TOKEN_EXPIRED, 'Reset token has expired. Please request a new one.', 400);
+        }
+
+        const passwordValidation = validatePassword(newPassword);
+        if (!passwordValidation.valid) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                passwordValidation.errors!.join(', '),
+                400
+            );
+        }
+
+        const passwordHash = await this.passwordService.hash(newPassword);
+
+        await this.database
+            .update(schema.users)
+            .set({ passwordHash, passwordChangedAt: new Date() })
+            .where(eq(schema.users.id, record.userId))
+            .run();
+
+        await this.database
+            .update(schema.passwordResetTokens)
+            .set({ used: true })
+            .where(eq(schema.passwordResetTokens.id, record.id))
+            .run();
+
+        await this.sessionService.revokeAllUserSessions(record.userId);
+    }
+
+    async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+        const user = await this.database
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.id, userId))
+            .get();
+
+        if (!user || user.provider !== 'email' || !user.passwordHash) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                'Password change is only available for email/password accounts',
+                400
+            );
+        }
+
+        const isValid = await this.passwordService.verify(currentPassword, user.passwordHash);
+        if (!isValid) {
+            throw new SecurityError(SecurityErrorType.INVALID_INPUT, 'Current password is incorrect', 401);
+        }
+
+        const passwordValidation = validatePassword(newPassword, undefined, { email: user.email });
+        if (!passwordValidation.valid) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                passwordValidation.errors!.join(', '),
+                400
+            );
+        }
+
+        const passwordHash = await this.passwordService.hash(newPassword);
+
+        await this.database
+            .update(schema.users)
+            .set({ passwordHash, passwordChangedAt: new Date() })
+            .where(eq(schema.users.id, userId))
+            .run();
     }
 }

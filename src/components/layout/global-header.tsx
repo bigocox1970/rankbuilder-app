@@ -61,9 +61,9 @@ export function GlobalHeader() {
 										src="/favicon-96x96.png"
 										alt="RankBuilder"
 										className="flex-shrink-0 transition-all duration-300"
-										style={{ width: '28px', height: '28px' }}
+										style={{ width: '32px', height: '32px' }}
 									/>
-									<span className="ml-2 font-bold text-base tracking-tight text-text-primary hidden sm:inline">
+									<span className="ml-2 font-bold text-lg tracking-tight text-text-primary hidden sm:inline">
 										Rank<span style={{ color: '#00E676' }}>Builder</span>
 									</span>
 								</a>

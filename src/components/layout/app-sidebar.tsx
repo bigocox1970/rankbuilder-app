@@ -23,6 +23,8 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useRecentApps, useFavoriteApps, useApps } from '@/hooks/use-apps';
@@ -175,8 +177,8 @@ export function AppSidebar() {
 		'apps',
 		'boards',
 	]);
-	const { state, setOpen } = useSidebar();
-	const isCollapsed = state === 'collapsed';
+	const { state, setOpen, isMobile } = useSidebar();
+	const isCollapsed = isMobile ? false : state === 'collapsed';
 
 	// Fetch real data from API
 	const { apps: recentApps, moreAvailable } = useRecentApps();
@@ -675,9 +677,11 @@ export function AppSidebar() {
 										</SidebarMenuButton>
 									</DropdownMenuTrigger>
 									<DropdownMenuContent side="right" align="end" className="w-56">
-										<DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer">
-											<Settings className="mr-2 h-4 w-4" /> Settings
-										</DropdownMenuItem>
+										<DropdownMenuLabel className="text-xs text-text-tertiary font-normal">
+											Signed in as<br />
+											<span className="font-medium text-text-secondary truncate block">{user.email}</span>
+										</DropdownMenuLabel>
+										<DropdownMenuSeparator />
 										<DropdownMenuItem onClick={() => logout()} className="cursor-pointer text-destructive focus:text-destructive">
 											<LogOut className="mr-2 h-4 w-4" /> Sign out
 										</DropdownMenuItem>

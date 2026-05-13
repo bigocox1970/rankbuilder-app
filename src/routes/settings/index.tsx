@@ -91,6 +91,36 @@ export default function SettingsPage() {
 		reset: resetCreatedKeyCopy,
 	} = useCopyToClipboard();
 
+	// Change password state
+	const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+	const [changePwForm, setChangePwForm] = useState({ current: '', next: '', confirm: '' });
+	const [changePwLoading, setChangePwLoading] = useState(false);
+	const [changePwError, setChangePwError] = useState<string | null>(null);
+
+	const handleChangePassword = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setChangePwError(null);
+		if (changePwForm.next !== changePwForm.confirm) {
+			setChangePwError('New passwords do not match');
+			return;
+		}
+		setChangePwLoading(true);
+		try {
+			const result = await apiClient.changePassword(changePwForm.current, changePwForm.next, changePwForm.confirm);
+			if (result.success) {
+				toast.success('Password changed successfully');
+				setChangePasswordOpen(false);
+				setChangePwForm({ current: '', next: '', confirm: '' });
+			} else {
+				setChangePwError(typeof result.error === 'string' ? result.error : 'Failed to change password');
+			}
+		} catch {
+			setChangePwError('Something went wrong. Please try again.');
+		} finally {
+			setChangePwLoading(false);
+		}
+	};
+
 	// Model configurations state
 	const [agentConfigs, setAgentConfigs] = useState<
 		Array<{ key: string; name: string; description: string }>
@@ -925,7 +955,63 @@ export default function SettingsPage() {
 									))
 								)}
 							</div>
-						</CardContent>
+								{user?.provider === 'email' && (
+									<>
+										<Separator />
+										<div className="space-y-2">
+											<h4 className="font-medium">Password</h4>
+											{changePasswordOpen ? (
+												<form onSubmit={handleChangePassword} className="space-y-3">
+													{changePwError && (
+														<p className="text-sm text-destructive">{changePwError}</p>
+													)}
+													<Input
+														type="password"
+														placeholder="Current password"
+														value={changePwForm.current}
+														onChange={(e) => setChangePwForm(f => ({ ...f, current: e.target.value }))}
+														disabled={changePwLoading}
+														required
+													/>
+													<Input
+														type="password"
+														placeholder="New password"
+														value={changePwForm.next}
+														onChange={(e) => setChangePwForm(f => ({ ...f, next: e.target.value }))}
+														disabled={changePwLoading}
+														required
+													/>
+													<Input
+														type="password"
+														placeholder="Confirm new password"
+														value={changePwForm.confirm}
+														onChange={(e) => setChangePwForm(f => ({ ...f, confirm: e.target.value }))}
+														disabled={changePwLoading}
+														required
+													/>
+													<div className="flex gap-2">
+														<Button type="submit" size="sm" disabled={changePwLoading}>
+															{changePwLoading ? 'Saving...' : 'Save'}
+														</Button>
+														<Button
+															type="button"
+															variant="outline"
+															size="sm"
+															onClick={() => { setChangePasswordOpen(false); setChangePwError(null); setChangePwForm({ current: '', next: '', confirm: '' }); }}
+														>
+															Cancel
+														</Button>
+													</div>
+												</form>
+											) : (
+												<Button variant="outline" size="sm" onClick={() => setChangePasswordOpen(true)}>
+													Change password
+												</Button>
+											)}
+										</div>
+									</>
+								)}
+							</CardContent>
 					</Card>
 
 					<div className="space-y-4 p-3">

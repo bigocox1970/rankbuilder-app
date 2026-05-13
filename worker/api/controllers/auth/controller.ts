@@ -7,10 +7,13 @@ import { SessionService } from '../../../database/services/SessionService';
 import { UserService } from '../../../database/services/UserService';
 import { ApiKeyService } from '../../../database/services/ApiKeyService';
 import { generateApiKey, sha256Hash } from '../../../utils/cryptoUtils';
-import { 
-    loginSchema, 
-    registerSchema, 
-    oauthProviderSchema
+import {
+    loginSchema,
+    registerSchema,
+    oauthProviderSchema,
+    forgotPasswordSchema,
+    resetPasswordSchema,
+    changePasswordSchema,
 } from './authSchemas';
 import { SecurityError } from 'shared/types/errors';
 import {
@@ -730,6 +733,77 @@ export class AuthController extends BaseController {
         }
     }
     
+    /**
+     * Request a password reset email
+     * POST /api/auth/forgot-password
+     */
+    static async forgotPassword(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+
+            const { email } = forgotPasswordSchema.parse(bodyResult.data);
+            const authService = new AuthService(env);
+            const appBaseUrl = `https://${env.CUSTOM_DOMAIN}`;
+            await authService.requestPasswordReset(email, appBaseUrl);
+
+            // Always return success to avoid revealing account existence
+            return AuthController.createSuccessResponse({ message: 'If an account exists for that email, a reset link has been sent.' });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'forgot password');
+        }
+    }
+
+    /**
+     * Reset password using a token from email
+     * POST /api/auth/reset-password
+     */
+    static async resetPassword(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+
+            const { token, newPassword } = resetPasswordSchema.parse(bodyResult.data);
+            const authService = new AuthService(env);
+            await authService.resetPassword(token, newPassword);
+
+            return AuthController.createSuccessResponse({ message: 'Password reset successfully. Please sign in with your new password.' });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'reset password');
+        }
+    }
+
+    /**
+     * Change password for authenticated user
+     * POST /api/auth/change-password
+     */
+    static async changePassword(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
+        try {
+            const user = routeContext.user;
+            if (!user) return AuthController.createErrorResponse('Unauthorised', 401);
+
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+
+            const { currentPassword, newPassword } = changePasswordSchema.parse(bodyResult.data);
+            const authService = new AuthService(env);
+            await authService.changePassword(user.id, currentPassword, newPassword);
+
+            return AuthController.createSuccessResponse({ message: 'Password changed successfully.' });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'change password');
+        }
+    }
+
     /**
      * Get available authentication providers
      * GET /api/auth/providers

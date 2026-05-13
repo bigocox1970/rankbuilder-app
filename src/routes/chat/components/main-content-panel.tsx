@@ -11,7 +11,6 @@ import { ViewContainer } from './view-container';
 import { ViewHeader } from './view-header';
 import { PreviewHeaderActions } from './preview-header-actions';
 import { EditorHeaderActions } from './editor-header-actions';
-import { Copy } from './copy';
 import { featureRegistry } from '@/features';
 import type { FileType, BlueprintType, BehaviorType, ModelConfigsInfo, TemplateDetails, ProjectType } from '@/api-types';
 import type { ContentDetectionResult } from '../utils/content-detector';
@@ -121,7 +120,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 	};
 
 	const renderViewWithHeader = (
-		centerContent: ReactNode,
 		viewContent: ReactNode,
 		rightActions?: ReactNode,
 		headerOverrides?: Partial<typeof commonHeaderProps>
@@ -130,7 +128,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 			<ViewHeader
 				{...commonHeaderProps}
 				{...headerOverrides}
-				centerContent={centerContent}
 				rightActions={rightActions}
 			/>
 			{viewContent}
@@ -147,7 +144,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		if (markdownFiles.length === 0) return null;
 
 		return renderViewWithHeader(
-			<span className="text-sm font-mono text-text-50/70">Documentation</span>,
 			<MarkdownDocsPreview
 				files={markdownFiles}
 				isGenerating={isGenerating || isGeneratingBlueprint}
@@ -159,14 +155,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		if (!previewUrl) {
 			return null;
 		}
-
-		// Get feature capabilities to determine preview behavior
-		const featureCapabilities = featureRegistry.getCapabilities(projectType);
-		const featureDefinition = featureRegistry.getDefinition(projectType);
-		const previewTitle = blueprint?.title ?? featureDefinition?.name ?? 'Preview';
-
-		// Check if we should show the refresh button (presentations handle refresh differently)
-		const showManualRefresh = featureCapabilities?.hasLiveReload ?? true;
 
 		// Get lazy-loaded preview component from feature registry
 		const FeaturePreviewComponent = featureRegistry.getLazyPreviewComponent(projectType);
@@ -260,21 +248,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		);
 
 		return renderViewWithHeader(
-			<div className="flex items-center gap-2">
-				<span className="text-sm font-mono text-text-50/70">
-					{previewTitle}
-				</span>
-				<Copy text={previewUrl} />
-				{showManualRefresh && (
-					<button
-						className="p-1 hover:bg-bg-2 rounded transition-colors"
-						onClick={onManualRefresh}
-						title="Refresh preview"
-					>
-						<RefreshCw className="size-4 text-text-primary/50" />
-					</button>
-				)}
-			</div>,
 			previewContent,
 			headerActions
 		);
@@ -282,10 +255,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 
 	const renderBlueprintView = () =>
 		renderViewWithHeader(
-			<div className="flex items-center gap-2">
-				<span className="text-sm text-text-50/70 font-mono">Blueprint.md</span>
-				{previewUrl && <Copy text={previewUrl} />}
-			</div>,
 			<div className="flex-1 overflow-y-auto bg-bg-3">
 				<div className="py-12 mx-auto">
 					<Blueprint
@@ -300,9 +269,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		// Defensive fallback: show file explorer with empty editor if no activeFile
 		if (!activeFile) {
 			return renderViewWithHeader(
-				<div className="flex items-center gap-2">
-					<span className="text-sm font-mono text-text-50/70">Select a file</span>
-				</div>,
 				<div className="flex-1 relative">
 					<div className="absolute inset-0 flex" ref={editorRef}>
 						<FileExplorer
@@ -328,10 +294,6 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		}
 
 		return renderViewWithHeader(
-			<div className="flex items-center gap-2">
-				<span className="text-sm font-mono text-text-50/70">{activeFile.filePath}</span>
-				{previewUrl && <Copy text={previewUrl} />}
-			</div>,
 			<div className="flex-1 relative">
 				<div className="absolute inset-0 flex" ref={editorRef}>
 					<FileExplorer

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import React from 'react';
 import { ViewModeSwitch } from './view-mode-switch';
 import { HEADER_STYLES } from './view-header-styles';
 import type { ProjectType } from '@/api-types';
@@ -10,8 +10,7 @@ interface ViewHeaderProps {
 	showTooltip: boolean;
 	hasDocumentation: boolean;
 	previewUrl?: string;
-	centerContent?: ReactNode;
-	rightActions?: ReactNode;
+	rightActions?: React.ReactNode;
 	projectType?: ProjectType;
 }
 
@@ -22,12 +21,11 @@ export function ViewHeader({
 	showTooltip,
     hasDocumentation,
 	previewUrl,
-	centerContent,
 	rightActions,
 	projectType,
 }: ViewHeaderProps) {
 	return (
-		<div className={`grid grid-cols-3 ${HEADER_STYLES.padding} ${HEADER_STYLES.container}`}>
+		<div className={`flex items-center justify-between ${HEADER_STYLES.padding} ${HEADER_STYLES.container}`}>
 			<div className="flex items-center">
 				<ViewModeSwitch
 					view={view}
@@ -38,9 +36,6 @@ export function ViewHeader({
 					previewUrl={previewUrl}
 					projectType={projectType}
 				/>
-			</div>
-			<div className="flex items-center justify-center">
-				{centerContent}
 			</div>
 			<div className="flex items-center justify-end">
 				{rightActions}
