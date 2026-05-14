@@ -13,6 +13,7 @@ const SLOT_LABELS: Record<string, string> = {
 
 export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; url: string } | null>(null);
+    const [lightbox, setLightbox] = useState<{ url: string; label: string } | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     const slots = Object.entries(images).filter(([, url]) => url && !url.includes('/undefined/'));
@@ -47,13 +48,14 @@ export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
                             e.dataTransfer.setData('text/plain', url);
                             e.dataTransfer.setData('text/uri-list', url);
                         }}
-                        title={`${SLOT_LABELS[slot] ?? slot} - right-click or drag to use`}
+                        title={`${SLOT_LABELS[slot] ?? slot} - click to enlarge, right-click or drag to use`}
                     >
                         <img
                             src={url}
                             alt={SLOT_LABELS[slot] ?? slot}
-                            className="h-14 w-auto rounded object-cover border border-zinc-700 group-hover:border-zinc-500 transition-colors cursor-grab active:cursor-grabbing"
+                            className="h-14 w-auto rounded object-cover border border-zinc-700 group-hover:border-zinc-500 transition-colors cursor-pointer"
                             crossOrigin="anonymous"
+                            onClick={() => setLightbox({ url, label: SLOT_LABELS[slot] ?? slot })}
                         />
                         <span className="absolute bottom-0 left-0 right-0 text-center text-[10px] text-zinc-400 bg-black/60 rounded-b px-1 py-0.5 leading-tight">
                             {SLOT_LABELS[slot] ?? slot}
@@ -89,6 +91,31 @@ export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
                         )}
                     </div>
                 </>
+            )}
+
+            {lightbox && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+                    onClick={() => setLightbox(null)}
+                >
+                    <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                        <img
+                            src={lightbox.url}
+                            alt={lightbox.label}
+                            className="max-w-full max-h-[85vh] rounded-lg object-contain shadow-2xl"
+                            crossOrigin="anonymous"
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between bg-black/60 rounded-b-lg px-4 py-2">
+                            <span className="text-sm text-zinc-300">{lightbox.label}</span>
+                            <button
+                                className="text-xs text-zinc-400 hover:text-white transition-colors"
+                                onClick={() => setLightbox(null)}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );
