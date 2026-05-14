@@ -25,7 +25,7 @@ class DebugPanelErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="fixed bottom-6 right-6 z-50 p-4 bg-red-50 border border-red-200 rounded-lg shadow-lg max-w-sm">
+        <div className="fixed bottom-24 right-6 z-50 p-4 bg-red-50 border border-red-200 rounded-lg shadow-lg max-w-sm">
           <div className="flex items-center gap-2 text-red-800 mb-2">
             <Bug className="w-4 h-4" />
             <span className="font-medium">Debug Panel Error</span>
@@ -520,7 +520,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
       {/* Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-105 ${
+        className={`fixed bottom-24 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-105 ${
           (errorCount > 0 || warningCount > 0) && !isOpen
             ? 'bg-red-500 text-white animate-pulse'
             : 'bg-zinc-800 text-white hover:bg-zinc-700'
