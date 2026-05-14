@@ -233,7 +233,7 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
         
         // Cross-Origin policies
         crossOriginEmbedderPolicy: 'require-corp',
-        crossOriginResourcePolicy: 'same-origin',
+        crossOriginResourcePolicy: 'cross-origin',
         crossOriginOpenerPolicy: 'same-origin',
         
         // Origin Agent Cluster

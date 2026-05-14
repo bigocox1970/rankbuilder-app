@@ -34,6 +34,12 @@ export function createApp(env: Env): Hono<AppEnv> {
         if (pathname.startsWith('/oauth/') || pathname === '/auth/callback') {
             return next();
         }
+
+        // Skip secure headers for generated images so the controller can set
+        // Cross-Origin-Resource-Policy: cross-origin (required for preview iframes with COEP).
+        if (pathname.startsWith('/api/generated-images/')) {
+            return next();
+        }
         // Apply secure headers
         return secureHeaders(getSecureHeadersConfig(env))(c, next);
     });
