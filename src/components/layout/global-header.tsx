@@ -8,8 +8,6 @@ import { ChevronRight, AlertCircle } from 'lucide-react';
 import { usePlatformStatus } from '@/hooks/use-platform-status';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useLocation } from 'react-router';
-import clsx from 'clsx';
 import { UsageLimitsBadge } from '../usage-limits-badge';
 
 export function GlobalHeader() {
@@ -18,8 +16,6 @@ export function GlobalHeader() {
 	const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
 	const hasChangeLogs = Boolean(status.changeLogs && status.changeLogs.trim().length > 0);
-	const { pathname } = useLocation();
-
 	useEffect(() => {
 		if (!hasChangeLogs) {
 			setIsChangelogOpen(false);
@@ -32,7 +28,7 @@ export function GlobalHeader() {
 				initial={{ y: -10, opacity: 0 }}
 				animate={{ y: 0, opacity: 1 }}
 				transition={{ duration: 0.2, ease: 'easeOut' }}
-				className={clsx("sticky top-0 z-[60]", pathname !== "/" && "bg-bg-3")}
+				className="sticky top-0 z-[60] bg-bg-3"
 			>
 				<div className="relative">
 					{/* Subtle gradient accent */}
