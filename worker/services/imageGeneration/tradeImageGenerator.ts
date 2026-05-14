@@ -9,7 +9,8 @@ export interface GeneratedTradeImages {
     work2: string;
 }
 
-const NO_TEXT = 'no text, no words, no writing, no watermarks, no logos, no signs, no captions, no overlays';
+const NO_TEXT = 'no text, no words, no writing, no watermarks, no logos, no signs, no captions, no overlays, no website, no screenshot, no mockup, no UI, no computer screen, no browser, no interface';
+const PHOTO_PREFIX = 'A real-world professional photograph of';
 
 const IMAGE_SPECS: Array<{
     key: keyof GeneratedTradeImages;
@@ -19,19 +20,19 @@ const IMAGE_SPECS: Array<{
 }> = [
     {
         key: 'hero',
-        promptSuffix: `professional hero shot, wide angle landscape, cinematic lighting, commercial photography, high quality, photorealistic, ${NO_TEXT}`,
+        promptSuffix: `wide angle exterior or action shot, cinematic natural lighting, DSLR photography, sharp focus, commercial photography style, photorealistic, ${NO_TEXT}`,
         width: 1024,
         height: 576,
     },
     {
         key: 'work1',
-        promptSuffix: `skilled professional at work, close detail shot, natural lighting, high quality photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: `skilled tradesperson at work on a job, close detail shot, natural daylight, DSLR photography, shallow depth of field, photorealistic, ${NO_TEXT}`,
         width: 768,
         height: 512,
     },
     {
         key: 'work2',
-        promptSuffix: `completed professional work, beautiful clean result, high quality photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: `finished professional work result, clean and polished, natural lighting, DSLR photography, photorealistic, ${NO_TEXT}`,
         width: 768,
         height: 512,
     },
@@ -80,7 +81,7 @@ export async function generateTradeImages(
     try {
         const results = await Promise.all(
             IMAGE_SPECS.map(async ({ key, promptSuffix, width, height }) => {
-                const prompt = `${businessContext}, ${promptSuffix}`;
+                const prompt = `${PHOTO_PREFIX} ${businessContext}, ${promptSuffix}`;
                 const bytes = await runFlux(env, prompt, width, height);
                 const r2Key = `generated-images/${agentId}/${key}.png`;
 
@@ -119,7 +120,8 @@ export async function regenerateTradeImage(
     const width = spec?.width ?? DEFAULT_WIDTH;
     const height = spec?.height ?? DEFAULT_HEIGHT;
 
-    const safePrompt = prompt.includes('no text') ? prompt : `${prompt}, ${NO_TEXT}`;
+    const basePrompt = prompt.startsWith(PHOTO_PREFIX) ? prompt : `${PHOTO_PREFIX} ${prompt}`;
+    const safePrompt = basePrompt.includes('no website') ? basePrompt : `${basePrompt}, ${NO_TEXT}`;
     const bytes = await runFlux(env, safePrompt, width, height);
     const r2Key = `generated-images/${agentId}/${slot}.png`;
 
