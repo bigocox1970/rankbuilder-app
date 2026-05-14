@@ -13,6 +13,7 @@ export interface CodeGenArgs {
     behaviorType?: BehaviorType;
     projectType?: ProjectType;
     images?: ImageAttachment[];
+    imageGenerationEnabled?: boolean;
 
     /** Optional ephemeral credentials (BYOK / gateway override) for sdk */
     credentials?: CredentialsPayload;

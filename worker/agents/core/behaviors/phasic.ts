@@ -1,9 +1,10 @@
-import { 
-    PhaseConceptGenerationSchemaType, 
+import {
+    PhaseConceptGenerationSchemaType,
     PhaseConceptType,
     FileOutputType,
     PhaseImplementationSchemaType,
 } from '../../schemas';
+import { generateTradeImages, buildImageContext } from '../../../services/imageGeneration/tradeImageGenerator';
 import { StaticAnalysisResponse } from '../../../services/sandbox/sandboxTypes';
 import { CurrentDevState, MAX_PHASES, PhasicState } from '../state';
 import { AllIssues, AgentInitArgs, PhaseExecutionResult, UserContext } from '../types';
@@ -69,11 +70,18 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             throw new Error('Phasic initialization requires templateInfo.templateDetails');
         }
         const { query, language, frameworks, hostname, inferenceContext, sandboxSessionId } = initArgs;
-        
+        const isWebsiteTemplate = templateInfo.templateDetails.name === 'minimal-js';
+        const imageGenerationEnabled = initArgs.imageGenerationEnabled !== false;
+
+        // Kick off image generation concurrently with blueprint (website template only)
+        const imageGenPromise = (isWebsiteTemplate && imageGenerationEnabled)
+            ? generateTradeImages(this.env, this.getAgentId(), query)
+            : Promise.resolve(null);
+
         // Generate a blueprint
         this.logger.info('Generating blueprint', { query, queryLength: query.length, imagesCount: initArgs.images?.length || 0 });
         this.logger.info(`Using language: ${language}, frameworks: ${frameworks ? frameworks.join(", ") : "none"}`);
-        
+
         const blueprint = await generateBlueprint({
             env: this.env,
             inferenceContext,
@@ -90,22 +98,36 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                     initArgs.onBlueprintChunk(chunk);
                 }
             }
-        })
-                
+        });
+
+        // Await images (generation ran in parallel with blueprint)
+        const generatedImages = await imageGenPromise;
+        const storedQuery = generatedImages
+            ? query + buildImageContext(generatedImages)
+            : query;
+
+        if (generatedImages) {
+            this.logger.info('Images generated and injected into context', {
+                hero: generatedImages.hero,
+                work1: generatedImages.work1,
+                work2: generatedImages.work2,
+            });
+        }
+
         const packageJson = templateInfo.templateDetails.allFiles['package.json'];
-                
+
         const projectName = generateProjectName(
             blueprint?.projectName || templateInfo?.templateDetails.name || '',
             generateNanoId(),
             PhasicCodingBehavior.PROJECT_NAME_PREFIX_MAX_LENGTH
         );
-                        
+
         this.logger.info('Generated project name', { projectName });
-                        
+
         const nextState: PhasicState = {
             ...this.state,
             projectName,
-            query,
+            query: storedQuery,
             blueprint,
             templateName: templateInfo.templateDetails.name,
             sandboxInstanceId: undefined,

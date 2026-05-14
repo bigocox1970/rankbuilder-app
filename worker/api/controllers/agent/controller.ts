@@ -247,6 +247,7 @@ export class CodingAgentController extends BaseController {
                 hostname,
                 inferenceContext,
                 images: uploadedImages,
+                imageGenerationEnabled: body.imageGenerationEnabled !== false,
                 onBlueprintChunk: (chunk: string) => {
                     writer.write({chunk});
                 },

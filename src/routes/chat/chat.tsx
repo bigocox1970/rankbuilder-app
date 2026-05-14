@@ -50,6 +50,7 @@ export default function Chat() {
 	const userQuery = searchParams.get('query');
 	const urlProjectType = searchParams.get('projectType') || 'app';
 	const urlSelectedTemplate = searchParams.get('selectedTemplate') || undefined;
+	const urlImageGeneration = searchParams.get('imageGeneration') !== '0';
 
 	// Extract images from URL params if present
 	const userImages = useMemo(() => {
@@ -161,6 +162,7 @@ export default function Chat() {
 		images: userImages,
 		projectType: urlProjectType as ProjectType,
 		selectedTemplate: urlSelectedTemplate,
+		imageGenerationEnabled: urlImageGeneration,
 		onDebugMessage: addDebugMessage,
 		onVaultUnlockRequired: handleVaultUnlockRequired,
 	});

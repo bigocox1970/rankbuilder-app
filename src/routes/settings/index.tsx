@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
 	Smartphone,
 	Trash2,
@@ -58,6 +58,8 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 // import { SecretsManager } from '@/components/vault';
 // import { ByokApiKeysModal } from '@/components/byok-api-keys-modal';
 import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
+import { Switch } from '@/components/ui/switch';
+import { ImageIcon } from 'lucide-react';
 
 const ADMIN_EMAIL = 'perimeter.uk@gmail.com';
 
@@ -125,6 +127,14 @@ export default function SettingsPage() {
 	};
 
 	// Model configurations state
+	const [imageGenEnabled, setImageGenEnabled] = useState<boolean>(() => {
+		try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; }
+	});
+
+	useEffect(() => {
+		try { localStorage.setItem('imageGeneration.enabled', imageGenEnabled ? 'true' : 'false'); } catch { /* ignore */ }
+	}, [imageGenEnabled]);
+
 	const [agentConfigs, setAgentConfigs] = useState<
 		Array<{ key: string; name: string; description: string }>
 	>([]);
@@ -629,6 +639,32 @@ export default function SettingsPage() {
 
 					{/* User Secrets Vault Section */}
 					{/* <SecretsManager id="secrets" /> */}
+
+					{/* Image Generation */}
+					<Card id="image-generation">
+						<CardHeader variant="minimal">
+							<div className="flex items-center gap-3 border-b w-full py-3 text-text-primary">
+								<ImageIcon className="h-5 w-5" />
+								<div>
+									<CardTitle>Image Generation</CardTitle>
+								</div>
+							</div>
+						</CardHeader>
+						<CardContent className="space-y-4 px-6 mt-4">
+							<div className="flex items-center justify-between">
+								<div>
+									<p className="text-sm font-medium text-text-primary">AI hero images for websites</p>
+									<p className="text-xs text-text-tertiary mt-0.5">
+										Generate real images using Cloudflare AI when building a website. Turn off for faster iteration.
+									</p>
+								</div>
+								<Switch
+									checked={imageGenEnabled}
+									onCheckedChange={setImageGenEnabled}
+								/>
+							</div>
+						</CardContent>
+					</Card>
 
 					<Card id="api-keys">
 						<CardHeader variant="minimal">

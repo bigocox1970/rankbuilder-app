@@ -141,7 +141,9 @@ export default function Home() {
 		// Encode images as JSON if present
 		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
 		const templateParam = stack === 'website' ? `&selectedTemplate=${WEBSITE_TEMPLATE}` : '';
-		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}`;
+		const imageGenEnabled = (() => { try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; } })();
+		const imageGenParam = (!imageGenEnabled || stack !== 'website') ? '&imageGeneration=0' : '';
+		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${imageGenParam}`;
 
 		if (
 			!requireAuth({

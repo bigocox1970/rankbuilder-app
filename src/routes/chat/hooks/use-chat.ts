@@ -53,6 +53,7 @@ export function useChat({
 	images: userImages,
 	projectType = 'app',
 	selectedTemplate,
+	imageGenerationEnabled = true,
 	onDebugMessage,
 	onTerminalMessage,
 	onVaultUnlockRequired,
@@ -62,6 +63,7 @@ export function useChat({
 	images?: ImageAttachment[];
 	projectType?: ProjectType;
 	selectedTemplate?: string;
+	imageGenerationEnabled?: boolean;
 	onDebugMessage?: (type: 'error' | 'warning' | 'info' | 'websocket', message: string, details?: string, source?: string, messageType?: string, rawMessage?: unknown) => void;
 	onTerminalMessage?: (log: { id: string; content: string; type: 'command' | 'stdout' | 'stderr' | 'info' | 'error' | 'warn' | 'debug'; timestamp: number; source?: string }) => void;
 	onVaultUnlockRequired?: (reason: string) => void;
@@ -477,6 +479,7 @@ export function useChat({
 						query: userQuery,
 						projectType,
 						selectedTemplate,
+						imageGenerationEnabled,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
 					});
 
