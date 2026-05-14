@@ -42,8 +42,7 @@ async function buildZip(files: FileType[], generatedImages?: Record<string, stri
 					if (!res.ok) return;
 					const buf = await res.arrayBuffer();
 					const filename = SLOT_EXTENSIONS[slot] ?? `${slot}.png`;
-					const zipPath = `images/${filename}`;
-					entries[zipPath] = new Uint8Array(buf);
+					entries[`public/images/${filename}`] = new Uint8Array(buf);
 
 					// Match any URL that references this slot (strip query string variant)
 					const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\?v=\d+/, '(?:\\?v=\\d+)?');
