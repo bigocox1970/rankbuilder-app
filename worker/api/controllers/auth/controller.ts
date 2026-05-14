@@ -827,7 +827,7 @@ export class AuthController extends BaseController {
             const response = AuthController.createSuccessResponse({
                 providers,
                 hasOAuth: providers.google || providers.github,
-                requiresEmailAuth: !providers.google && !providers.github,
+                requiresEmailAuth: true,
                 csrfToken,
                 csrfExpiresIn: Math.floor(CsrfService.defaults.tokenTTL / 1000)
             });

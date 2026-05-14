@@ -63,7 +63,7 @@ export function GlobalHeader() {
 										className="flex-shrink-0 transition-all duration-300"
 										style={{ width: '32px', height: '32px' }}
 									/>
-									<span className="ml-2 font-bold text-lg tracking-tight text-text-primary hidden sm:inline">
+									<span className="ml-2 font-bold text-lg tracking-tight text-text-primary">
 										Rank<span style={{ color: '#00E676' }}>Builder</span>
 									</span>
 								</a>
@@ -111,6 +111,7 @@ export function GlobalHeader() {
 									}}
 								/>
 							)}
+							{user && <ThemeToggle />}
 							{!user && <ThemeToggle />}
 							{!user && <AuthButton />}
 						</motion.div>

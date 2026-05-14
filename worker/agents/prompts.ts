@@ -682,6 +682,10 @@ export default function Page() {
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="manifest" href="/manifest.json" />
 - Every page/route must be fully usable and visually correct at 375px width (iPhone SE) — no content clipped, no elements overflowing, no horizontal scrollbar
+
+7) No decorative pill/badge labels above headings
+- NEVER place a small pill, badge, tag, or chip element directly above an h1, h2, or hero heading. These are the small rounded labels (e.g. <span className="rounded-full px-3 py-1 text-sm ...">Our Services</span>) used as eyebrow text above section titles.
+- If you need to establish section context, use a subheading, a short paragraph, or styled text — not a pill/badge component.
 `,
 PROJECT_CONTEXT: `Here is everything you will need about the project:
 
