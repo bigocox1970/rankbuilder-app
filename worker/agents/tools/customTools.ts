@@ -19,6 +19,7 @@ import { createGetRuntimeErrorsTool } from './toolkit/get-runtime-errors';
 import { createWaitForGenerationTool } from './toolkit/wait-for-generation';
 import { createWaitForDebugTool } from './toolkit/wait-for-debug';
 import { createGitTool } from './toolkit/git';
+import { createRegenerateImageTool } from './toolkit/regenerate-image';
 import { ICodingAgent } from '../services/interfaces/ICodingAgent';
 import { Message } from '../inferutils/common';
 import { ChatCompletionMessageFunctionToolCall } from 'openai/resources';
@@ -59,6 +60,7 @@ export function buildTools(
         createGitTool(agent, logger, { excludeCommands: ['reset'] }),
         // Deep autonomous debugging assistant tool
         createDeepDebuggerTool(agent, logger, toolRenderer, streamCb),
+        createRegenerateImageTool(agent, logger),
     ];
 }
 

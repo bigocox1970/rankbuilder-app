@@ -72,7 +72,8 @@ export interface HandleMessageDeps {
     clearDeploymentTimeout?: () => void;
 
     setBackendErrorDialog: React.Dispatch<React.SetStateAction<BackendErrorDialogState>>;
-    
+    setGeneratedImageUrls: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+
     // Current state
     isInitialStateRestored: boolean;
     blueprint: BlueprintType | undefined;
@@ -125,7 +126,21 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
     // Blueprint chunk parser (maintained across chunks)
     let blueprintParser: ReturnType<typeof createRepairingJSONParser> | null = null;
 
-    return (websocket: WebSocket, message: WebSocketMessage) => {
+    return (websocket: WebSocket, rawMessage: WebSocketMessage) => {
+        // The Cloudflare Agents SDK occasionally sends cf_agent_state with the
+        // full JSON payload double-encoded as the `type` string. Detect and unwrap it.
+        let message: WebSocketMessage = rawMessage;
+        if (typeof rawMessage.type === 'string' && rawMessage.type.startsWith('{')) {
+            try {
+                const inner = JSON.parse(rawMessage.type) as WebSocketMessage;
+                if (inner && typeof inner.type === 'string') {
+                    message = inner;
+                }
+            } catch {
+                // Not valid JSON — fall through to normal handling
+            }
+        }
+
         const {
             setFiles,
             setPhaseTimeline,
@@ -151,6 +166,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setInternalProjectType,
             setTemplateDetails,
             setBackendErrorDialog,
+            setGeneratedImageUrls,
             isInitialStateRestored,
             blueprint,
             query,
@@ -174,7 +190,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
         // Log messages except for frequent ones
         if (message.type !== 'file_chunk_generated' && message.type !== 'cf_agent_state' && message.type.length <= 50) {
             logger.info('received message', message.type, message);
-            onDebugMessage?.('websocket', 
+            onDebugMessage?.('websocket',
                 `${message.type}`,
                 JSON.stringify(message, null, 2),
                 'WebSocket',
@@ -182,7 +198,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 message
             );
         }
-        
+
         switch (message.type) {
             case 'conversation_cleared': {
                 // Reset chat messages to a subtle tool-event entry indicating success
@@ -328,8 +344,12 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         setMessages(prev => [...prev, ...queuedMessages]);
                     }
 
+                    if (state.generatedImageUrls && Object.keys(state.generatedImageUrls).length > 0) {
+                        setGeneratedImageUrls(state.generatedImageUrls);
+                    }
+
                     setIsInitialStateRestored(true);
-                    
+
                     if (state.shouldBeGenerating && !isGenerating) {
                         logger.debug('🔄 Reconnected with shouldBeGenerating=true, auto-resuming generation');
                         setIsGenerating(true); 
@@ -1090,8 +1110,36 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
-            default:
-                logger.warn('Unhandled message:', message);
+            case 'images_generated': {
+                setGeneratedImageUrls(message.images);
+                break;
+            }
+
+            // SDK-internal messages and screenshot events the UI doesn't need to act on
+            case 'screenshot_capture_started':
+            case 'screenshot_capture_success':
+            case 'screenshot_capture_error':
+            case 'screenshot_analysis_result':
+            case 'static_analysis_results':
+            case 'command_executing':
+            case 'command_executed':
+            case 'command_execution_failed':
+            case 'project_name_updated':
+            case 'blueprint_updated':
+            case 'user_suggestions_processing':
+            case 'deterministic_code_fix_started':
+            case 'deterministic_code_fix_completed':
+            case 'model_configs_info':
+            case 'terminal_command':
+                break;
+
+            default: {
+                // cf_agent_mcp_servers is an SDK-internal message we don't need to handle
+                const unknownType = (message as { type: string }).type;
+                if (unknownType !== 'cf_agent_mcp_servers') {
+                    logger.warn('Unhandled message:', message);
+                }
+            }
         }
     };
 }

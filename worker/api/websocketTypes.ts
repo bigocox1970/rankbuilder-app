@@ -105,6 +105,11 @@ type PreviewForceRefreshMessage = {
 	type: 'preview_force_refresh';
 };
 
+type ImagesGeneratedMessage = {
+    type: 'images_generated';
+    images: Record<string, string>;
+};
+
 type CommandExecutingMessage = {
 	type: 'command_executing';
 	message: string;
@@ -628,6 +633,7 @@ export type WebSocketMessage =
 	| ServerLogMessage
 	| VaultUnlockedMessage
 	| VaultLockedMessage
+	| ImagesGeneratedMessage
 	| VaultRequiredMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)

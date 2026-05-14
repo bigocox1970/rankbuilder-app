@@ -64,6 +64,8 @@ export interface BaseProjectState {
     // Deep debug
     lastDeepDebugTranscript: string | null;
 
+    generatedImageUrls?: Record<string, string>;
+
     mvpGenerated: boolean;
     reviewingInitiated: boolean;
     cloudflareToken?: string; // Encrypted Cloudflare OAuth token blob (backend decrypts when needed)

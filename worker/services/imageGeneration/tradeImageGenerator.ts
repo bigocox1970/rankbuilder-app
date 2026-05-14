@@ -76,13 +76,56 @@ export async function generateTradeImages(
     }
 }
 
+// Default dimensions for any slot not in IMAGE_SPECS
+const DEFAULT_WIDTH = 768;
+const DEFAULT_HEIGHT = 512;
+
+export async function regenerateTradeImage(
+    env: Env,
+    agentId: string,
+    slot: string,
+    prompt: string,
+): Promise<string> {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(slot)) throw new Error(`Invalid image slot name: ${slot}`);
+
+    const spec = IMAGE_SPECS.find(s => s.key === slot);
+    const width = spec?.width ?? DEFAULT_WIDTH;
+    const height = spec?.height ?? DEFAULT_HEIGHT;
+
+    const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
+        prompt,
+        num_steps: 4,
+        width,
+        height,
+    });
+
+    const buffer = await new Response(response as ReadableStream).arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const r2Key = `generated-images/${agentId}/${slot}.png`;
+
+    await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
+        httpMetadata: { contentType: 'image/png' },
+        customMetadata: { agentId },
+    });
+
+    return getPublicUrlForR2Image(env, r2Key);
+}
+
 export function buildImageContext(images: GeneratedTradeImages): string {
     return `
 
-[GENERATED IMAGES - use these exact URLs in your HTML implementation]
-Hero image (use for the main hero/banner section, full width): ${images.hero}
-Work image 1 (use for services or portfolio section): ${images.work1}
-Work image 2 (use for about, gallery, or second services section): ${images.work2}
+[GENERATED IMAGES]
+CRITICAL: Exactly 3 real images have been generated for this site. These are the ONLY images you may use. Do NOT use placeholder images, stock photos, or URLs from unsplash.com, picsum.photos, placehold.it, or any other external image source.
+
+Rules:
+- Use ONLY the 3 URLs below — no other image URLs anywhere in the HTML
+- Do NOT create gallery sections with more than 3 images
+- Do NOT add <img> tags or CSS background-image references to any URL not listed here
+- Design sections to use these images, not the other way around
+
+Hero image (main hero/banner, full width): ${images.hero}
+Work image 1 (services or portfolio section): ${images.work1}
+Work image 2 (about section or secondary content): ${images.work2}
 [END GENERATED IMAGES]
 `;
 }

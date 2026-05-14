@@ -34,6 +34,7 @@ import { mergeFiles } from '@/utils/file-helpers';
 import { ChatModals } from './components/chat-modals';
 import { MainContentPanel } from './components/main-content-panel';
 import { ChatInput } from './components/chat-input';
+import { GeneratedImageThumbnails } from './components/GeneratedImageThumbnails';
 import { useVault } from '@/hooks/use-vault';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { VaultUnlockModal } from '@/components/vault';
@@ -156,6 +157,7 @@ export default function Chat() {
 		// Backend error dialog state
 		backendErrorDialog,
 		setBackendErrorDialog,
+		generatedImageUrls,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -868,6 +870,10 @@ export default function Chat() {
 					</div>
 
 
+				<GeneratedImageThumbnails
+					images={generatedImageUrls}
+					onInsertUrl={(url) => setNewMessage(prev => prev ? `${prev} ${url}` : url)}
+				/>
 				<ChatInput
 					newMessage={newMessage}
 					onMessageChange={setNewMessage}

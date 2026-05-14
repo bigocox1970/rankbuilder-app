@@ -43,6 +43,7 @@ import { generatePortToken } from 'worker/utils/cryptoUtils';
 import { getPreviewDomain, getProtocolForHost } from 'worker/utils/urls';
 import { isDev } from 'worker/utils/envs';
 import { InMemoryAnalyzer } from '../../../services/static-analysis';
+import { regenerateTradeImage } from '../../../services/imageGeneration/tradeImageGenerator';
 
 // Screenshot capture configuration
 const SCREENSHOT_CONFIG = {
@@ -1026,6 +1027,22 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         // await this.getSandboxServiceClient().writeFiles(sandboxInstanceId, [{ filePath: regenerated.filePath, fileContents: regenerated.fileContents }], `Deep debugger fix: ${path}`);
         await this.deploymentManager.deployToSandbox([regenerated])
         return { path, diff: regenerated.lastDiff };
+    }
+
+    async regenerateImage(slot: string, description: string): Promise<{ url: string }> {
+        const query = this.state.query || '';
+        const baseQuery = query.replace(/\[GENERATED IMAGES\][\s\S]*?\[END GENERATED IMAGES\]/g, '').trim();
+        const prompt = baseQuery ? `${baseQuery}, ${description}` : description;
+        const url = await regenerateTradeImage(this.env, this.getAgentId(), slot, prompt);
+        const updatedUrls = { ...(this.state.generatedImageUrls || {}), [slot]: url };
+        this.setState({ ...this.state, generatedImageUrls: updatedUrls });
+        this.broadcast(WebSocketMessageResponses.IMAGES_GENERATED, { images: updatedUrls });
+        this.broadcast(WebSocketMessageResponses.PREVIEW_FORCE_REFRESH, {});
+        return { url };
+    }
+
+    getGeneratedImageUrls(): Record<string, string> {
+        return this.state.generatedImageUrls || {};
     }
 
     async generateFiles(

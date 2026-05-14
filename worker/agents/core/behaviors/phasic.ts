@@ -74,8 +74,9 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         const imageGenerationEnabled = initArgs.imageGenerationEnabled !== false;
 
         // Kick off image generation concurrently with blueprint (website template only)
+        // Use inferenceContext.metadata.agentId directly — state.metadata isn't set until setState() later in this method
         const imageGenPromise = (isWebsiteTemplate && imageGenerationEnabled)
-            ? generateTradeImages(this.env, this.getAgentId(), query)
+            ? generateTradeImages(this.env, inferenceContext.metadata.agentId, query)
             : Promise.resolve(null);
 
         // Generate a blueprint
@@ -138,9 +139,17 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             hostname,
             metadata: inferenceContext.metadata,
             projectType: this.projectType,
-            behaviorType: 'phasic'
+            behaviorType: 'phasic',
+            generatedImageUrls: generatedImages
+                ? { hero: generatedImages.hero, work1: generatedImages.work1, work2: generatedImages.work2 }
+                : this.state.generatedImageUrls,
         };
         this.setState(nextState);
+        if (generatedImages) {
+            this.broadcast(WebSocketMessageResponses.IMAGES_GENERATED, {
+                images: { hero: generatedImages.hero, work1: generatedImages.work1, work2: generatedImages.work2 }
+            });
+        }
         // Customize template files (package.json, wrangler.jsonc, .bootstrap.js, .gitignore)
         const customizedFiles = customizeTemplateFiles(
             templateInfo.templateDetails.allFiles,

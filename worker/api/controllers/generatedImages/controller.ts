@@ -54,9 +54,10 @@ export class GeneratedImagesController extends BaseController {
             return new Response(obj.body, {
                 headers: {
                     'Content-Type': contentType,
-                    'Cache-Control': 'public, max-age=86400',
+                    'Cache-Control': 'no-cache',
                     'X-Content-Type-Options': 'nosniff',
                     'Access-Control-Allow-Origin': '*',
+                    'Cross-Origin-Resource-Policy': 'cross-origin',
                 },
             }) as unknown as ControllerResponse<ApiResponse<never>>;
         } catch (error) {

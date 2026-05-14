@@ -159,6 +159,8 @@ export function useChat({
 	// Track whether we've completed initial state restoration to avoid disrupting active sessions
 	const [isInitialStateRestored, setIsInitialStateRestored] = useState(false);
 
+	const [generatedImageUrls, setGeneratedImageUrls] = useState<Record<string, string>>({});
+
 	const updateStage = useCallback(
 		(stageId: ProjectStage['id'], data: Partial<Omit<ProjectStage, 'id'>>) => {
 			logger.debug('updateStage', { stageId, ...data });
@@ -204,6 +206,9 @@ export function useChat({
 		]);
 	}, []);
 
+	// Ref so the WS event listener always calls the latest handler without needing to re-attach
+	const handleWebSocketMessageRef = useRef<ReturnType<typeof createWebSocketMessageHandler> | null>(null);
+
 	// Create the WebSocket message handler
 	const handleWebSocketMessage = useMemo(
 		() =>
@@ -235,6 +240,7 @@ export function useChat({
 			setInternalProjectType,
 			setTemplateDetails,
 			setBackendErrorDialog,
+			setGeneratedImageUrls,
 			// Current state
 			isInitialStateRestored,
 			blueprint,
@@ -283,6 +289,11 @@ export function useChat({
 			clearDeploymentTimeout,
 		],
 	);
+
+	// Keep the ref in sync so event listeners always call the latest handler
+	useEffect(() => {
+		handleWebSocketMessageRef.current = handleWebSocketMessage;
+	}, [handleWebSocketMessage]);
 
 	// WebSocket connection with retry logic
 	const connectWithRetry = useCallback(
@@ -359,7 +370,7 @@ export function useChat({
 				ws.addEventListener('message', (event) => {
 					try {
 						const message: WebSocketMessage = JSON.parse(event.data);
-						handleWebSocketMessage(ws, message);
+						handleWebSocketMessageRef.current?.(ws, message);
 					} catch (parseError) {
 						logger.error('❌ Error parsing WebSocket message:', parseError, event.data);
 					}
@@ -396,7 +407,7 @@ export function useChat({
 				handleConnectionFailureRef.current?.(wsUrl, disableGenerate, 'Connection setup failed');
 			}
 		},
-		[maxRetries, handleWebSocketMessage, urlChatId],
+		[maxRetries, urlChatId],
 	);
 
 	// Handle connection failures with exponential backoff retry
@@ -788,6 +799,7 @@ export function useChat({
 		runtimeErrorCount,
 		staticIssueCount,
 		isDebugging,
+		generatedImageUrls,
 		// Behavior type from backend
 		behaviorType,
 		projectType: internalProjectType,

@@ -62,6 +62,10 @@ export interface ICodingAgent {
     ): Promise<{ files: Array<{ path: string; purpose: string; diff: string }> }>;
 
     regenerateFileByPath(path: string, issues: string[]): Promise<{ path: string; diff: string }>;
+
+    regenerateImage(slot: string, description: string): Promise<{ url: string }>;
+
+    getGeneratedImageUrls(): Record<string, string>;
     
     isCodeGenerating(): boolean;
     
