@@ -28,7 +28,7 @@ export function GlobalHeader() {
 				initial={{ y: -10, opacity: 0 }}
 				animate={{ y: 0, opacity: 1 }}
 				transition={{ duration: 0.2, ease: 'easeOut' }}
-				className="sticky top-0 z-[60] bg-bg-3"
+				className="sticky top-0 z-[60] bg-bg-3/80 backdrop-blur-md border-b border-border/20"
 			>
 				<div className="relative">
 					{/* Subtle gradient accent */}

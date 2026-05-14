@@ -178,7 +178,7 @@ export default function Home() {
 	const discoverLinkRef = useRef<HTMLDivElement>(null);
 
 	return (
-		<div className="relative flex flex-col items-center size-full">
+		<div className="relative flex flex-col items-center size-full overflow-y-auto">
 			{/* Radial glow background matching marketing site */}
 			<div className="fixed inset-0 z-0 pointer-events-none">
 				<div className="absolute inset-0" style={{
@@ -186,15 +186,16 @@ export default function Home() {
 				}} />
 			</div>
 
+			{/* Top spacer — flexes to fill space but caps out so content doesn't drop too low */}
+			<div className="flex-1 min-h-[1rem] max-h-[20vh]" />
+
 			<LayoutGroup>
 				<div className="rounded-md w-full max-w-2xl overflow-hidden">
 					<motion.div
 						layout
 						transition={{ layout: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }}
-						className={clsx(
-							"px-6 p-8 flex flex-col items-center z-10",
-							discoverReady ? "mt-32" : "mt-[20vh] sm:mt-[24vh] md:mt-[28vh]"
-						)}>
+						className="px-6 p-8 flex flex-col items-center z-10"
+					>
 						<h1 className="font-bold leading-[1.1] tracking-tight text-5xl w-full mb-6 text-text-primary">
 							What should we <span style={{ color: '#00E676' }}>build</span> today?
 						</h1>
