@@ -89,7 +89,7 @@ export async function generateTradeImages(
                     customMetadata: { agentId },
                 });
 
-                const url = getPublicUrlForR2Image(env, r2Key);
+                const url = `${getPublicUrlForR2Image(env, r2Key)}?v=${Date.now()}`;
                 logger.info(`Generated image: ${key}`, { url });
                 return [key, url] as const;
             })
@@ -128,7 +128,7 @@ export async function regenerateTradeImage(
         customMetadata: { agentId },
     });
 
-    return getPublicUrlForR2Image(env, r2Key);
+    return `${getPublicUrlForR2Image(env, r2Key)}?v=${Date.now()}`;
 }
 
 export function buildImageContext(images: GeneratedTradeImages): string {

@@ -51,10 +51,16 @@ export class GeneratedImagesController extends BaseController {
             const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
             const contentType = obj.httpMetadata?.contentType || mimeMap[ext] || 'image/png';
 
+            // URLs include ?v=<timestamp> so the same bytes are always at the same URL — safe to cache immutably
+            const hasVersion = new URL(_request.url).searchParams.has('v');
+            const cacheControl = hasVersion
+                ? 'public, max-age=31536000, immutable'
+                : 'public, max-age=3600';
+
             return new Response(obj.body, {
                 headers: {
                     'Content-Type': contentType,
-                    'Cache-Control': 'no-cache',
+                    'Cache-Control': cacheControl,
                     'X-Content-Type-Options': 'nosniff',
                     'Access-Control-Allow-Origin': '*',
                     'Cross-Origin-Resource-Policy': 'cross-origin',
