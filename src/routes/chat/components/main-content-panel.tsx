@@ -309,6 +309,8 @@ export function MainContentPanel(props: MainContentPanelProps) {
 						files={allFiles}
 						currentFile={activeFile}
 						onFileClick={onFileClick}
+						generatedImages={generatedImages}
+						onDeleteGeneratedImage={onDeleteGeneratedImage}
 					/>
 					<div className="flex-1">
 						<MonacoEditor
