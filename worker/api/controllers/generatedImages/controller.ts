@@ -103,7 +103,7 @@ export class GeneratedImagesController extends BaseController {
             // Also clear the slot from the agent's persistent state so it doesn't reappear on reconnect
             try {
                 const agentStub = await getAgentStub(env, agentId);
-                agentStub.deleteGeneratedImageSlot(slot);
+                await agentStub.deleteGeneratedImageSlot(slot);
             } catch {
                 // Non-fatal: R2 object is already gone, state will be stale but not harmful
             }

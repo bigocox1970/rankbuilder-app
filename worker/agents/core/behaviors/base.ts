@@ -1047,7 +1047,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return this.state.generatedImageUrls || {};
     }
 
-    deleteGeneratedImageSlot(slot: string): void {
+    async deleteGeneratedImageSlot(slot: string): Promise<void> {
         const urls = { ...(this.state.generatedImageUrls || {}) };
         delete urls[slot];
         this.setState({ ...this.state, generatedImageUrls: urls });

@@ -370,8 +370,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.behavior.importTemplate(templateName);
     }
 
-    deleteGeneratedImageSlot(slot: string): void {
-        this.behavior.deleteGeneratedImageSlot(slot);
+    async deleteGeneratedImageSlot(slot: string): Promise<void> {
+        await this.behavior.deleteGeneratedImageSlot(slot);
     }
     
     protected async saveToDatabase() {

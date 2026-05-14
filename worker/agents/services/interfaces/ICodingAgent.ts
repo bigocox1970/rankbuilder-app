@@ -66,7 +66,7 @@ export interface ICodingAgent {
     regenerateImage(slot: string, description: string): Promise<{ url: string }>;
 
     getGeneratedImageUrls(): Record<string, string>;
-    deleteGeneratedImageSlot(slot: string): void;
+    deleteGeneratedImageSlot(slot: string): Promise<void>;
 
     isCodeGenerating(): boolean;
     
