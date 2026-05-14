@@ -86,6 +86,7 @@ export async function regenerateTradeImage(
     slot: string,
     prompt: string,
 ): Promise<string> {
+    if (!agentId || agentId === 'undefined') throw new Error('Agent ID is not set — cannot generate image');
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(slot)) throw new Error(`Invalid image slot name: ${slot}`);
 
     const spec = IMAGE_SPECS.find(s => s.key === slot);

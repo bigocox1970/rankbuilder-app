@@ -1030,10 +1030,14 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     async regenerateImage(slot: string, description: string): Promise<{ url: string }> {
+        const agentId = this.getAgentId();
+        if (!agentId || agentId === 'undefined') {
+            throw new Error('Agent is not fully initialized yet — please wait a moment and try again');
+        }
         const query = this.state.query || '';
         const baseQuery = query.replace(/\[GENERATED IMAGES\][\s\S]*?\[END GENERATED IMAGES\]/g, '').trim();
         const prompt = baseQuery ? `${baseQuery}, ${description}` : description;
-        const url = await regenerateTradeImage(this.env, this.getAgentId(), slot, prompt);
+        const url = await regenerateTradeImage(this.env, agentId, slot, prompt);
         const updatedUrls = { ...(this.state.generatedImageUrls || {}), [slot]: url };
         this.setState({ ...this.state, generatedImageUrls: updatedUrls });
         this.broadcast(WebSocketMessageResponses.IMAGES_GENERATED, { images: updatedUrls });

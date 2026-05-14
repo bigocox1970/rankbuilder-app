@@ -73,10 +73,15 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         const isWebsiteTemplate = templateInfo.templateDetails.name === 'minimal-js';
         const imageGenerationEnabled = initArgs.imageGenerationEnabled !== false;
 
+        const agentIdForImages = inferenceContext.metadata.agentId;
+        if (isWebsiteTemplate && imageGenerationEnabled && !agentIdForImages) {
+            this.logger.error('agentId missing from inferenceContext.metadata — skipping image generation');
+        }
+
         // Kick off image generation concurrently with blueprint (website template only)
         // Use inferenceContext.metadata.agentId directly — state.metadata isn't set until setState() later in this method
-        const imageGenPromise = (isWebsiteTemplate && imageGenerationEnabled)
-            ? generateTradeImages(this.env, inferenceContext.metadata.agentId, query)
+        const imageGenPromise = (isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages)
+            ? generateTradeImages(this.env, agentIdForImages, query)
             : Promise.resolve(null);
 
         // Generate a blueprint

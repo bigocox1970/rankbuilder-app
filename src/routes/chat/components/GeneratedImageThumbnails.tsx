@@ -15,7 +15,7 @@ export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; url: string } | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    const slots = Object.entries(images).filter(([, url]) => url);
+    const slots = Object.entries(images).filter(([, url]) => url && !url.includes('/undefined/'));
 
     if (slots.length === 0) return null;
 
