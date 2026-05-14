@@ -35,6 +35,31 @@ const IMAGE_SPECS: Array<{
     },
 ];
 
+// Flux returns base64-encoded PNG in response.image
+function base64ToBytes(base64: string): Uint8Array {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+async function runFlux(env: Env, prompt: string, width: number, height: number): Promise<Uint8Array> {
+    const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
+        prompt,
+        num_steps: 4,
+        width,
+        height,
+    });
+
+    if (!response.image) {
+        throw new Error('Flux returned no image data');
+    }
+
+    return base64ToBytes(response.image);
+}
+
 export async function generateTradeImages(
     env: Env,
     agentId: string,
@@ -46,16 +71,7 @@ export async function generateTradeImages(
         const results = await Promise.all(
             IMAGE_SPECS.map(async ({ key, promptSuffix, width, height }) => {
                 const prompt = `${query}, ${promptSuffix}`;
-
-                const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-                    prompt,
-                    num_steps: 4,
-                    width,
-                    height,
-                });
-
-                const buffer = await new Response(response as ReadableStream).arrayBuffer();
-                const bytes = new Uint8Array(buffer);
+                const bytes = await runFlux(env, prompt, width, height);
                 const r2Key = `generated-images/${agentId}/${key}.png`;
 
                 await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
@@ -93,15 +109,7 @@ export async function regenerateTradeImage(
     const width = spec?.width ?? DEFAULT_WIDTH;
     const height = spec?.height ?? DEFAULT_HEIGHT;
 
-    const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-        prompt,
-        num_steps: 4,
-        width,
-        height,
-    });
-
-    const buffer = await new Response(response as ReadableStream).arrayBuffer();
-    const bytes = new Uint8Array(buffer);
+    const bytes = await runFlux(env, prompt, width, height);
     const r2Key = `generated-images/${agentId}/${slot}.png`;
 
     await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
