@@ -299,6 +299,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					onGitHubExportClick={githubExport.openModal}
 					editorRef={editorRef}
 					allFiles={allFiles}
+					generatedImages={generatedImages}
 				/>
 			);
 		}
