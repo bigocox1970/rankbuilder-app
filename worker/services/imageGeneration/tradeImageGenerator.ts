@@ -9,6 +9,8 @@ export interface GeneratedTradeImages {
     work2: string;
 }
 
+const NO_TEXT = 'no text, no words, no writing, no watermarks, no logos, no signs, no captions, no overlays';
+
 const IMAGE_SPECS: Array<{
     key: keyof GeneratedTradeImages;
     promptSuffix: string;
@@ -17,19 +19,19 @@ const IMAGE_SPECS: Array<{
 }> = [
     {
         key: 'hero',
-        promptSuffix: 'professional hero shot, wide angle landscape, cinematic lighting, commercial photography, high quality, photorealistic',
+        promptSuffix: `professional hero shot, wide angle landscape, cinematic lighting, commercial photography, high quality, photorealistic, ${NO_TEXT}`,
         width: 1024,
         height: 576,
     },
     {
         key: 'work1',
-        promptSuffix: 'skilled professional at work, close detail shot, natural lighting, high quality photography, photorealistic',
+        promptSuffix: `skilled professional at work, close detail shot, natural lighting, high quality photography, photorealistic, ${NO_TEXT}`,
         width: 768,
         height: 512,
     },
     {
         key: 'work2',
-        promptSuffix: 'completed professional work, beautiful clean result, high quality photography, photorealistic',
+        promptSuffix: `completed professional work, beautiful clean result, high quality photography, photorealistic, ${NO_TEXT}`,
         width: 768,
         height: 512,
     },
@@ -60,17 +62,25 @@ async function runFlux(env: Env, prompt: string, width: number, height: number):
     return base64ToBytes(response.image);
 }
 
+function extractBusinessContext(query: string): string {
+    return query
+        .replace(/^(please\s+)?(build|create|make|design|generate|develop)\s+(me\s+)?(a\s+)?(website|site|web\s*page|landing\s*page)\s+(for\s+(a\s+)?)?/i, '')
+        .replace(/\[GENERATED IMAGES\][\s\S]*?\[END GENERATED IMAGES\]/g, '')
+        .trim();
+}
+
 export async function generateTradeImages(
     env: Env,
     agentId: string,
     query: string,
 ): Promise<GeneratedTradeImages | null> {
     logger.info('Generating trade images', { agentId, queryLength: query.length });
+    const businessContext = extractBusinessContext(query);
 
     try {
         const results = await Promise.all(
             IMAGE_SPECS.map(async ({ key, promptSuffix, width, height }) => {
-                const prompt = `${query}, ${promptSuffix}`;
+                const prompt = `${businessContext}, ${promptSuffix}`;
                 const bytes = await runFlux(env, prompt, width, height);
                 const r2Key = `generated-images/${agentId}/${key}.png`;
 
@@ -109,7 +119,8 @@ export async function regenerateTradeImage(
     const width = spec?.width ?? DEFAULT_WIDTH;
     const height = spec?.height ?? DEFAULT_HEIGHT;
 
-    const bytes = await runFlux(env, prompt, width, height);
+    const safePrompt = prompt.includes('no text') ? prompt : `${prompt}, ${NO_TEXT}`;
+    const bytes = await runFlux(env, safePrompt, width, height);
     const r2Key = `generated-images/${agentId}/${slot}.png`;
 
     await env.TEMPLATES_BUCKET.put(r2Key, bytes, {

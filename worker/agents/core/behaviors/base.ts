@@ -1034,9 +1034,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         if (!agentId || agentId === 'undefined') {
             throw new Error('Agent is not fully initialized yet — please wait a moment and try again');
         }
-        const query = this.state.query || '';
-        const baseQuery = query.replace(/\[GENERATED IMAGES\][\s\S]*?\[END GENERATED IMAGES\]/g, '').trim();
-        const prompt = baseQuery ? `${baseQuery}, ${description}` : description;
+        const prompt = description;
         const url = await regenerateTradeImage(this.env, agentId, slot, prompt);
         const updatedUrls = { ...(this.state.generatedImageUrls || {}), [slot]: url };
         this.setState({ ...this.state, generatedImageUrls: updatedUrls });
