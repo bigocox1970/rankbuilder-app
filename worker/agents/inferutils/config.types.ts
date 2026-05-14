@@ -337,7 +337,30 @@ const MODELS_MASTER = {
             creditCost: 8, // $0.22
             contextSize: 262144, // 256K Context
         },
-    }
+    },
+    // --- MiniMax Models ---
+    MINIMAX_TEXT_01: {
+        id: 'minimax/MiniMax-Text-01',
+        config: {
+            name: 'MiniMax Text-01',
+            size: ModelSize.REGULAR,
+            provider: 'minimax',
+            creditCost: 0.8, // ~$0.20/1M input tokens
+            contextSize: 1_000_000,
+            directOverride: true,
+        }
+    },
+    MINIMAX_M1: {
+        id: 'minimax/MiniMax-M1',
+        config: {
+            name: 'MiniMax M1',
+            size: ModelSize.REGULAR,
+            provider: 'minimax',
+            creditCost: 1.2, // ~$0.30/1M input tokens
+            contextSize: 1_000_000,
+            directOverride: true,
+        }
+    },
 } as const;
 
 /**

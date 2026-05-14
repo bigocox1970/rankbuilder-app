@@ -5,6 +5,18 @@ import { ExecuteCommandsResponse } from 'worker/services/sandbox/sandboxTypes';
 
 export type ExecCommandsResult = ExecuteCommandsResponse | { error: string };
 
+// Strip version specifier from a bun/npm add command for retry.
+// e.g. "bun add react-parallax@^10.0.0" -> "bun add react-parallax"
+function stripVersionFromAddCommand(cmd: string): string | null {
+	const match = cmd.match(/^(bun add|npm install|npm i)\s+(.+)$/);
+	if (!match) return null;
+	const stripped = match[2]
+		.split(/\s+/)
+		.map((pkg) => pkg.replace(/@[\^~]?[\d].*$/, ''))
+		.join(' ');
+	return stripped !== match[2] ? `${match[1]} ${stripped}` : null;
+}
+
 export function createExecCommandsTool(
 	agent: ICodingAgent,
 	logger: StructuredLogger
@@ -29,8 +41,36 @@ export function createExecCommandsTool(
 					shouldSave: shouldSaveValue,
 					timeout: timeoutValue,
 				});
-				const output = await agent.execCommands(commands, shouldSave, timeout);
-				
+				let output = await agent.execCommands(commands, shouldSave, timeoutValue);
+
+				// If a package install failed, retry each failing command without the version
+				// specifier (handles hallucinated/non-existent package versions).
+				if (output.results?.some((r) => !r.success)) {
+					const retryCommands: string[] = [];
+					const retriedIndices: number[] = [];
+
+					output.results.forEach((r, i) => {
+						if (!r.success) {
+							const fallback = stripVersionFromAddCommand(commands[i]);
+							if (fallback) {
+								retryCommands.push(fallback);
+								retriedIndices.push(i);
+							}
+						}
+					});
+
+					if (retryCommands.length > 0) {
+						logger.warn('Package install failed, retrying without version specifiers', { retryCommands });
+						const retryOutput = await agent.execCommands(retryCommands, shouldSaveValue, timeoutValue);
+						retryOutput.results.forEach((r, idx) => {
+							output.results[retriedIndices[idx]] = {
+								...r,
+								output: `[retried without version] ${r.output}`,
+							};
+						});
+					}
+				}
+
 				// Truncate output to max 1000 characters per result
 				const MAX_OUTPUT_LENGTH = 1000;
 				const truncatedOutput = {

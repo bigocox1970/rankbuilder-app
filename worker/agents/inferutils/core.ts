@@ -346,6 +346,11 @@ export async function getConfigurationForModel(
                     baseURL: 'https://api.anthropic.com/v1/',
                     apiKey: env.ANTHROPIC_API_KEY,
                 };
+            case 'minimax':
+                return {
+                    baseURL: 'https://api.minimaxi.chat/v1',
+                    apiKey: env.MINIMAX_API_KEY,
+                };
             default:
                 providerForcedOverride = modelConfig.provider as AIGatewayProviders;
                 break;

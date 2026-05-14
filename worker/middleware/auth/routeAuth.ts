@@ -21,14 +21,14 @@ const logger = createLogger('RouteAuth');
 /**
  * Authentication levels for route protection
  */
-export type AuthLevel = 'public' | 'authenticated' | 'owner-only';
+export type AuthLevel = 'public' | 'authenticated' | 'owner-only' | 'admin-only';
 
 /**
  * Authentication requirement configuration
  */
 export interface AuthRequirement {
     required: boolean;
-    level: 'public' | 'authenticated' | 'owner-only';
+    level: 'public' | 'authenticated' | 'owner-only' | 'admin-only';
     resourceOwnershipCheck?: (user: AuthUser, params: Record<string, string>, env: Env) => Promise<boolean>;
 }
 
@@ -69,10 +69,16 @@ export const AuthConfig = {
     },
     
     // Require resource ownership (for app editing)
-    ownerOnly: { 
-        required: true, 
+    ownerOnly: {
+        required: true,
         level: 'owner-only' as const,
         resourceOwnershipCheck: checkAppOwnership
+    },
+
+    // Require admin email (platform admin only)
+    adminOnly: {
+        required: true,
+        level: 'admin-only' as const,
     },
     
     // Public read access, but owner required for modifications
@@ -94,6 +100,17 @@ export async function routeAuthChecks(
         // Public routes always pass
         console.log('requirement', requirement, 'for user', user);
         if (requirement.level === 'public') {
+            return { success: true };
+        }
+
+        // For admin-only routes
+        if (requirement.level === 'admin-only') {
+            if (!user) {
+                return { success: false, response: createAuthRequiredResponse() };
+            }
+            if (user.email !== env.ADMIN_EMAIL) {
+                return { success: false, response: createForbiddenResponse('Admin access required') };
+            }
             return { success: true };
         }
 
@@ -168,7 +185,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
     }
     
     // Only perform auth if we need it or don't have user yet
-    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only')) {
+    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only' || requirement.level === 'admin-only')) {
         const request = c.req.raw;
         const env = c.env;
         const params = c.req.param();

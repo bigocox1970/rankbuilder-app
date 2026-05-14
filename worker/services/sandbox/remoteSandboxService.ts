@@ -36,9 +36,9 @@ import { env } from 'cloudflare:workers'
 import z from 'zod';
 import { FileOutputType } from 'worker/agents/schemas';
 
-export async function runnerFetch(url: string, method: 'GET' | 'POST' | 'DELETE', headers: Headers, body: string | undefined) {
+export async function runnerFetch(url: string, method: 'GET' | 'POST' | 'DELETE', headers: Headers, body: string | undefined, signal?: AbortSignal) {
     // Use direct fetch for runner service communication
-    return await fetch(url, { method, headers, body });
+    return await fetch(url, { method, headers, body, signal });
 }
 
 /**
@@ -63,7 +63,8 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
         method: 'GET' | 'POST' | 'DELETE',
         schema?: T,
         body?: unknown,
-        resetPrevious: boolean = false
+        resetPrevious: boolean = false,
+        timeoutMs?: number
     ): Promise<z.infer<T>> {
         const url = `${RemoteSandboxServiceClient.sandboxServiceUrl}${endpoint}`;
 
@@ -76,7 +77,8 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
                 headers.set('x-container-action', 'reset');
             }
 
-            const response = await runnerFetch(url, method, headers, body ? JSON.stringify(body) : undefined);
+            const signal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
+            const response = await runnerFetch(url, method, headers, body ? JSON.stringify(body) : undefined, signal);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -161,7 +163,11 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
      */
     async executeCommands(instanceId: string, commands: string[], timeout?: number): Promise<ExecuteCommandsResponse> {
         const requestBody: ExecuteCommandsRequest = { commands, timeout };
-        return this.makeRequest(`/instances/${instanceId}/commands`, 'POST', ExecuteCommandsResponseSchema, requestBody);
+        // Add a fetch-level timeout slightly longer than the command timeout so the
+        // Worker never hangs if the sandbox container itself stalls (e.g. bun add on a
+        // non-existent package version).
+        const fetchTimeout = Math.min((timeout ?? 30000) + 10000, 90000);
+        return this.makeRequest(`/instances/${instanceId}/commands`, 'POST', ExecuteCommandsResponseSchema, requestBody, false, fetchTimeout);
     }
 
     /**

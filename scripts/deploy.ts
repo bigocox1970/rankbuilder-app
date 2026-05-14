@@ -1108,7 +1108,7 @@ class CloudflareDeploymentManager {
 				custom_domain: boolean;
 				zone_id?: string;
 			} = {
-				pattern: `*${wildcardDomain}/*`,
+				pattern: `*.${wildcardDomain}/*`,
 				custom_domain: false,
 			};
 

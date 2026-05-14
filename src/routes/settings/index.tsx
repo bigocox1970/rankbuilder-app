@@ -59,8 +59,11 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 // import { ByokApiKeysModal } from '@/components/byok-api-keys-modal';
 import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
 
+const ADMIN_EMAIL = 'perimeter.uk@gmail.com';
+
 export default function SettingsPage() {
 	const { user } = useAuth();
+	const isAdmin = user?.email === ADMIN_EMAIL;
 	// Active sessions state
 	const [activeSessions, setActiveSessions] = useState<
 		ActiveSessionsData & { loading: boolean }
@@ -425,8 +428,9 @@ export default function SettingsPage() {
 		}
 	};
 
-	// Load agent configurations dynamically from API
+	// Load agent configurations dynamically from API (admin only)
 	React.useEffect(() => {
+		if (!isAdmin) return;
 		apiClient
 			.getModelDefaults()
 			.then((response) => {
@@ -444,13 +448,13 @@ export default function SettingsPage() {
 			.catch((error) => {
 				console.error('Failed to load agent configurations:', error);
 			});
-	}, [formatAgentConfigName, getAgentConfigDescription]);
+	}, [isAdmin, formatAgentConfigName, getAgentConfigDescription]);
 
 	// Load sessions and model configs on component mount
 	React.useEffect(() => {
 		if (user) {
 			loadActiveSessions();
-			loadModelConfigs();
+			if (isAdmin) loadModelConfigs();
 			loadApiKeys();
 		}
 	}, [user]);
@@ -556,11 +560,11 @@ export default function SettingsPage() {
 						</CardContent>
 					</Card> */}
 
-					{/* Cloudflare Account & Gateway Selection */}
-					<CloudflareAccountSelector />
+					{/* Cloudflare Account & Gateway Selection — admin only */}
+					{isAdmin && <CloudflareAccountSelector />}
 
-					{/* Model Configuration Section */}
-					<Card id="model-configs">
+					{/* Model Configuration Section — admin only */}
+					{isAdmin && <Card id="model-configs">
 						<CardHeader variant="minimal">
 							<div className="flex items-center gap-3 border-b w-full py-3 text-text-primary">
 								{' '}
@@ -621,7 +625,7 @@ export default function SettingsPage() {
 								savingConfigs={savingConfigs}
 							/>
 						</CardContent>
-					</Card>
+					</Card>}
 
 					{/* User Secrets Vault Section */}
 					{/* <SecretsManager id="secrets" /> */}

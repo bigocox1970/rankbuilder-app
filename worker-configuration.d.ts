@@ -34,6 +34,8 @@ declare namespace Cloudflare {
 		CLOUDFLARE_OAUTH_TOKEN_URL: string;
 		CLOUDFLARE_OAUTH_USERINFO_URL: string;
 		CLOUDFLARE_OAUTH_SCOPES: string;
+		MINIMAX_API_KEY: string;
+		ADMIN_EMAIL: string;
 		SERPAPI_KEY: string;
 		GOOGLE_CLIENT_SECRET: string;
 		GOOGLE_CLIENT_ID: string;
