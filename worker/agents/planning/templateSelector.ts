@@ -189,7 +189,7 @@ export async function selectTemplate({ env, query, projectType, availableTemplat
         ? await predictProjectType(env, query, inferenceContext, images)
         : (projectType || 'app') as ProjectType;
     
-    availableTemplates = availableTemplates.filter(t => !t.disabled && !t.name.includes('minimal'));
+    availableTemplates = availableTemplates.filter(t => !t.disabled);
     logger.info(`Using project type: ${actualProjectType}${projectType === 'auto' ? ' (auto-detected)' : ''}`);
 
     // Step 2: Filter templates by project type

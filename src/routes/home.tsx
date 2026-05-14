@@ -20,10 +20,15 @@ import { useLimitsContext } from '@/contexts/limits-context';
 import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
 
+type StackType = 'website' | 'app';
+
+const WEBSITE_TEMPLATE = 'minimal-js';
+
 export default function Home() {
 	const navigate = useNavigate();
 	const { requireAuth } = useAuthGuard();
 	const [projectMode, setProjectMode] = useState<ProjectType>('app');
+	const [stack, setStack] = useState<StackType>('website');
 	const [query, setQuery] = useState('');
 	const { user } = useAuth();
 	const { isLoadingCapabilities, capabilities, getEnabledFeatures } = useFeature();
@@ -74,11 +79,16 @@ export default function Home() {
 	});
 
 
-	const placeholderPhrases = useMemo(() => [
+	const placeholderPhrases = useMemo(() => stack === 'website' ? [
+		"plumber in Manchester",
+		"local carpenter in Oxford",
+		"electrician serving Bristol",
+		"roofing company in Leeds",
+	] : [
 		"todo list app",
 		"F1 fantasy game",
-		"personal finance tracker"
-	], []);
+		"personal finance tracker",
+	], [stack]);
 
 	const {
 		apps,
@@ -130,7 +140,8 @@ export default function Home() {
 
 		// Encode images as JSON if present
 		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
-		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}`;
+		const templateParam = stack === 'website' ? `&selectedTemplate=${WEBSITE_TEMPLATE}` : '';
+		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}`;
 
 		if (
 			!requireAuth({
@@ -182,14 +193,43 @@ export default function Home() {
 							"px-6 p-8 flex flex-col items-center z-10",
 							discoverReady ? "mt-32" : "mt-[20vh] sm:mt-[24vh] md:mt-[28vh]"
 						)}>
-						<h1 className="font-bold leading-[1.1] tracking-tight text-5xl w-full mb-4 text-text-primary">
+						<h1 className="font-bold leading-[1.1] tracking-tight text-5xl w-full mb-6 text-text-primary">
 							What should we <span style={{ color: '#00E676' }}>build</span> today?
 						</h1>
+
+						{/* Website / App selector */}
+						<div className="flex gap-2 w-full mb-4">
+							<button
+								type="button"
+								onClick={() => setStack('website')}
+								className={`flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+									stack === 'website'
+										? 'border-accent bg-accent/10 text-text-primary'
+										: 'border-text-primary/10 bg-bg-2/50 text-text-primary/50 hover:border-text-primary/20 hover:text-text-primary/70'
+								}`}
+							>
+								<span className="text-sm font-medium">Website</span>
+								<span className="text-xs mt-0.5 opacity-70">Pre-rendered HTML · Google-ready</span>
+							</button>
+							<button
+								type="button"
+								onClick={() => setStack('app')}
+								className={`flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+									stack === 'app'
+										? 'border-accent bg-accent/10 text-text-primary'
+										: 'border-text-primary/10 bg-bg-2/50 text-text-primary/50 hover:border-text-primary/20 hover:text-text-primary/70'
+								}`}
+							>
+								<span className="text-sm font-medium">App</span>
+								<span className="text-xs mt-0.5 opacity-70">React · Interactive tools &amp; dashboards</span>
+							</button>
+						</div>
+
 						<PromptBox
 							value={query}
 							onChange={setQuery}
 							onSubmit={() => handleCreateApp(query, projectMode)}
-							placeholder="Create a "
+							placeholder={stack === 'website' ? 'Website for a ' : 'Create a '}
 							animatedPlaceholder
 							placeholderPhrases={placeholderPhrases}
 							images={images}
@@ -204,7 +244,7 @@ export default function Home() {
 							variant="expanded"
 							submitIcon={user && usageLimitsLoading ? <Loader2 className="animate-spin" /> : <ArrowRight />}
 							leftActions={
-								showModeSelector ? (
+								stack === 'app' && showModeSelector ? (
 									<ProjectModeSelector
 										value={projectMode}
 										onChange={setProjectMode}
