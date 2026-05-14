@@ -250,6 +250,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				onGitHubExportClick={githubExport.openModal}
 				previewRef={previewRef}
 				previewUrl={previewUrl}
+				onManualRefresh={onManualRefresh}
 			/>
 		);
 

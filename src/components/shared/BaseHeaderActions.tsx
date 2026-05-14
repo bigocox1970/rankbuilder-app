@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { GitBranch, Github, Expand } from 'lucide-react';
+import { GitBranch, Github, Expand, RefreshCw } from 'lucide-react';
 import { ModelConfigInfo } from '@/components/shared/ModelConfigInfo';
 import { HeaderButton } from '@/components/shared/header-actions';
 import type { ModelConfigsInfo } from '@/api-types';
@@ -13,6 +13,7 @@ export interface BaseHeaderActionsProps {
 	isGitHubExportReady: boolean;
 	onGitHubExportClick: () => void;
 	fallbackUrl?: string;
+	onManualRefresh?: () => void;
 }
 
 export function BaseHeaderActions({
@@ -24,6 +25,7 @@ export function BaseHeaderActions({
 	isGitHubExportReady,
 	onGitHubExportClick,
 	fallbackUrl,
+	onManualRefresh,
 }: BaseHeaderActionsProps) {
 	const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled;
 
@@ -38,6 +40,14 @@ export function BaseHeaderActions({
 
 	return (
 		<>
+			{onManualRefresh && (
+				<HeaderButton
+					icon={RefreshCw}
+					onClick={onManualRefresh}
+					title="Refresh preview"
+					iconOnly
+				/>
+			)}
 			<ModelConfigInfo
 				configs={modelConfigs}
 				onRequestConfigs={onRequestConfigs}

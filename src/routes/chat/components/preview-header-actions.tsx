@@ -11,6 +11,7 @@ interface PreviewHeaderActionsProps {
 	onGitHubExportClick: () => void;
 	previewRef: RefObject<HTMLIFrameElement | null>;
 	previewUrl?: string;
+	onManualRefresh?: () => void;
 }
 
 export function PreviewHeaderActions({
@@ -22,6 +23,7 @@ export function PreviewHeaderActions({
 	onGitHubExportClick,
 	previewRef,
 	previewUrl,
+	onManualRefresh,
 }: PreviewHeaderActionsProps) {
 	return (
 		<BaseHeaderActions
@@ -33,6 +35,7 @@ export function PreviewHeaderActions({
 			isGitHubExportReady={isGitHubExportReady}
 			onGitHubExportClick={onGitHubExportClick}
 			fallbackUrl={previewUrl}
+			onManualRefresh={onManualRefresh}
 		/>
 	);
 }
