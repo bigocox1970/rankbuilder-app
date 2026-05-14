@@ -193,7 +193,7 @@ export default function Home() {
 						transition={{ layout: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }}
 						className={clsx(
 							"px-6 p-8 flex flex-col items-center z-10",
-							discoverReady ? "mt-32" : "mt-[20vh] sm:mt-[24vh] md:mt-[28vh]"
+							(recentApps.length > 0 || discoverReady) ? "mt-8 sm:mt-10" : "mt-[20vh] sm:mt-[24vh] md:mt-[28vh]"
 						)}>
 						<h1 className="font-bold leading-[1.1] tracking-tight text-5xl w-full mb-6 text-text-primary">
 							What should we <span style={{ color: '#00E676' }}>build</span> today?
@@ -287,7 +287,7 @@ export default function Home() {
 							animate={{ opacity: 1, y: 0 }}
 							exit={{ opacity: 0, y: 10 }}
 							transition={{ duration: 0.3 }}
-							className={cn("px-6 mt-6 z-10 w-full", recentViewMode === 'grid' ? "max-w-4xl" : "max-w-2xl")}
+							className={cn("px-6 mt-6 pb-8 z-10 w-full", recentViewMode === 'grid' ? "max-w-4xl" : "max-w-2xl")}
 						>
 							<div className="flex items-center justify-between mb-3">
 								<h2 className="text-sm font-medium text-text-tertiary uppercase tracking-widest">Recent projects</h2>
