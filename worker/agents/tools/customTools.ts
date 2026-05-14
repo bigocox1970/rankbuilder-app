@@ -61,6 +61,7 @@ export function buildTools(
         // Deep autonomous debugging assistant tool
         createDeepDebuggerTool(agent, logger, toolRenderer, streamCb),
         createRegenerateImageTool(agent, logger),
+        createRegenerateFileTool(agent, logger),
     ];
 }
 
