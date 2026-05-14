@@ -22,7 +22,7 @@ import { PromptBox } from '@/components/prompt-box';
 
 type StackType = 'website' | 'app';
 
-const WEBSITE_TEMPLATE = 'minimal-js';
+const WEBSITE_TEMPLATE = 'tradesperson-sp';
 
 export default function Home() {
 	const navigate = useNavigate();

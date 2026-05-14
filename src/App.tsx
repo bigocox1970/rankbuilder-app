@@ -21,7 +21,7 @@ export default function App() {
                   <AppLayout>
                     <Outlet />
                   </AppLayout>
-                  <Toaster richColors position="top-right" />
+                  <Toaster richColors position="bottom-right" />
                 </AuthModalProvider>
               </LimitsProvider>
             </VaultProvider>

@@ -373,7 +373,7 @@ export async function generateBlueprint(
         if (templateDetails) logger.info(`Using template: ${templateDetails.name}`);
 
         // Select prompt and schema based on behavior type and template
-        const isLiteTemplate = !isAgentic && templateDetails?.name?.includes('minimal');
+        const isLiteTemplate = !isAgentic && (templateDetails?.name?.includes('minimal') || templateDetails?.renderMode === 'browser');
         const systemPromptTemplate = isAgentic
             ? SIMPLE_SYSTEM_PROMPT
             : isLiteTemplate ? LITE_PHASIC_SYSTEM_PROMPT : PHASIC_SYSTEM_PROMPT;

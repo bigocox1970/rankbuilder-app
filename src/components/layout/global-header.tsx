@@ -32,7 +32,7 @@ export function GlobalHeader() {
 				initial={{ y: -10, opacity: 0 }}
 				animate={{ y: 0, opacity: 1 }}
 				transition={{ duration: 0.2, ease: 'easeOut' }}
-				className={clsx("sticky top-0 z-50", pathname !== "/" && "bg-bg-3")}
+				className={clsx("sticky top-0 z-[60]", pathname !== "/" && "bg-bg-3")}
 			>
 				<div className="relative">
 					{/* Subtle gradient accent */}

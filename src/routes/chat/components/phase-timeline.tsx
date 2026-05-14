@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Loader, Check, AlertCircle, ChevronDown, ChevronRight, ArrowUp, Zap, XCircle } from 'lucide-react';
+import { Loader, Check, AlertCircle, ChevronDown, ChevronRight, ArrowUp, Zap, XCircle, X } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { RefObject } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -285,6 +285,7 @@ export function PhaseTimeline({
 	const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
 	const [showCollapsedBar, setShowCollapsedBar] = useState(false);
 	const [isCollapsedBarExpanded, setIsCollapsedBarExpanded] = useState(false);
+	const [isCollapsedBarDismissed, setIsCollapsedBarDismissed] = useState(false);
 	const componentRef = useRef<HTMLDivElement>(null);
 	const lastPhaseRef = useRef<HTMLDivElement>(null);
 	const timelineCardRef = useRef<HTMLDivElement>(null);
@@ -322,7 +323,7 @@ export function PhaseTimeline({
 				// Show collapsed bar when 30% of timeline has scrolled out of view
 				const shouldCollapse = entry.intersectionRatio < 0.7; // 70% visible = 30% scrolled out
 				const hasContent = projectStages.length > 0 || phaseTimeline.length > 0;
-				setShowCollapsedBar(shouldCollapse && hasContent);
+				setShowCollapsedBar(shouldCollapse && hasContent && !isCollapsedBarDismissed);
 			},
 			{
 				root: parentEl,
@@ -548,6 +549,18 @@ export function PhaseTimeline({
                                         <span className="hidden sm:inline">{isDeploying ? 'Deploying...' : 'Deploy'}</span>
                                     </button>
                                 )}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsCollapsedBarDismissed(true);
+                                        setShowCollapsedBar(false);
+                                    }}
+                                    className="ml-1 flex-shrink-0 p-1 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-3 transition-colors"
+                                    title="Dismiss"
+                                    aria-label="Dismiss"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
                             </motion.div>
 
 							{/* Expanded Content */}

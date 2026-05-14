@@ -137,15 +137,15 @@ export function buildImageContext(images: GeneratedTradeImages): string {
 [GENERATED IMAGES]
 CRITICAL: Exactly 3 real images have been generated for this site. These are the ONLY images you may use. Do NOT use placeholder images, stock photos, or URLs from unsplash.com, picsum.photos, placehold.it, or any other external image source.
 
-Rules:
-- Use ONLY the 3 URLs below — no other image URLs anywhere in the HTML
-- Do NOT create gallery sections with more than 3 images
-- Do NOT add <img> tags or CSS background-image references to any URL not listed here
-- Design sections to use these images, not the other way around
+Token mapping — use exactly these URLs for the corresponding tokens:
+- {{HERO_IMAGE_URL}} → ${images.hero}
+- {{ABOUT_IMAGE_URL}} → ${images.work1}
+- {{PROJECT1_IMAGE_URL}} through {{PROJECT6_IMAGE_URL}} → ${images.work2} (use the same work2 URL for every project card; use the hero URL as a fallback only if absolutely needed)
 
-Hero image (main hero/banner, full width): ${images.hero}
-Work image 1 (services or portfolio section): ${images.work1}
-Work image 2 (about section or secondary content): ${images.work2}
+Rules:
+- Copy every URL character-for-character including any ?v= query string
+- Do NOT use any other image URLs anywhere in the HTML
+- Do NOT write invented paths like images/photo.jpg or any unsplash/placehold URL
 [END GENERATED IMAGES]
 `;
 }

@@ -70,7 +70,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             throw new Error('Phasic initialization requires templateInfo.templateDetails');
         }
         const { query, language, frameworks, hostname, inferenceContext, sandboxSessionId } = initArgs;
-        const isWebsiteTemplate = templateInfo.templateDetails.name === 'minimal-js';
+        const isWebsiteTemplate = templateInfo.templateDetails.renderMode === 'browser';
         const imageGenerationEnabled = initArgs.imageGenerationEnabled !== false;
 
         const agentIdForImages = inferenceContext.metadata.agentId;
