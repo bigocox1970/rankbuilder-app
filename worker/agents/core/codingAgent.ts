@@ -369,6 +369,10 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     importTemplate(templateName: string): Promise<{ templateName: string; filesImported: number }> {
         return this.behavior.importTemplate(templateName);
     }
+
+    deleteGeneratedImageSlot(slot: string): void {
+        this.behavior.deleteGeneratedImageSlot(slot);
+    }
     
     protected async saveToDatabase() {
         this.logger().info(`Saving agent ${this.getAgentId()} to database`);

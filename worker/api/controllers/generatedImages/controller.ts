@@ -2,6 +2,7 @@ import { BaseController } from '../baseController';
 import type { ControllerResponse, ApiResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
+import { getAgentStub } from '../../../agents';
 
 const logger = createLogger('GeneratedImagesController');
 
@@ -98,6 +99,15 @@ export class GeneratedImagesController extends BaseController {
 
             const key = `generated-images/${agentId}/${slot}.png`;
             await env.TEMPLATES_BUCKET.delete(key);
+
+            // Also clear the slot from the agent's persistent state so it doesn't reappear on reconnect
+            try {
+                const agentStub = await getAgentStub(env, agentId);
+                agentStub.deleteGeneratedImageSlot(slot);
+            } catch {
+                // Non-fatal: R2 object is already gone, state will be stale but not harmful
+            }
+
             logger.info('Deleted generated image', { agentId, slot });
 
             return new Response(JSON.stringify({ success: true }), {

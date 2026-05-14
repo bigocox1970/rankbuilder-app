@@ -1047,6 +1047,12 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return this.state.generatedImageUrls || {};
     }
 
+    deleteGeneratedImageSlot(slot: string): void {
+        const urls = { ...(this.state.generatedImageUrls || {}) };
+        delete urls[slot];
+        this.setState({ ...this.state, generatedImageUrls: urls });
+    }
+
     async generateFiles(
         phaseName: string,
         phaseDescription: string,
