@@ -12,6 +12,7 @@ export function setupScreenshotRoutes(app: Hono<AppEnv>): void {
 
   const generatedImagesRouter = new Hono<AppEnv>();
   generatedImagesRouter.get('/:agentId/:file', setAuthLevel(AuthConfig.public), adaptController(GeneratedImagesController, GeneratedImagesController.serve));
+  generatedImagesRouter.delete('/:agentId/:slot', setAuthLevel(AuthConfig.authenticated), adaptController(GeneratedImagesController, GeneratedImagesController.deleteImage));
   app.route('/api/generated-images', generatedImagesRouter);
 
 //   const imagesRouter = new Hono<AppEnv>();

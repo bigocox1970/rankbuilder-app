@@ -158,6 +158,7 @@ export default function Chat() {
 		backendErrorDialog,
 		setBackendErrorDialog,
 		generatedImageUrls,
+		deleteGeneratedImage,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -935,6 +936,8 @@ export default function Chat() {
 								previewRef={previewRef}
 								editorRef={editorRef}
 								templateDetails={templateDetails}
+								generatedImages={generatedImageUrls}
+								onDeleteGeneratedImage={deleteGeneratedImage}
 							/>
 						</motion.div>
 					)}

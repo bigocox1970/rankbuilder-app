@@ -18,6 +18,10 @@ function validateFileName(file: string): string | null {
     return file;
 }
 
+function isValidSlot(slot: string): boolean {
+    return /^[A-Za-z0-9_-]{1,64}$/.test(slot);
+}
+
 export class GeneratedImagesController extends BaseController {
     static async serve(
         _request: Request,
@@ -68,6 +72,39 @@ export class GeneratedImagesController extends BaseController {
             }) as unknown as ControllerResponse<ApiResponse<never>>;
         } catch (error) {
             logger.error('Error serving generated image', { error });
+            return GeneratedImagesController.createErrorResponse('Internal server error', 500);
+        }
+    }
+
+    static async deleteImage(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<never>>> {
+        try {
+            const agentId = context.pathParams.agentId;
+            const slot = context.pathParams.slot;
+
+            if (!agentId || !slot) {
+                return GeneratedImagesController.createErrorResponse('Missing path parameters', 400);
+            }
+            if (!isValidAgentId(agentId)) {
+                return GeneratedImagesController.createErrorResponse('Invalid agent id', 400);
+            }
+            if (!isValidSlot(slot)) {
+                return GeneratedImagesController.createErrorResponse('Invalid slot name', 400);
+            }
+
+            const key = `generated-images/${agentId}/${slot}.png`;
+            await env.TEMPLATES_BUCKET.delete(key);
+            logger.info('Deleted generated image', { agentId, slot });
+
+            return new Response(JSON.stringify({ success: true }), {
+                headers: { 'Content-Type': 'application/json' },
+            }) as unknown as ControllerResponse<ApiResponse<never>>;
+        } catch (error) {
+            logger.error('Error deleting generated image', { error });
             return GeneratedImagesController.createErrorResponse('Internal server error', 500);
         }
     }

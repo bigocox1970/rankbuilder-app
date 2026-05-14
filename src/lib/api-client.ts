@@ -1268,6 +1268,12 @@ class ApiClient {
 			method: 'DELETE',
 		});
 	}
+
+	async deleteGeneratedImage(agentId: string, slot: string): Promise<ApiResponse<{ success: boolean }>> {
+		return this.request<{ success: boolean }>(`/api/generated-images/${agentId}/${slot}`, {
+			method: 'DELETE',
+		});
+	}
 }
 
 // Export singleton instance

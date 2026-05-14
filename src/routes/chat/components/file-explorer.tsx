@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { LucideNetwork, ChevronRight, File } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { LucideNetwork, ChevronRight, File, Image, Trash2 } from 'lucide-react';
 import type { FileType } from '@/api-types';
 import clsx from 'clsx';
 
@@ -118,14 +119,107 @@ function buildFileTree(files: FileType[]): FileTreeItem[] {
 	return Object.values(root);
 }
 
+const SLOT_LABELS: Record<string, string> = {
+	hero: 'Hero',
+	work1: 'Work 1',
+	work2: 'Work 2',
+};
+
+function GeneratedImagesPanel({
+	images,
+	onDelete,
+}: {
+	images: Record<string, string>;
+	onDelete: (slot: string) => void;
+}) {
+	const [expanded, setExpanded] = useState(true);
+	const [lightbox, setLightbox] = useState<{ url: string; label: string } | null>(null);
+
+	const slots = Object.entries(images).filter(([, url]) => url && !url.includes('/undefined/'));
+	if (slots.length === 0) return null;
+
+	return (
+		<>
+			<div className="border-t border-text/10 mt-1">
+				<button
+					onClick={() => setExpanded(e => !e)}
+					className="flex items-center gap-2 py-1 px-3 transition-colors text-sm text-text-primary/50 hover:text-text-primary hover:bg-accent w-full font-medium"
+				>
+					<ChevronRight className={clsx('size-3 transition-transform duration-200', expanded && 'rotate-90')} />
+					<Image className="size-3" />
+					Images
+					<span className="ml-auto text-[10px] text-text-primary/30">{slots.length}</span>
+				</button>
+
+				{expanded && (
+					<div className="flex flex-col gap-0.5 pb-1">
+						{slots.map(([slot, url]) => (
+							<div
+								key={slot}
+								className="group flex items-center gap-2 px-3 py-1 hover:bg-accent transition-colors"
+							>
+								<button
+									className="flex-shrink-0"
+									onClick={() => setLightbox({ url, label: SLOT_LABELS[slot] ?? slot })}
+									title="Click to enlarge"
+								>
+									<img
+										src={url}
+										alt={slot}
+										className="h-7 w-10 rounded object-cover border border-text/10 group-hover:border-text/30 transition-colors"
+										crossOrigin="anonymous"
+									/>
+								</button>
+								<span className="flex-1 text-xs text-text-primary/70 truncate">{SLOT_LABELS[slot] ?? slot}</span>
+								<button
+									onClick={() => onDelete(slot)}
+									className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-text-primary/40 hover:text-red-400"
+									title="Delete image"
+								>
+									<Trash2 className="size-3" />
+								</button>
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+
+			{lightbox && createPortal(
+				<div
+					className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+					onClick={() => setLightbox(null)}
+				>
+					<div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+						<img
+							src={lightbox.url}
+							alt={lightbox.label}
+							className="max-w-full max-h-[85vh] rounded-lg object-contain shadow-2xl"
+							crossOrigin="anonymous"
+						/>
+						<div className="absolute bottom-0 left-0 right-0 flex items-center justify-between bg-black/60 rounded-b-lg px-4 py-2">
+							<span className="text-sm text-zinc-300">{lightbox.label}</span>
+							<button className="text-xs text-zinc-400 hover:text-white" onClick={() => setLightbox(null)}>Close</button>
+						</div>
+					</div>
+				</div>,
+				document.body
+			)}
+		</>
+	);
+}
+
 export function FileExplorer({
 	files,
 	currentFile,
 	onFileClick,
+	generatedImages,
+	onDeleteGeneratedImage,
 }: {
 	files: FileType[];
 	currentFile: FileType | undefined;
 	onFileClick: (file: FileType) => void;
+	generatedImages?: Record<string, string>;
+	onDeleteGeneratedImage?: (slot: string) => void;
 }) {
 	const fileTree = buildFileTree(files);
 
@@ -145,6 +239,9 @@ export function FileExplorer({
 					/>
 				))}
 			</div>
+			{generatedImages && onDeleteGeneratedImage && (
+				<GeneratedImagesPanel images={generatedImages} onDelete={onDeleteGeneratedImage} />
+			)}
 		</div>
 	);
 }

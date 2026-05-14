@@ -68,6 +68,10 @@ interface MainContentPanelProps {
 	// Refs
 	previewRef: RefObject<HTMLIFrameElement | null>;
 	editorRef: RefObject<HTMLDivElement | null>;
+
+	// Generated images
+	generatedImages?: Record<string, string>;
+	onDeleteGeneratedImage?: (slot: string) => void;
 }
 
 export function MainContentPanel(props: MainContentPanelProps) {
@@ -101,6 +105,8 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		previewRef,
 		editorRef,
 		templateDetails,
+		generatedImages,
+		onDeleteGeneratedImage,
 	} = props;
 
 	// Feature-specific state management
@@ -275,6 +281,8 @@ export function MainContentPanel(props: MainContentPanelProps) {
 							files={allFiles}
 							currentFile={undefined}
 							onFileClick={onFileClick}
+							generatedImages={generatedImages}
+							onDeleteGeneratedImage={onDeleteGeneratedImage}
 						/>
 						<div className="flex-1 flex items-center justify-center bg-bg-3">
 							<span className="text-text-50/50 text-sm">No file selected</span>

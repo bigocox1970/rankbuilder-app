@@ -800,6 +800,17 @@ export function useChat({
 		staticIssueCount,
 		isDebugging,
 		generatedImageUrls,
+		deleteGeneratedImage: async (slot: string) => {
+			if (!chatId) return;
+			setGeneratedImageUrls(prev => {
+				const next = { ...prev };
+				delete next[slot];
+				return next;
+			});
+			await apiClient.deleteGeneratedImage(chatId, slot).catch(() => {
+				// R2 deletion is best-effort; local state is already updated
+			});
+		},
 		// Behavior type from backend
 		behaviorType,
 		projectType: internalProjectType,
