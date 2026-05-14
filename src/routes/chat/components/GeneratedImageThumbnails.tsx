@@ -15,9 +15,10 @@ const SLOT_LABELS: Record<string, string> = {
 export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; url: string } | null>(null);
     const [lightbox, setLightbox] = useState<{ url: string; label: string } | null>(null);
+    const [dismissed, setDismissed] = useState<Set<string>>(new Set());
     const menuRef = useRef<HTMLDivElement>(null);
 
-    const slots = Object.entries(images).filter(([, url]) => url && !url.includes('/undefined/'));
+    const slots = Object.entries(images).filter(([slot, url]) => url && !url.includes('/undefined/') && !dismissed.has(slot));
 
     if (slots.length === 0) return null;
 
@@ -61,6 +62,13 @@ export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
                         <span className="absolute bottom-0 left-0 right-0 text-center text-[10px] text-zinc-400 bg-black/60 rounded-b px-1 py-0.5 leading-tight">
                             {SLOT_LABELS[slot] ?? slot}
                         </span>
+                        <button
+                            className="absolute -top-1 -right-1 hidden group-hover:flex items-center justify-center w-4 h-4 rounded-full bg-zinc-700 hover:bg-zinc-500 text-zinc-300 hover:text-white text-[10px] leading-none transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setDismissed(prev => new Set([...prev, slot])); }}
+                            title="Dismiss"
+                        >
+                            ×
+                        </button>
                     </div>
                 ))}
             </div>
