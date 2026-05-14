@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Props {
     images: Record<string, string>;
@@ -93,9 +94,9 @@ export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
                 </>
             )}
 
-            {lightbox && (
+            {lightbox && createPortal(
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
                     onClick={() => setLightbox(null)}
                 >
                     <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -115,7 +116,8 @@ export function GeneratedImageThumbnails({ images, onInsertUrl }: Props) {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );
