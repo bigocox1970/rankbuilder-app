@@ -298,6 +298,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					isGitHubExportReady={isGitHubExportReady}
 					onGitHubExportClick={githubExport.openModal}
 					editorRef={editorRef}
+					allFiles={allFiles}
 				/>
 			);
 		}
