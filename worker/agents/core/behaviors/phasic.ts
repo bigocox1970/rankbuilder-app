@@ -118,6 +118,17 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 work1: generatedImages.work1,
                 work2: generatedImages.work2,
             });
+
+            // Pre-fill image tokens directly in the template HTML so the agent never
+            // has to copy URLs from the context block — it just sees real URLs already in place.
+            const templateIndex = templateInfo.templateDetails.allFiles['public/index.html'];
+            if (templateIndex) {
+                templateInfo.templateDetails.allFiles['public/index.html'] = templateIndex
+                    .replace(/\{\{HERO_IMAGE_URL\}\}/g, generatedImages.hero)
+                    .replace(/\{\{ABOUT_IMAGE_URL\}\}/g, generatedImages.work1)
+                    .replace(/\{\{PROJECT[1-6]_IMAGE_URL\}\}/g, generatedImages.work2);
+                this.logger.info('Pre-filled image tokens in template index.html');
+            }
         }
 
         const packageJson = templateInfo.templateDetails.allFiles['package.json'];
