@@ -39,15 +39,6 @@ export function FileTreeItem({
 			>
 				<File className="size-3" />
 				<span className="flex-1 text-left truncate">{item.name}</span>
-				{/* {item.file.isGenerating ? (
-					<Loader className="size-3 animate-spin" />
-				) : null}
-				{item.file.needsFixing && (
-					<span className="text-[9px] text-orange-400">fix</span>
-				)}
-				{item.file.hasRuntimeError && (
-					<span className="text-[9px] text-red-400">error</span>
-				)} */}
 			</button>
 		);
 	}
@@ -125,63 +116,57 @@ const SLOT_LABELS: Record<string, string> = {
 	work2: 'Work 2',
 };
 
-function GeneratedImagesPanel({
+function ImagesTabContent({
 	images,
 	onDelete,
 }: {
 	images: Record<string, string>;
 	onDelete: (slot: string) => void;
 }) {
-	const [expanded, setExpanded] = useState(true);
 	const [lightbox, setLightbox] = useState<{ url: string; label: string } | null>(null);
 
 	const slots = Object.entries(images).filter(([, url]) => url && !url.includes('/undefined/'));
-	if (slots.length === 0) return null;
+
+	if (slots.length === 0) {
+		return (
+			<div className="flex-1 flex items-center justify-center p-4">
+				<span className="text-xs text-text-primary/30 text-center">No images generated yet</span>
+			</div>
+		);
+	}
 
 	return (
 		<>
-			<div className="border-t border-text/10 mt-1">
-				<button
-					onClick={() => setExpanded(e => !e)}
-					className="flex items-center gap-2 py-1 px-3 transition-colors text-sm text-text-primary/50 hover:text-text-primary hover:bg-accent w-full font-medium"
-				>
-					<ChevronRight className={clsx('size-3 transition-transform duration-200', expanded && 'rotate-90')} />
-					<Image className="size-3" />
-					Images
-					<span className="ml-auto text-[10px] text-text-primary/30">{slots.length}</span>
-				</button>
-
-				{expanded && (
-					<div className="flex flex-col gap-0.5 pb-1">
-						{slots.map(([slot, url]) => (
-							<div
-								key={slot}
-								className="group flex items-center gap-2 px-3 py-1 hover:bg-accent transition-colors"
+			<div className="flex flex-col gap-0.5 p-2">
+				{slots.map(([slot, url]) => (
+					<div
+						key={slot}
+						className="group flex flex-col gap-1 p-2 rounded hover:bg-bg-4 transition-colors"
+					>
+						<button
+							className="w-full"
+							onClick={() => setLightbox({ url, label: SLOT_LABELS[slot] ?? slot })}
+							title="Click to enlarge"
+						>
+							<img
+								src={url}
+								alt={slot}
+								className="w-full h-24 rounded object-cover border border-text/10 group-hover:border-text/30 transition-colors"
+								crossOrigin="anonymous"
+							/>
+						</button>
+						<div className="flex items-center justify-between">
+							<span className="text-xs text-text-primary/70 truncate">{SLOT_LABELS[slot] ?? slot}</span>
+							<button
+								onClick={() => onDelete(slot)}
+								className="opacity-0 group-hover:opacity-100 transition-opacity text-text-primary/40 hover:text-red-400 flex-shrink-0"
+								title="Delete image"
 							>
-								<button
-									className="flex-shrink-0"
-									onClick={() => setLightbox({ url, label: SLOT_LABELS[slot] ?? slot })}
-									title="Click to enlarge"
-								>
-									<img
-										src={url}
-										alt={slot}
-										className="h-7 w-10 rounded object-cover border border-text/10 group-hover:border-text/30 transition-colors"
-										crossOrigin="anonymous"
-									/>
-								</button>
-								<span className="flex-1 text-xs text-text-primary/70 truncate">{SLOT_LABELS[slot] ?? slot}</span>
-								<button
-									onClick={() => onDelete(slot)}
-									className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-text-primary/40 hover:text-red-400"
-									title="Delete image"
-								>
-									<Trash2 className="size-3" />
-								</button>
-							</div>
-						))}
+								<Trash2 className="size-3" />
+							</button>
+						</div>
 					</div>
-				)}
+				))}
 			</div>
 
 			{lightbox && createPortal(
@@ -222,25 +207,65 @@ export function FileExplorer({
 	onDeleteGeneratedImage?: (slot: string) => void;
 }) {
 	const fileTree = buildFileTree(files);
+	const [activeTab, setActiveTab] = useState<'files' | 'images'>('files');
+
+	const imageSlots = generatedImages
+		? Object.entries(generatedImages).filter(([, url]) => url && !url.includes('/undefined/'))
+		: [];
+	const hasImages = imageSlots.length > 0;
+
+	const tab = hasImages ? activeTab : 'files';
 
 	return (
-		<div className="w-full max-w-[200px] bg-bg-3 border-r border-text/10 h-full overflow-y-auto">
-			<div className="p-2 px-3 text-sm flex items-center gap-1 text-text-primary/50 font-medium">
-				<LucideNetwork className="size-4" />
-				Files
+		<div className="w-full max-w-[200px] bg-bg-3 border-r border-text/10 h-full overflow-y-auto flex flex-col">
+			<div className="flex items-center border-b border-text/10 px-1 pt-1">
+				<button
+					onClick={() => setActiveTab('files')}
+					className={clsx(
+						'flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-t transition-colors flex-1 justify-center',
+						tab === 'files'
+							? 'text-text-primary border-b-2 border-accent -mb-px bg-bg-4'
+							: 'text-text-primary/40 hover:text-text-primary/70',
+					)}
+					title="Files"
+				>
+					<LucideNetwork className="size-3.5" />
+					Files
+				</button>
+				{hasImages && (
+					<button
+						onClick={() => setActiveTab('images')}
+						className={clsx(
+							'flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-t transition-colors flex-1 justify-center',
+							tab === 'images'
+								? 'text-text-primary border-b-2 border-accent -mb-px bg-bg-4'
+								: 'text-text-primary/40 hover:text-text-primary/70',
+						)}
+						title="Generated Images"
+					>
+						<Image className="size-3.5" />
+						Images
+						<span className="text-[9px] text-text-primary/30">{imageSlots.length}</span>
+					</button>
+				)}
 			</div>
-			<div className="flex flex-col">
-				{fileTree.map((item) => (
-					<FileTreeItem
-						key={item.filePath}
-						item={item}
-						currentFile={currentFile}
-						onFileClick={onFileClick}
-					/>
-				))}
-			</div>
-			{generatedImages && onDeleteGeneratedImage && (
-				<GeneratedImagesPanel images={generatedImages} onDelete={onDeleteGeneratedImage} />
+
+			{tab === 'files' ? (
+				<div className="flex flex-col">
+					{fileTree.map((item) => (
+						<FileTreeItem
+							key={item.filePath}
+							item={item}
+							currentFile={currentFile}
+							onFileClick={onFileClick}
+						/>
+					))}
+				</div>
+			) : (
+				<ImagesTabContent
+					images={generatedImages!}
+					onDelete={onDeleteGeneratedImage!}
+				/>
 			)}
 		</div>
 	);
