@@ -243,42 +243,39 @@ export function AppSidebar() {
 									<span className="font-medium text-text-primary/80 group-hover:text-primary transition-colors">Dashboard</span>
 								</SidebarMenuButton>
 
-							{location.pathname !== '/' && (
-								<div
-									className={cn(
-										isCollapsed ? ' pr-2' : 'px-1',
-									)}
-								>
-									<TooltipProvider delayDuration={0}>
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<button
-													className={cn(
-														'group flex w-full border-[0.5px] border-bg-2 items-center gap-2 font-medium hover:opacity-80 hover:cursor-pointer p-2 rounded-md cursor-hand text-text-secondary hover:text-text-primary',
-														isCollapsed
-															? 'justify-center bg-accent'
-															: 'justify-start bg-accent',
-													)}
-													onClick={() => {
-														// Collapse sidebar when starting a new build
-														if (!isCollapsed) {
-															setOpen(false);
-														}
-														navigate('/');
-													}}
-												>
-													<Plus className="h-4 w-4 text-neutral-50" />
-													{!isCollapsed && (
-														<span className="font-medium text-neutral-50">
-															New build
-														</span>
-													)}
-												</button>
-											</TooltipTrigger>
-										</Tooltip>
-									</TooltipProvider>
-								</div>
-							)}
+							<div
+								className={cn(
+									isCollapsed ? ' pr-2' : 'px-1',
+								)}
+							>
+								<TooltipProvider delayDuration={0}>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												className={cn(
+													'group flex w-full border-[0.5px] border-bg-2 items-center gap-2 font-medium hover:opacity-80 hover:cursor-pointer p-2 rounded-md cursor-hand text-text-secondary hover:text-text-primary',
+													isCollapsed
+														? 'justify-center bg-accent'
+														: 'justify-start bg-accent',
+												)}
+												onClick={() => {
+													if (!isCollapsed) {
+														setOpen(false);
+													}
+													navigate('/');
+												}}
+											>
+												<Plus className="h-4 w-4 text-neutral-50" />
+												{!isCollapsed && (
+													<span className="font-medium text-neutral-50">
+														New build
+													</span>
+												)}
+											</button>
+										</TooltipTrigger>
+									</Tooltip>
+								</TooltipProvider>
+							</div>
 							</div>
 						</SidebarGroupContent>
 					</SidebarGroup>
