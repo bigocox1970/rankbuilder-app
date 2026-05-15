@@ -7,6 +7,12 @@ export interface GeneratedTradeImages {
     hero: string;
     work1: string;
     work2: string;
+    project1: string;
+    project2: string;
+    project3: string;
+    project4: string;
+    project5: string;
+    project6: string;
 }
 
 const NO_TEXT = 'no text, no words, no writing, no watermarks, no logos, no signs, no captions, no overlays, no website, no screenshot, no mockup, no UI, no computer screen, no browser, no interface';
@@ -32,7 +38,43 @@ const IMAGE_SPECS: Array<{
     },
     {
         key: 'work2',
-        promptSuffix: `finished professional work result, clean and polished, natural lighting, DSLR photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: `beautifully finished professional work result, wide shot, natural lighting, DSLR photography, photorealistic, ${NO_TEXT}`,
+        width: 768,
+        height: 512,
+    },
+    {
+        key: 'project1',
+        promptSuffix: `completed project, exterior view, golden hour lighting, DSLR photography, photorealistic, ${NO_TEXT}`,
+        width: 768,
+        height: 512,
+    },
+    {
+        key: 'project2',
+        promptSuffix: `close-up detail of expert craftsmanship and quality finish, macro photography, DSLR, photorealistic, ${NO_TEXT}`,
+        width: 768,
+        height: 512,
+    },
+    {
+        key: 'project3',
+        promptSuffix: `tradesperson actively working on a project, mid-action, natural daylight, DSLR photography, photorealistic, ${NO_TEXT}`,
+        width: 768,
+        height: 512,
+    },
+    {
+        key: 'project4',
+        promptSuffix: `finished job, interior or close view, clean professional result, DSLR photography, photorealistic, ${NO_TEXT}`,
+        width: 768,
+        height: 512,
+    },
+    {
+        key: 'project5',
+        promptSuffix: `professional tools and equipment laid out neatly on a job site, overhead shot, DSLR photography, photorealistic, ${NO_TEXT}`,
+        width: 768,
+        height: 512,
+    },
+    {
+        key: 'project6',
+        promptSuffix: `before-and-after style completed transformation, wide angle, bright natural light, DSLR photography, photorealistic, ${NO_TEXT}`,
         width: 768,
         height: 512,
     },
@@ -137,12 +179,17 @@ export function buildImageContext(images: GeneratedTradeImages): string {
     return `
 
 [GENERATED IMAGES]
-CRITICAL: Exactly 3 real images have been generated for this site. These are the ONLY images you may use. Do NOT use placeholder images, stock photos, or URLs from unsplash.com, picsum.photos, placehold.it, or any other external image source.
+CRITICAL: Exactly 9 real images have been generated for this site. These are the ONLY images you may use. Do NOT use placeholder images, stock photos, or URLs from unsplash.com, picsum.photos, placehold.it, or any other external image source.
 
 Token mapping — use exactly these URLs for the corresponding tokens:
 - {{HERO_IMAGE_URL}} → ${images.hero}
 - {{ABOUT_IMAGE_URL}} → ${images.work1}
-- {{PROJECT1_IMAGE_URL}} through {{PROJECT6_IMAGE_URL}} → ${images.work2} (use the same work2 URL for every project card; use the hero URL as a fallback only if absolutely needed)
+- {{PROJECT1_IMAGE_URL}} → ${images.project1}
+- {{PROJECT2_IMAGE_URL}} → ${images.project2}
+- {{PROJECT3_IMAGE_URL}} → ${images.project3}
+- {{PROJECT4_IMAGE_URL}} → ${images.project4}
+- {{PROJECT5_IMAGE_URL}} → ${images.project5}
+- {{PROJECT6_IMAGE_URL}} → ${images.project6}
 
 Rules:
 - Copy every URL character-for-character including any ?v= query string

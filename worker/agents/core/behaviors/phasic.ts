@@ -126,7 +126,12 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 templateInfo.templateDetails.allFiles['public/index.html'] = templateIndex
                     .replace(/\{\{HERO_IMAGE_URL\}\}/g, generatedImages.hero)
                     .replace(/\{\{ABOUT_IMAGE_URL\}\}/g, generatedImages.work1)
-                    .replace(/\{\{PROJECT[1-6]_IMAGE_URL\}\}/g, generatedImages.work2);
+                    .replace(/\{\{PROJECT1_IMAGE_URL\}\}/g, generatedImages.project1)
+                    .replace(/\{\{PROJECT2_IMAGE_URL\}\}/g, generatedImages.project2)
+                    .replace(/\{\{PROJECT3_IMAGE_URL\}\}/g, generatedImages.project3)
+                    .replace(/\{\{PROJECT4_IMAGE_URL\}\}/g, generatedImages.project4)
+                    .replace(/\{\{PROJECT5_IMAGE_URL\}\}/g, generatedImages.project5)
+                    .replace(/\{\{PROJECT6_IMAGE_URL\}\}/g, generatedImages.project6);
                 this.logger.info('Pre-filled image tokens in template index.html');
             }
         }
@@ -157,13 +162,13 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             projectType: this.projectType,
             behaviorType: 'phasic',
             generatedImageUrls: generatedImages
-                ? { hero: generatedImages.hero, work1: generatedImages.work1, work2: generatedImages.work2 }
+                ? { hero: generatedImages.hero, work1: generatedImages.work1, work2: generatedImages.work2, project1: generatedImages.project1, project2: generatedImages.project2, project3: generatedImages.project3, project4: generatedImages.project4, project5: generatedImages.project5, project6: generatedImages.project6 }
                 : this.state.generatedImageUrls,
         };
         this.setState(nextState);
         if (generatedImages) {
             this.broadcast(WebSocketMessageResponses.IMAGES_GENERATED, {
-                images: { hero: generatedImages.hero, work1: generatedImages.work1, work2: generatedImages.work2 }
+                images: { hero: generatedImages.hero, work1: generatedImages.work1, work2: generatedImages.work2, project1: generatedImages.project1, project2: generatedImages.project2, project3: generatedImages.project3, project4: generatedImages.project4, project5: generatedImages.project5, project6: generatedImages.project6 }
             });
         }
         // Customize template files (package.json, wrangler.jsonc, .bootstrap.js, .gitignore)
