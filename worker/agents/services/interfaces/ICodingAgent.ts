@@ -63,7 +63,7 @@ export interface ICodingAgent {
 
     regenerateFileByPath(path: string, issues: string[]): Promise<{ path: string; diff: string }>;
 
-    regenerateImage(slot: string, description: string): Promise<{ url: string }>;
+    regenerateImage(slot: string, description: string, quality?: 'standard' | 'premium'): Promise<{ url: string }>;
 
     getGeneratedImageUrls(): Record<string, string>;
     deleteGeneratedImageSlot(slot: string): Promise<void>;

@@ -105,6 +105,18 @@ async function runFlux(env: Env, prompt: string, width: number, height: number):
     return base64ToBytes(response.image);
 }
 
+async function runPremiumModel(env: Env, prompt: string): Promise<Uint8Array> {
+    // SDXL produces significantly more detailed and photorealistic results at higher compute cost
+    const response = await env.AI.run('@cf/stabilityai/stable-diffusion-xl-base-1.0', {
+        prompt,
+        num_steps: 20,
+    }) as unknown as ReadableStream<Uint8Array>;
+
+    const resp = new Response(response);
+    const buffer = await resp.arrayBuffer();
+    return new Uint8Array(buffer);
+}
+
 function extractBusinessContext(query: string): string {
     return query
         .replace(/^(please\s+)?(build|create|make|design|generate|develop)\s+(me\s+)?(a\s+)?(website|site|web\s*page|landing\s*page)\s+(for\s+(a\s+)?)?/i, '')
@@ -154,6 +166,7 @@ export async function regenerateTradeImage(
     agentId: string,
     slot: string,
     prompt: string,
+    quality: 'standard' | 'premium' = 'standard',
 ): Promise<string> {
     if (!agentId || agentId === 'undefined') throw new Error('Agent ID is not set — cannot generate image');
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(slot)) throw new Error(`Invalid image slot name: ${slot}`);
@@ -164,7 +177,9 @@ export async function regenerateTradeImage(
 
     const basePrompt = prompt.startsWith(PHOTO_PREFIX) ? prompt : `${PHOTO_PREFIX} ${prompt}`;
     const safePrompt = basePrompt.includes('no website') ? basePrompt : `${basePrompt}, ${NO_TEXT}`;
-    const bytes = await runFlux(env, safePrompt, width, height);
+    const bytes = quality === 'premium'
+        ? await runPremiumModel(env, safePrompt)
+        : await runFlux(env, safePrompt, width, height);
     const r2Key = `generated-images/${agentId}/${slot}.png`;
 
     await env.TEMPLATES_BUCKET.put(r2Key, bytes, {

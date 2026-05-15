@@ -1029,13 +1029,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return { path, diff: regenerated.lastDiff };
     }
 
-    async regenerateImage(slot: string, description: string): Promise<{ url: string }> {
+    async regenerateImage(slot: string, description: string, quality: 'standard' | 'premium' = 'standard'): Promise<{ url: string }> {
         const agentId = this.getAgentId();
         if (!agentId || agentId === 'undefined') {
             throw new Error('Agent is not fully initialized yet — please wait a moment and try again');
         }
         const prompt = description;
-        const url = await regenerateTradeImage(this.env, agentId, slot, prompt);
+        const url = await regenerateTradeImage(this.env, agentId, slot, prompt, quality);
         const updatedUrls = { ...(this.state.generatedImageUrls || {}), [slot]: url };
         this.setState({ ...this.state, generatedImageUrls: updatedUrls });
         this.broadcast(WebSocketMessageResponses.IMAGES_GENERATED, { images: updatedUrls });
