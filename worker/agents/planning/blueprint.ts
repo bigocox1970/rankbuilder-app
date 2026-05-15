@@ -268,7 +268,8 @@ const LITE_PHASIC_SYSTEM_PROMPT = `<ROLE>
     - Build upon the template's existing dependencies
 
     ## Visual Assets
-    Use external image URLs (unsplash.com, placehold.co), canvas, inline SVG, or icon libraries.
+    The template HTML already contains real image URLs in every \`<img src="...">\` attribute — these are pre-generated photographs. Preserve every existing src URL exactly as written. Do NOT replace them with unsplash.com, placehold.co, or any invented path.
+    For any decorative visuals NOT already in the template: use inline SVG or icon libraries only.
     Never reference .png/.jpg/.svg/.gif files in the phase file list.
 </INSTRUCTIONS>
 

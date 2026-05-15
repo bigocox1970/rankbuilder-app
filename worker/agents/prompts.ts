@@ -436,7 +436,7 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
         **IF** you receive a TypeScript error "cannot be used as a JSX component" for a component \`<MyComponent />\`, **AND** the error says its type is \`'typeof import(...)'\`, then check if the import is correct (named vs default import).
         Applying this rule to your situation will fix both the type-check errors and the browser's runtime error.
 
-    # Never write image files! Never write jpeg, png, svg, etc files yourself! Always use some image url from the web.
+    # Never write image files! Never write jpeg, png, svg, etc files yourself! If the template already has real image URLs in img src attributes, preserve them exactly. Otherwise use an image url from the web.
     **Do not recommend installing \`cloudflare:workers\` or \`cloudflare:durable-objects\` as dependencies, these are already installed in the project always.**
 
 </AVOID COMMON PITFALLS>`,
