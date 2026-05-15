@@ -27,8 +27,8 @@ const IMAGE_SPECS: Array<{
     {
         key: 'hero',
         promptSuffix: `wide angle exterior or action shot, cinematic natural lighting, DSLR photography, sharp focus, commercial photography style, photorealistic, ${NO_TEXT}`,
-        width: 1024,
-        height: 576,
+        width: 1280,
+        height: 640,
     },
     {
         key: 'work1',

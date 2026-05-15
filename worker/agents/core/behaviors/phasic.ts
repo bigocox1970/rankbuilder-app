@@ -123,7 +123,9 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             // has to copy URLs from the context block — it just sees real URLs already in place.
             const templateIndex = templateInfo.templateDetails.allFiles['public/index.html'];
             if (templateIndex) {
+                const heroOgUrl = generatedImages.hero.split('?')[0];
                 templateInfo.templateDetails.allFiles['public/index.html'] = templateIndex
+                    .replace(/\{\{OG_IMAGE_URL\}\}/g, heroOgUrl)
                     .replace(/\{\{HERO_IMAGE_URL\}\}/g, generatedImages.hero)
                     .replace(/\{\{ABOUT_IMAGE_URL\}\}/g, generatedImages.work1)
                     .replace(/\{\{PROJECT1_IMAGE_URL\}\}/g, generatedImages.project1)
