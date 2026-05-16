@@ -34,7 +34,7 @@ export function GitCloneCommand({ cloneUrl, appTitle }: GitCloneCommandProps) {
 			aria-label="Click to copy git clone command"
 			title="Click to copy"
 		>
-			<code className="flex-1 text-xs font-mono text-text-secondary truncate select-all min-w-0">
+			<code className="flex-1 text-xs font-mono text-text-secondary break-all select-all min-w-0">
 				{fullCommand}
 			</code>
 			{copied && (

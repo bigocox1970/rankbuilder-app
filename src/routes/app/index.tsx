@@ -731,12 +731,11 @@ export default function AppView() {
 					onValueChange={setActiveTab}
 					className="flex flex-col flex-1 gap-2"
 				>
-					{/* Tab switcher and Git Clone inline */}
-					<div className="flex items-center gap-4">
-						{/* Using proper TabsList and TabsTrigger components */}
+					{/* Tab switcher */}
+					<div className="flex flex-col gap-2 min-w-0 overflow-hidden">
 						<TabsList className="inline-flex h-auto w-fit items-center gap-0.5 bg-bg-2 dark:bg-bg-1 rounded-md p-0.5 border border-border-primary/30">
-						<TabsTrigger 
-							value="preview" 
+						<TabsTrigger
+							value="preview"
 							className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
 						>
 							<Eye className={cn(
@@ -745,8 +744,8 @@ export default function AppView() {
 							)} />
 							Preview
 						</TabsTrigger>
-						<TabsTrigger 
-							value="code" 
+						<TabsTrigger
+							value="code"
 							className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
 						>
 							<Code2 className={cn(
@@ -755,8 +754,8 @@ export default function AppView() {
 							)} />
 							Code
 						</TabsTrigger>
-						<TabsTrigger 
-							value="prompt" 
+						<TabsTrigger
+							value="prompt"
 							className="px-3 py-1.5 rounded text-xs font-medium data-[state=active]:bg-bg-4 dark:data-[state=active]:bg-bg-3 data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
 						>
 							<MessageSquare className={cn(
@@ -766,20 +765,18 @@ export default function AppView() {
 							Prompt
 						</TabsTrigger>
 						</TabsList>
-						
-						{/* Git Clone - Inline with tabs */}
-						<div className="flex-shrink-0">
-							{app.visibility === 'public' ? (
-								<GitCloneCommand
-									cloneUrl={`${window.location.protocol}//${window.location.host}/apps/${app.id}.git`}
-									appTitle={app.title}
-								/>
-							) : isOwner ? (
-								<GitClonePrivatePrompt
-									onOpenModal={() => setIsGitCloneModalOpen(true)}
-								/>
-							) : null}
-						</div>
+
+						{/* Git Clone - own row so the URL wraps and stays within the container */}
+						{app.visibility === 'public' ? (
+							<GitCloneCommand
+								cloneUrl={`${window.location.protocol}//${window.location.host}/apps/${app.id}.git`}
+								appTitle={app.title}
+							/>
+						) : isOwner ? (
+							<GitClonePrivatePrompt
+								onOpenModal={() => setIsGitCloneModalOpen(true)}
+							/>
+						) : null}
 					</div>
 
 					<TabsContent value="preview" className="flex-1">
