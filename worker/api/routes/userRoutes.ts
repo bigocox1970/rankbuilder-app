@@ -13,4 +13,7 @@ export function setupUserRoutes(app: Hono<AppEnv>): void {
 
     // User profile
     app.put('/api/user/profile', setAuthLevel(AuthConfig.authenticated), adaptController(UserController, UserController.updateProfile));
+
+    // User plan info
+    app.get('/api/user/plan', setAuthLevel(AuthConfig.authenticated), adaptController(UserController, UserController.getPlan));
 }

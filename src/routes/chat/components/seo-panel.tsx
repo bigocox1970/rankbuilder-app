@@ -121,13 +121,17 @@ function scorePage(page: SeoPage, htmlSignals?: HtmlSignals): { checks: ScoreChe
 		checks.push({ label: 'Primary keyword in description', passed, points: 12, earned: passed ? 12 : 0, detail: passed ? undefined : `"${kw.primary}" missing` });
 	}
 
+	const h2Text = page.h2s.join(' ');
+	const altText = page.imageAlts.join(' ');
+
 	if (primary) {
-		const h2Text = page.h2s.join(' ');
-		const altText = page.imageAlts.join(' ');
 		const inH2 = kwInText(kw.primary, h2Text);
 		checks.push({ label: 'Primary keyword in H2', passed: inH2, points: 8, earned: inH2 ? 8 : 0 });
-		const inAlt = kwInText(kw.primary, altText) || (longTail ? kwInText(kw.longTail, altText) : false);
-		checks.push({ label: 'Keyword in image alt text', passed: inAlt, points: 8, earned: inAlt ? 8 : 0 });
+	}
+
+	if (primary || longTail) {
+		const inAlt = (primary ? kwInText(kw.primary, altText) : false) || (longTail ? kwInText(kw.longTail, altText) : false);
+		checks.push({ label: 'Keyword in image alt text', passed: inAlt, points: 8, earned: inAlt ? 8 : 0, detail: page.imageAlts.length === 0 ? 'no alts in seo.json' : undefined });
 	}
 
 	{
@@ -198,6 +202,22 @@ function CheckRow({ check }: { check: ScoreCheck }) {
 	);
 }
 
+type FieldState = 'green' | 'amber' | 'red' | 'neutral';
+
+function fieldState(len: number, perfectMin: number, perfectMax: number, okMin: number, okMax: number): FieldState {
+	if (len === 0) return 'neutral';
+	if (len >= perfectMin && len <= perfectMax) return 'green';
+	if (len >= okMin && len <= okMax) return 'amber';
+	return 'red';
+}
+
+const STATE_BORDER: Record<FieldState, string> = {
+	green: 'border-emerald-400/50',
+	amber: 'border-yellow-400/50',
+	red: 'border-red-400/40',
+	neutral: 'border-text-primary/10',
+};
+
 function CharCounter({ value, min, max }: { value: string; min: number; max: number }) {
 	const len = value.length;
 	const color = len >= min && len <= max
@@ -208,9 +228,9 @@ function CharCounter({ value, min, max }: { value: string; min: number; max: num
 	return <span className={clsx('text-xs tabular-nums', color)}>{len}/{max}</span>;
 }
 
-function SerpPreview({ title, description, url }: { title: string; description: string; url: string }) {
+function SerpPreview({ title, description, url, state }: { title: string; description: string; url: string; state?: FieldState }) {
 	return (
-		<div className="rounded-lg bg-white/5 border border-text-primary/10 p-4 text-left">
+		<div className={clsx('rounded-lg bg-white/5 border p-4 text-left transition-colors', STATE_BORDER[state ?? 'neutral'])}>
 			<p className="text-xs text-text-primary/30 mb-2 uppercase tracking-wider">Google preview</p>
 			<div className="flex items-center gap-1.5 mb-0.5">
 				<div className="size-4 rounded-full bg-text-primary/20" />
@@ -295,6 +315,17 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 
 	const { checks, total, max } = useMemo(() => scorePage(draftPage, htmlSignals), [draftPage, htmlSignals]);
 	const failingChecks = useMemo(() => checks.filter(c => !c.passed), [checks]);
+
+	const titleState = fieldState(draftTitle.length, 50, 60, 40, 70);
+	const descState = fieldState(draftDescription.length, 140, 160, 120, 170);
+	const serpState = useMemo<FieldState>(() => {
+		if (titleState === 'neutral' && descState === 'neutral') return 'neutral';
+		if (titleState === 'green' && descState === 'green') return 'green';
+		if (titleState === 'red' || descState === 'red') return 'red';
+		return 'amber';
+	}, [titleState, descState]);
+	const checksPct = max > 0 ? Math.round((total / max) * 100) : 0;
+	const checksState: FieldState = checksPct >= 90 ? 'green' : checksPct >= 70 ? 'amber' : 'red';
 
 	// Dirty detection
 	const originalKw = useMemo(() => normaliseKeywords(page.keywords), [page.keywords]);
@@ -428,7 +459,7 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 			</div>
 
 			{/* SERP preview — live */}
-			<SerpPreview title={draftTitle} description={draftDescription} url={page.canonicalUrl} />
+			<SerpPreview title={draftTitle} description={draftDescription} url={page.canonicalUrl} state={serpState} />
 
 			{/* Title */}
 			<div>
@@ -440,7 +471,10 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 					type="text"
 					value={draftTitle}
 					onChange={e => setDraftTitle(e.target.value)}
-					className="w-full rounded-md bg-bg-3 border border-text-primary/10 focus:border-accent/40 outline-none px-3 py-2 text-sm text-text-primary transition-colors"
+					className={clsx(
+						'w-full rounded-md bg-bg-3 border outline-none px-3 py-2 text-sm text-text-primary transition-colors focus:border-accent/40',
+						STATE_BORDER[titleState],
+					)}
 					placeholder="No title set"
 				/>
 				<p className="text-xs text-text-primary/30 mt-1">50–60 chars. Include primary keyword and location.</p>
@@ -456,7 +490,10 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 					value={draftDescription}
 					onChange={e => setDraftDescription(e.target.value)}
 					rows={3}
-					className="w-full rounded-md bg-bg-3 border border-text-primary/10 focus:border-accent/40 outline-none px-3 py-2 text-sm text-text-primary leading-relaxed resize-none transition-colors"
+					className={clsx(
+						'w-full rounded-md bg-bg-3 border outline-none px-3 py-2 text-sm text-text-primary leading-relaxed resize-none transition-colors focus:border-accent/40',
+						STATE_BORDER[descState],
+					)}
 					placeholder="No description set"
 				/>
 				<p className="text-xs text-text-primary/30 mt-0.5">140–160 chars (max 160). Include primary keyword naturally.</p>
@@ -571,7 +608,7 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 			{/* Checklist */}
 			<div>
 				<label className="text-xs font-medium text-text-primary/50 uppercase tracking-wider block mb-2">SEO checks</label>
-				<div className="rounded-md bg-bg-3 border border-text-primary/10 px-3 py-1">
+				<div className={clsx('rounded-md bg-bg-3 border px-3 py-1 transition-colors', STATE_BORDER[checksState])}>
 					{checks.map((c, i) => <CheckRow key={i} check={c} />)}
 				</div>
 			</div>

@@ -1,6 +1,15 @@
 import { useMemo } from 'react';
 import { ImageIcon } from 'lucide-react';
+import clsx from 'clsx';
 import type { FileType } from '@/api-types';
+
+type FieldState = 'green' | 'amber' | 'red' | 'neutral';
+const STATE_BORDER: Record<FieldState, string> = {
+	green: 'border-emerald-400/50',
+	amber: 'border-yellow-400/50',
+	red: 'border-red-400/40',
+	neutral: 'border-text-primary/10',
+};
 
 interface SocialPreviewPanelProps {
 	seoFile?: FileType;
@@ -95,8 +104,8 @@ function FaviconPlaceholder() {
 	return (
 		<div>
 			<p className="text-xs text-text-primary/30 uppercase tracking-wider mb-3">Favicon</p>
-			<div className="flex items-center gap-3 px-4 py-3 rounded-md bg-bg-3 border border-text-primary/8 border-dashed">
-				<div className="size-8 rounded bg-text-primary/8 flex items-center justify-center text-text-primary/20 text-lg font-bold flex-shrink-0">?</div>
+			<div className="flex items-center gap-3 px-4 py-3 rounded-md bg-bg-3 border border-yellow-400/30 border-dashed">
+				<div className="size-8 rounded bg-yellow-400/10 flex items-center justify-center text-yellow-400/40 text-lg font-bold flex-shrink-0">?</div>
 				<p className="text-xs text-text-primary/30">No favicon generated yet. Ask Orange to add one, or use the SEO panel to fix it.</p>
 			</div>
 		</div>
@@ -119,12 +128,18 @@ function SocialCardPreview({
 		if (canonicalUrl) domain = new URL(canonicalUrl).hostname;
 	} catch {}
 
+	const cardState: FieldState =
+		!title && !description ? 'neutral' :
+		ogImageUrl && title && description ? 'green' :
+		title && description ? 'amber' :
+		'red';
+
 	return (
 		<div>
 			<p className="text-xs text-text-primary/30 uppercase tracking-wider mb-3">Social sharing card</p>
 			<p className="text-[11px] text-text-primary/25 mb-3">Appears on iMessage, WhatsApp, Twitter/X, Slack, LinkedIn</p>
 
-			<div className="rounded-xl overflow-hidden border border-text-primary/10 bg-white/5 max-w-[320px]">
+			<div className={clsx('rounded-xl overflow-hidden border bg-white/5 max-w-[320px] transition-colors', STATE_BORDER[cardState])}>
 				{/* OG image */}
 				<div className="aspect-[1.91/1] bg-bg-3 flex items-center justify-center overflow-hidden">
 					{ogImageUrl ? (

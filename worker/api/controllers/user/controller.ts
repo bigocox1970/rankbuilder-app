@@ -4,7 +4,7 @@ import { RouteContext } from '../../types/route-context';
 import { UserService } from '../../../database/services/UserService';
 import { AppService } from '../../../database/services/AppService';
 import { Visibility, AppSortOption, SortOrder, TimePeriod } from '../../../database/types';
-import { UserAppsData, ProfileUpdateData } from './types';
+import { UserAppsData, ProfileUpdateData, UserPlanData } from './types';
 import { createLogger } from '../../../logger';
 
 const logger = createLogger('UserController');
@@ -102,6 +102,29 @@ export class UserController extends BaseController {
         } catch (error) {
             this.logger.error('Error updating user profile:', error);
             return UserController.createErrorResponse<ProfileUpdateData>('Failed to update profile', 500);
+        }
+    }
+
+    /**
+     * GET /api/user/plan
+     * Returns the current user's plan tier and limits
+     */
+    static async getPlan(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<UserPlanData>>> {
+        try {
+            const user = context.user!;
+            const kvValue = await env.VibecoderStore.get(`user_config:${user.id}`);
+            const hasKvOverride = kvValue !== null;
+
+            const data: UserPlanData = {
+                plan: hasKvOverride ? 'pro' : 'free',
+                hasKvOverride,
+                dailyBuildLimit: hasKvOverride ? 200 : 10,
+            };
+
+            return UserController.createSuccessResponse(data);
+        } catch (error) {
+            this.logger.error('Error getting user plan:', error);
+            return UserController.createErrorResponse<UserPlanData>('Failed to get plan info', 500);
         }
     }
 }

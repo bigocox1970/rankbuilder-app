@@ -10,11 +10,18 @@ import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';
 import { AdminController } from '../controllers/admin/controller';
 
 export function setupAdminRoutes(app: Hono<AppEnv>): void {
-    // Cost dashboard
+    // Cost dashboard (internal D1 log)
     app.get(
         '/api/admin/costs',
         setAuthLevel(AuthConfig.adminOnly),
         adaptController(AdminController, AdminController.getCosts),
+    );
+
+    // AI Gateway actual spend
+    app.get(
+        '/api/admin/gateway-costs',
+        setAuthLevel(AuthConfig.adminOnly),
+        adaptController(AdminController, AdminController.getGatewayCosts),
     );
 
     // User management

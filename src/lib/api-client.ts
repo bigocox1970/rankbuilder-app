@@ -10,6 +10,8 @@ import type{
 	AdminUsersData,
 	AdminUserActionData,
 	AdminKvStatusData,
+	AdminGatewayCostData,
+	UserPlanData,
 	AppsListData,
 	PublicAppsData,
 	FavoriteToggleData,
@@ -1288,6 +1290,14 @@ class ApiClient {
 	 */
 	async getAdminCosts(period: '24h' | '7d' | '30d' | 'all'): Promise<ApiResponse<AdminCostData>> {
 		return this.request<AdminCostData>(`/api/admin/costs?period=${encodeURIComponent(period)}`);
+	}
+
+	async getAdminGatewayCosts(period: '24h' | '7d' | '30d'): Promise<ApiResponse<AdminGatewayCostData>> {
+		return this.request<AdminGatewayCostData>(`/api/admin/gateway-costs?period=${encodeURIComponent(period)}`);
+	}
+
+	async getUserPlan(): Promise<ApiResponse<UserPlanData>> {
+		return this.request<UserPlanData>('/api/user/plan');
 	}
 
 	/**

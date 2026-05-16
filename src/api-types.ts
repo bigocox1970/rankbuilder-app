@@ -317,4 +317,11 @@ export type {
     AdminUsersData,
     AdminUserActionData,
     AdminKvStatusData,
+    AdminGatewayCostData,
+    MiniMaxCostData,
 } from 'worker/api/controllers/admin/types';
+
+// User plan/billing types
+export type {
+    UserPlanData,
+} from 'worker/api/controllers/user/types';

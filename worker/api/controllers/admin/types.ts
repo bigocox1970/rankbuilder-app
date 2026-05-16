@@ -46,3 +46,22 @@ export interface AdminUserActionData {
 export interface AdminKvStatusData {
     hasOverride: boolean;
 }
+
+export interface MiniMaxCostData {
+    requests: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+}
+
+export interface AdminGatewayCostData {
+    period: '24h' | '7d' | '30d';
+    totalCostUsd: number;
+    totalRequests: number;
+    tokensIn: number;
+    tokensOut: number;
+    cacheHitRate: number;
+    errorRate: number;
+    lastRequestAt: string | null;
+    minimax: MiniMaxCostData | null;
+}

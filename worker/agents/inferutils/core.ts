@@ -29,6 +29,32 @@ import { createLogger } from '../../logger';
 
 const logger = createLogger('Inference');
 
+// MiniMax direct API pricing (USD per 1M tokens)
+const MINIMAX_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+    'minimax/MiniMax-Text-01': { inputPer1M: 0.20, outputPer1M: 1.10 },
+    'minimax/MiniMax-M1': { inputPer1M: 0.30, outputPer1M: 1.10 },
+};
+
+async function trackMiniMaxUsage(modelName: string, tokensIn: number, tokensOut: number, env: Env): Promise<void> {
+    const pricing = MINIMAX_PRICING[modelName];
+    if (!pricing) return;
+    const costUsd = (tokensIn / 1_000_000) * pricing.inputPer1M + (tokensOut / 1_000_000) * pricing.outputPer1M;
+    const today = new Date().toISOString().split('T')[0];
+    const key = `minimax_costs:${today}`;
+    try {
+        type DailyData = { requests: number; tokensIn: number; tokensOut: number; costUsd: number };
+        const existing = await env.VibecoderStore.get(key, 'json') as DailyData | null;
+        await env.VibecoderStore.put(key, JSON.stringify({
+            requests: (existing?.requests ?? 0) + 1,
+            tokensIn: (existing?.tokensIn ?? 0) + tokensIn,
+            tokensOut: (existing?.tokensOut ?? 0) + tokensOut,
+            costUsd: (existing?.costUsd ?? 0) + costUsd,
+        }), { expirationTtl: 60 * 60 * 24 * 35 });
+    } catch (err) {
+        console.warn('Failed to track MiniMax usage:', err);
+    }
+}
+
 function optimizeInputs(messages: Message[]): Message[] {
     return messages.map((message) => ({
         ...message,
@@ -756,6 +782,11 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             }),
             tool_choice: 'auto' as const
         } : {};
+        // Request usage in final streaming chunk for direct-provider models (e.g. MiniMax)
+        const streamOpts = stream && modelConfig.directOverride
+            ? { stream_options: { include_usage: true } }
+            : {};
+
         let response: OpenAI.ChatCompletion | OpenAI.ChatCompletionChunk | Stream<OpenAI.ChatCompletionChunk>;
         try {
             // Call OpenAI API with proper structured output format
@@ -763,6 +794,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 ...schemaObj,
                 ...extraBody,
                 ...toolsOpts,
+                ...streamOpts,
                 model: modelName,
                 messages: messagesToPass as OpenAI.ChatCompletionMessageParam[],
                 max_completion_tokens: maxTokens || 150000,
@@ -811,10 +843,15 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 const byIndex = new Map<number, ToolAccumulatorEntry>();
                 const byId = new Map<string, ToolAccumulatorEntry>();
                 const orderCounterRef = { value: 0 };
-                
+                let streamUsage: { prompt_tokens: number; completion_tokens: number } | null = null;
+
                 for await (const event of response) {
+                    // Capture usage from final chunk (present when stream_options.include_usage = true)
+                    const chunkUsage = (event as ChatCompletionChunk).usage;
+                    if (chunkUsage) streamUsage = chunkUsage;
+
                     const delta = (event as ChatCompletionChunk).choices[0]?.delta;
-                    
+
                     // Provider-specific logging
                     const provider = modelName.split('/')[0];
                     if (delta?.tool_calls && (provider === 'google-ai-studio' || provider === 'gemini')) {
@@ -841,6 +878,10 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     }
                 }
                 
+                if (streamUsage && modelConfig.directOverride) {
+                    await trackMiniMaxUsage(modelName, streamUsage.prompt_tokens, streamUsage.completion_tokens, env);
+                }
+
                 // Assemble toolCalls with preference for index ordering, else first-seen order
                 const assembled = assembleToolCalls(byIndex, byId);
                 const dropped = assembled.filter(tc => !tc.function.name || tc.function.name.trim() === '');
@@ -891,8 +932,11 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             }
             toolCalls = allToolCalls.filter(tc => tc.function.name && tc.function.name.trim() !== '');
             // Also print the total number of tokens used in the prompt
-            const totalTokens = (response as OpenAI.ChatCompletion).usage?.total_tokens;
-            console.log(`Total tokens used in prompt: ${totalTokens}`);
+            const completionUsage = (response as OpenAI.ChatCompletion).usage;
+            console.log(`Total tokens used in prompt: ${completionUsage?.total_tokens}`);
+            if (completionUsage && modelConfig.directOverride) {
+                await trackMiniMaxUsage(modelName, completionUsage.prompt_tokens, completionUsage.completion_tokens, env);
+            }
         }
 
         const assistantMessage = { role: "assistant" as MessageRole, content, tool_calls: toolCalls };

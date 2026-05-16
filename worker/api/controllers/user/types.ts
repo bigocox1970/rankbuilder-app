@@ -19,3 +19,12 @@ export interface ProfileUpdateData {
     success: boolean;
     message: string;
 }
+
+/**
+ * Response data for user plan/billing info
+ */
+export interface UserPlanData {
+    plan: 'free' | 'pro';
+    hasKvOverride: boolean;
+    dailyBuildLimit: number;
+}
