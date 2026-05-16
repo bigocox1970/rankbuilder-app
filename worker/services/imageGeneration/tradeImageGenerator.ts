@@ -155,7 +155,7 @@ export async function generateTradeImages(
                 const r2Key = `generated-images/${agentId}/${key}.png`;
 
                 await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
-                    httpMetadata: { contentType: 'image/png' },
+                    httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },
                     customMetadata: { agentId },
                 });
 
@@ -198,7 +198,7 @@ export async function regenerateTradeImage(
     const r2Key = `generated-images/${agentId}/${slot}.png`;
 
     await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
-        httpMetadata: { contentType: 'image/png' },
+        httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },
         customMetadata: { agentId },
     });
 

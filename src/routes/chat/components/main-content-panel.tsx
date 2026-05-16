@@ -3,7 +3,7 @@ import type { ViewportMode } from '@/features/core/types';
 import { WebSocket } from 'partysocket';
 import { MonacoEditor } from '../../../components/monaco-editor/monaco-editor';
 import { motion } from 'framer-motion';
-import { RefreshCw, ChevronLeft } from 'lucide-react';
+import { RefreshCw, ChevronLeft, MousePointer2, PenLine } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Blueprint } from './blueprint';
 import { FileExplorer } from './file-explorer';
@@ -344,14 +344,34 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				onManualRefresh={onManualRefresh}
 				viewportMode={viewportMode}
 				onViewportChange={setViewportMode}
-				selectorMode={isBrowserTemplate ? selectorMode : undefined}
-				onSelectorModeChange={isBrowserTemplate ? setSelectorMode : undefined}
 			/>
 		);
 
+		const selectorButtons = isBrowserTemplate ? (
+			<div className="flex items-center border border-border-primary rounded-md overflow-hidden mr-1">
+				<button
+					onClick={() => setSelectorMode(selectorMode === 'select' ? 'off' : 'select')}
+					className={`p-1.5 transition-colors ${selectorMode === 'select' ? 'bg-accent text-white' : 'text-text-primary/50 hover:text-text-primary hover:bg-bg-3'}`}
+					title="Click element to reference in chat"
+				>
+					<MousePointer2 className="size-3.5" />
+				</button>
+				<button
+					onClick={() => setSelectorMode(selectorMode === 'edit' ? 'off' : 'edit')}
+					className={`p-1.5 transition-colors ${selectorMode === 'edit' ? 'bg-accent text-white' : 'text-text-primary/50 hover:text-text-primary hover:bg-bg-3'}`}
+					title="Click text to edit inline"
+				>
+					<PenLine className="size-3.5" />
+				</button>
+			</div>
+		) : null;
+
 		return renderViewWithHeader(
 			viewportContent,
-			headerActions
+			<div className="flex items-center">
+				{selectorButtons}
+				{headerActions}
+			</div>
 		);
 	};
 
