@@ -14,10 +14,10 @@ export interface BaseHeaderActionsProps {
 	onViewportChange?: (mode: ViewportMode) => void;
 }
 
-const VIEWPORT_BUTTONS: { mode: ViewportMode; Icon: typeof Monitor; title: string }[] = [
-	{ mode: 'desktop', Icon: Monitor, title: 'Desktop view' },
-	{ mode: 'tablet', Icon: Tablet, title: 'Tablet view (768px)' },
-	{ mode: 'mobile', Icon: Smartphone, title: 'Mobile view (390px)' },
+const VIEWPORT_CYCLE: { mode: ViewportMode; Icon: typeof Monitor; label: string }[] = [
+	{ mode: 'desktop', Icon: Monitor, label: 'Desktop' },
+	{ mode: 'tablet', Icon: Tablet, label: 'Tablet (768px)' },
+	{ mode: 'mobile', Icon: Smartphone, label: 'Mobile (390px)' },
 ];
 
 export function BaseHeaderActions({
@@ -51,24 +51,20 @@ export function BaseHeaderActions({
 					iconOnly
 				/>
 			)}
-			{viewportMode && onViewportChange && (
-				<div className="flex items-center border border-border-primary rounded-md overflow-hidden">
-					{VIEWPORT_BUTTONS.map(({ mode, Icon, title }) => (
-						<button
-							key={mode}
-							onClick={() => onViewportChange(mode)}
-							title={title}
-							className={`p-1.5 transition-colors duration-150 ${
-								viewportMode === mode
-									? 'bg-accent text-black'
-									: 'text-text-primary/50 hover:text-text-primary hover:bg-bg-4'
-							}`}
-						>
-							<Icon className="size-4" />
-						</button>
-					))}
-				</div>
-			)}
+			{viewportMode && onViewportChange && (() => {
+				const currentIndex = VIEWPORT_CYCLE.findIndex(v => v.mode === viewportMode);
+				const current = VIEWPORT_CYCLE[currentIndex] ?? VIEWPORT_CYCLE[0];
+				const next = VIEWPORT_CYCLE[(currentIndex + 1) % VIEWPORT_CYCLE.length];
+				const CurrentIcon = current.Icon;
+				return (
+					<HeaderButton
+						icon={CurrentIcon}
+						onClick={() => onViewportChange(next.mode)}
+						title={`Viewport: ${current.label} — click for ${next.label}`}
+						iconOnly
+					/>
+				);
+			})()}
 			<HeaderButton
 				icon={GitBranch}
 				label="Clone"
