@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { ArrowRight, Info } from 'react-feather';
 import { Loader2, LayoutGrid, List, Code2 } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '@/contexts/auth-context';
 import { cn } from '@/lib/utils';
 import { ProjectModeSelector, type ProjectModeOption } from '../components/project-mode-selector';
@@ -26,11 +26,22 @@ const WEBSITE_TEMPLATE = 'tradesperson-sp';
 
 export default function Home() {
 	const navigate = useNavigate();
+	const [searchParams] = useSearchParams();
 	const { requireAuth } = useAuthGuard();
 	const [projectMode, setProjectMode] = useState<ProjectType>('app');
 	const [stack, setStack] = useState<StackType>('website');
 	const [query, setQuery] = useState('');
 	const [keywords, setKeywords] = useState<string[]>([]);
+
+	// Pre-fill prompt when arriving from Lovable import modal
+	useEffect(() => {
+		const importUrl = searchParams.get('import');
+		if (importUrl) {
+			setQuery(`Import my Lovable project from GitHub: ${importUrl} — make it SEO-friendly, add structured data, and deploy to Cloudflare`);
+			setStack('website');
+		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 	const { user } = useAuth();
 	const { isLoadingCapabilities, capabilities, getEnabledFeatures } = useFeature();
 	const { data: limitsData, loading: usageLimitsLoading } = useLimitsContext();

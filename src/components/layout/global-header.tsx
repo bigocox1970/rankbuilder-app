@@ -4,16 +4,18 @@ import { AuthButton } from '../auth/auth-button';
 import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
-import { ChevronRight, AlertCircle } from 'lucide-react';
+import { ChevronRight, AlertCircle, Zap } from 'lucide-react';
 import { usePlatformStatus } from '@/hooks/use-platform-status';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UsageLimitsBadge } from '../usage-limits-badge';
+import { LovableImportModal } from '../lovable-import-modal';
 
 export function GlobalHeader() {
 	const { user } = useAuth();
 	const { status } = usePlatformStatus();
 	const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+	const [isLovableOpen, setIsLovableOpen] = useState(false);
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
 	const hasChangeLogs = Boolean(status.changeLogs && status.changeLogs.trim().length > 0);
 	useEffect(() => {
@@ -23,6 +25,8 @@ export function GlobalHeader() {
 	}, [hasChangeLogs]);
 
 	return (
+		<>
+		<LovableImportModal open={isLovableOpen} onOpenChange={setIsLovableOpen} />
 		<Dialog open={isChangelogOpen} onOpenChange={setIsChangelogOpen}>
 			<motion.header
 				initial={{ y: -10, opacity: 0 }}
@@ -101,6 +105,16 @@ export function GlobalHeader() {
 									}}
 								/>
 							)}
+							{user && (
+								<button
+									onClick={() => setIsLovableOpen(true)}
+									className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-text-primary/70 hover:text-accent hover:bg-accent/10 transition-colors border border-border-primary/50 hover:border-accent/40"
+									title="Import from Lovable"
+								>
+									<Zap className="h-3.5 w-3.5" />
+									<span className="hidden sm:inline">Lovable</span>
+								</button>
+							)}
 							{user && <ThemeToggle />}
 							{!user && <ThemeToggle />}
 							{!user && <AuthButton />}
@@ -126,5 +140,6 @@ export function GlobalHeader() {
 				</DialogContent>
 			)}
 		</Dialog>
+		</>
 	);
 }
