@@ -80,8 +80,9 @@ interface MainContentPanelProps {
 	generatedImages?: Record<string, string>;
 	onDeleteGeneratedImage?: (slot: string) => void;
 
-	// SEO panel action
+	// Panel actions
 	onSendMessage?: (msg: string) => void;
+	onPrefillMessage?: (msg: string) => void;
 }
 
 export function MainContentPanel(props: MainContentPanelProps) {
@@ -120,6 +121,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		generatedImages,
 		onDeleteGeneratedImage,
 		onSendMessage,
+		onPrefillMessage,
 	} = props;
 
 	const isMobile = useIsMobile();
@@ -135,6 +137,49 @@ export function MainContentPanel(props: MainContentPanelProps) {
 	useEffect(() => {
 		if (view !== 'preview') setViewportMode('desktop');
 	}, [view]);
+
+	// Element selector state — only active for browser-mode (HTML) templates
+	type SelectorMode = 'off' | 'select' | 'edit';
+	const [selectorMode, setSelectorMode] = useState<SelectorMode>('off');
+
+	// Disable selector when leaving preview
+	useEffect(() => {
+		if (view !== 'preview') setSelectorMode('off');
+	}, [view]);
+
+	// Send selector enable/disable to iframe via postMessage
+	useEffect(() => {
+		const iframe = previewRef.current;
+		if (!iframe?.contentWindow || !previewUrl) return;
+		let origin = '*';
+		try { origin = new URL(previewUrl).origin; } catch { /* use wildcard */ }
+		iframe.contentWindow.postMessage(
+			selectorMode !== 'off'
+				? { type: 'RB_ENABLE_SELECTOR', mode: selectorMode }
+				: { type: 'RB_DISABLE_SELECTOR' },
+			origin
+		);
+	}, [selectorMode, previewUrl, previewRef]);
+
+	// Listen for element click/edit messages from iframe
+	useEffect(() => {
+		const handler = (e: MessageEvent) => {
+			if (!e.data) return;
+			if (e.data.type === 'RB_ELEMENT_CLICK') {
+				const { tag, text } = e.data as { tag: string; text: string };
+				const label = text ? `"${text.slice(0, 60)}"` : 'element';
+				onPrefillMessage?.(`The ${tag} ${label} — `);
+			}
+			if (e.data.type === 'RB_ELEMENT_EDIT') {
+				const { tag, oldText, newText } = e.data as { tag: string; oldText: string; newText: string };
+				onSendMessage?.(`Change the ${tag} "${oldText}" to "${newText}"`);
+			}
+		};
+		window.addEventListener('message', handler);
+		return () => window.removeEventListener('message', handler);
+	}, [onPrefillMessage, onSendMessage]);
+
+	const isBrowserTemplate = templateDetails?.renderMode === 'browser';
 
 	// On mobile, clicking a file switches to editor view
 	const handleFileClickWrapped = useCallback((file: FileType) => {
@@ -299,6 +344,8 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				onManualRefresh={onManualRefresh}
 				viewportMode={viewportMode}
 				onViewportChange={setViewportMode}
+				selectorMode={isBrowserTemplate ? selectorMode : undefined}
+				onSelectorModeChange={isBrowserTemplate ? setSelectorMode : undefined}
 			/>
 		);
 

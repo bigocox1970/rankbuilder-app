@@ -632,6 +632,13 @@ export default function Chat() {
 		[websocket, sendUserMessage, scrollToBottom],
 	);
 
+	const handlePrefillFromPanel = useCallback(
+		(message: string) => {
+			setNewMessage(message);
+		},
+		[],
+	);
+
 	const onNewMessage = useCallback(
 		(e: FormEvent) => {
 			e.preventDefault();
@@ -972,6 +979,7 @@ export default function Chat() {
 								generatedImages={generatedImageUrls}
 								onDeleteGeneratedImage={deleteGeneratedImage}
 								onSendMessage={handleSendFromPanel}
+								onPrefillMessage={handlePrefillFromPanel}
 							/>
 						</motion.div>
 					)}
