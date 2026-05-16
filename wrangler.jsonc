@@ -70,11 +70,7 @@
             // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
 			"max_instances": 10,
             // ATTENTION: Altering instance_type value will have no effect. Please use the SANDBOX_INSTANCE_TYPE var instead.
-            "instance_type": {
-                "vcpu": 4,
-                "memory_mib": 12288,
-                "disk_mb": 10240
-            },
+            "instance_type": "standard-3",
             "rollout_step_percentage": 100,
 			"ssh": {
 				"enabled": true
