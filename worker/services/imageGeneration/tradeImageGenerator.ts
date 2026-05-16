@@ -15,8 +15,10 @@ export interface GeneratedTradeImages {
     project6: string;
 }
 
-const NO_TEXT = 'no text, no words, no writing, no watermarks, no logos, no signs, no captions, no overlays, no website, no screenshot, no mockup, no UI, no computer screen, no browser, no interface';
-const PHOTO_PREFIX = 'A real-world professional photograph of';
+// Keep NO_TEXT minimal — mentioning "website/screenshot/UI" (even negated) causes
+// Flux Schnell to focus on those concepts and generate them.
+const NO_TEXT = 'no text, no letters, no watermarks';
+const PHOTO_PREFIX = 'Real-world photograph of';
 
 const IMAGE_SPECS: Array<{
     key: keyof GeneratedTradeImages;
@@ -26,55 +28,55 @@ const IMAGE_SPECS: Array<{
 }> = [
     {
         key: 'hero',
-        promptSuffix: `wide angle exterior or action shot, cinematic natural lighting, DSLR photography, sharp focus, commercial photography style, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'outdoors on an active job site, wide angle, natural daylight, DSLR photography, photorealistic',
         width: 1280,
         height: 640,
     },
     {
         key: 'work1',
-        promptSuffix: `skilled tradesperson at work on a job, close detail shot, natural daylight, DSLR photography, shallow depth of field, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'skilled worker carrying out hands-on trade work close up, natural daylight, shallow depth of field, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'work2',
-        promptSuffix: `beautifully finished professional work result, wide shot, natural lighting, DSLR photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'high-quality finished trade work result, wide shot, natural light, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project1',
-        promptSuffix: `completed project, exterior view, golden hour lighting, DSLR photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'completed outdoor project, golden hour lighting, wide angle, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project2',
-        promptSuffix: `close-up detail of expert craftsmanship and quality finish, macro photography, DSLR, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'close-up detail of expert craftsmanship and quality finish, macro lens, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project3',
-        promptSuffix: `tradesperson actively working on a project, mid-action, natural daylight, DSLR photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'tradesperson actively working on location mid-task, natural daylight, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project4',
-        promptSuffix: `finished job, interior or close view, clean professional result, DSLR photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'finished indoor work result, clean professional finish, bright natural light, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project5',
-        promptSuffix: `professional tools and equipment laid out neatly on a job site, overhead shot, DSLR photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'professional tools and equipment arranged on a job site, overhead shot, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project6',
-        promptSuffix: `before-and-after style completed transformation, wide angle, bright natural light, DSLR photography, photorealistic, ${NO_TEXT}`,
+        promptSuffix: 'dramatic before-and-after completed transformation, wide angle, bright natural light, DSLR photography',
         width: 768,
         height: 512,
     },
@@ -118,10 +120,23 @@ async function runPremiumModel(env: Env, prompt: string): Promise<Uint8Array> {
 }
 
 function extractBusinessContext(query: string): string {
-    return query
-        .replace(/^(please\s+)?(build|create|make|design|generate|develop)\s+(me\s+)?(a\s+)?(website|site|web\s*page|landing\s*page)\s+(for\s+(a\s+)?)?/i, '')
+    let context = query
+        .replace(/^(please\s+)?(build|create|make|design|generate|develop)\s+(me\s+)?(a\s+)?(website|site|web\s*page|landing\s*page|page)\s+(for\s+(a\s+|the\s+)?)?/i, '')
         .replace(/\[GENERATED IMAGES\][\s\S]*?\[END GENERATED IMAGES\]/g, '')
         .trim();
+
+    // Take only the first sentence — everything after is typically website
+    // design instructions, not business description, and will corrupt image prompts.
+    const firstSentence = context.split(/[.!?\n]/)[0].trim();
+    context = firstSentence || context;
+
+    // Strip web/design vocabulary that would make Flux generate screenshots
+    context = context
+        .replace(/\b(website|web\s*site|web\s*page|landing\s*page|site|homepage|hero(\s*section)?|nav(igation)?|footer|header|section|dark\s*theme|light\s*theme|layout|design|theme|style)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return context || 'a skilled tradesperson';
 }
 
 export async function generateTradeImages(
@@ -176,7 +191,7 @@ export async function regenerateTradeImage(
     const height = spec?.height ?? DEFAULT_HEIGHT;
 
     const basePrompt = prompt.startsWith(PHOTO_PREFIX) ? prompt : `${PHOTO_PREFIX} ${prompt}`;
-    const safePrompt = basePrompt.includes('no website') ? basePrompt : `${basePrompt}, ${NO_TEXT}`;
+    const safePrompt = basePrompt.includes('no watermarks') ? basePrompt : `${basePrompt}, ${NO_TEXT}`;
     const bytes = quality === 'premium'
         ? await runPremiumModel(env, safePrompt)
         : await runFlux(env, safePrompt, width, height);
