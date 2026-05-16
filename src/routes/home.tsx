@@ -30,6 +30,7 @@ export default function Home() {
 	const [projectMode, setProjectMode] = useState<ProjectType>('app');
 	const [stack, setStack] = useState<StackType>('website');
 	const [query, setQuery] = useState('');
+	const [keywords, setKeywords] = useState<string[]>([]);
 	const { user } = useAuth();
 	const { isLoadingCapabilities, capabilities, getEnabledFeatures } = useFeature();
 	const { data: limitsData, loading: usageLimitsLoading } = useLimitsContext();
@@ -143,7 +144,8 @@ export default function Home() {
 		const templateParam = stack === 'website' ? `&selectedTemplate=${WEBSITE_TEMPLATE}` : '';
 		const imageGenEnabled = (() => { try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; } })();
 		const imageGenParam = (!imageGenEnabled || stack !== 'website') ? '&imageGeneration=0' : '';
-		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${imageGenParam}`;
+		const keywordsParam = keywords.length > 0 ? `&keywords=${encodeURIComponent(keywords.join(','))}` : '';
+		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${imageGenParam}${keywordsParam}`;
 
 		if (
 			!requireAuth({
@@ -246,6 +248,9 @@ export default function Home() {
 							onConnectCloudflare={handleConnectCloudflare}
 							variant="expanded"
 							submitIcon={user && usageLimitsLoading ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+							keywords={keywords}
+							onKeywordsChange={setKeywords}
+							showKeywords={stack === 'website'}
 							leftActions={
 								stack === 'app' && showModeSelector ? (
 									<ProjectModeSelector

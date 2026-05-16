@@ -1,5 +1,6 @@
-import { type FormEvent, type ReactNode, type RefObject, useRef } from 'react';
+import { type FormEvent, type ReactNode, type RefObject, useRef, useState, type KeyboardEvent } from 'react';
 import { ArrowRight } from 'react-feather';
+import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { ImageUploadButton } from '@/components/image-upload-button';
@@ -64,6 +65,11 @@ export interface PromptBoxProps {
 	// Refs
 	formRef?: RefObject<HTMLFormElement | null>;
 
+	// Keywords (expanded variant only, for SEO)
+	keywords?: string[];
+	onKeywordsChange?: (keywords: string[]) => void;
+	showKeywords?: boolean;
+
 	// Styling
 	className?: string;
 }
@@ -93,9 +99,13 @@ export function PromptBox({
 	maxWords,
 	formRef,
 	className,
+	keywords = [],
+	onKeywordsChange,
+	showKeywords = false,
 }: PromptBoxProps) {
 	const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const typewriterText = useTypewriterPlaceholder(placeholderPhrases, animatedPlaceholder);
+	const [keywordInput, setKeywordInput] = useState('');
 
 	const resolvedPlaceholder = animatedPlaceholder
 		? `${placeholder}${typewriterText}`
@@ -120,6 +130,26 @@ export function PromptBox({
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			onSubmit();
+		}
+	};
+
+	const addKeyword = (raw: string) => {
+		const kw = raw.trim().toLowerCase().replace(/,+$/, '');
+		if (!kw || keywords.includes(kw) || keywords.length >= 10) return;
+		onKeywordsChange?.([...keywords, kw]);
+		setKeywordInput('');
+	};
+
+	const removeKeyword = (kw: string) => {
+		onKeywordsChange?.(keywords.filter((k) => k !== kw));
+	};
+
+	const handleKeywordKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === 'Enter' || e.key === ',') {
+			e.preventDefault();
+			addKeyword(keywordInput);
+		} else if (e.key === 'Backspace' && keywordInput === '' && keywords.length > 0) {
+			removeKeyword(keywords[keywords.length - 1]);
 		}
 	};
 
@@ -242,6 +272,50 @@ export function PromptBox({
 							</div>
 						)}
 					</div>
+					{showKeywords && onKeywordsChange && (
+						<div className="mt-3 pt-3 border-t border-accent/15">
+							<p className="text-xs text-text-primary/40 mb-2">Target keywords <span className="text-text-primary/25">(optional · 1st = primary, 2nd = long-tail · Enter or comma to add)</span></p>
+							<div className="flex flex-wrap gap-1.5 items-center min-h-[28px]">
+								{keywords.map((kw, i) => {
+									const typeLabel = i === 0 ? 'primary' : i === 1 ? 'long-tail' : null;
+									const colorClass = i === 0
+										? 'bg-accent/15 text-accent'
+										: i === 1
+											? 'bg-blue-400/15 text-blue-400'
+											: 'bg-text-primary/10 text-text-primary/50';
+									return (
+										<span
+											key={kw}
+											className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}
+										>
+											{typeLabel && <span className="opacity-50 text-[10px] mr-0.5">{typeLabel}</span>}
+											{kw}
+											<button
+												type="button"
+												onClick={() => removeKeyword(kw)}
+												className="hover:opacity-70 transition-opacity"
+												aria-label={`Remove keyword ${kw}`}
+											>
+												<X className="size-3" />
+											</button>
+										</span>
+									);
+								})}
+								{keywords.length < 10 && (
+									<input
+										type="text"
+										value={keywordInput}
+										onChange={(e) => setKeywordInput(e.target.value)}
+										onKeyDown={handleKeywordKeyDown}
+										onBlur={() => keywordInput.trim() && addKeyword(keywordInput)}
+										placeholder={keywords.length === 0 ? 'e.g. bricklayer oxford' : ''}
+										className="flex-1 min-w-[140px] bg-transparent text-xs text-text-primary placeholder:text-text-primary/30 outline-none ring-0"
+									/>
+								)}
+							</div>
+						</div>
+					)}
+
 					<div
 						className={clsx(
 							'flex items-center mt-4 pt-1',

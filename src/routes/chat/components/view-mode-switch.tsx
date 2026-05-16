@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Eye, Code, FileText, Presentation } from 'lucide-react';
+import { Eye, Code, FileText, Presentation, SearchCheck } from 'lucide-react';
 import { featureRegistry } from '@/features';
 import type { ProjectType } from '@/api-types';
 
@@ -16,14 +16,16 @@ export function ViewModeSwitch({
 	previewAvailable = false,
 	showTooltip = false,
 	hasDocumentation = false,
+	hasSeoData = false,
 	previewUrl,
 	projectType,
 }: {
-	view: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation'
-	onChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation') => void;
+	view: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo'
+	onChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo') => void;
 	previewAvailable: boolean;
 	showTooltip: boolean;
 	hasDocumentation: boolean;
+	hasSeoData: boolean;
 	previewUrl?: string;
 	projectType?: ProjectType;
 }) {
@@ -100,6 +102,23 @@ export function ViewModeSwitch({
 					<FileText className="size-4" />
 				</button>
 			)}
+
+			{/* SEO button - show when seo.json exists */}
+			{hasSeoData && (
+				<button
+					onClick={() => onChange('seo')}
+					className={clsx(
+						'p-1.5 flex items-center justify-center rounded-md transition-all duration-200',
+						view === 'seo'
+							? 'bg-bg-4 text-accent'
+							: 'text-text-primary/40 hover:text-accent hover:bg-bg-4/60',
+					)}
+					title="SEO"
+				>
+					<SearchCheck className="size-4" />
+				</button>
+			)}
+
 			{/* {terminalAvailable && (
 				<button
 					onClick={() => onChange('terminal')}

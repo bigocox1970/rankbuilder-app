@@ -48,7 +48,20 @@ export default function Chat() {
 	const { chatId: urlChatId } = useParams();
 
 	const [searchParams] = useSearchParams();
-	const userQuery = searchParams.get('query');
+	const urlRawQuery = searchParams.get('query');
+	const urlKeywords = useMemo(() => {
+		const raw = searchParams.get('keywords');
+		return raw ? raw.split(',').map(k => k.trim()).filter(Boolean) : [];
+	}, [searchParams]);
+	const userQuery = useMemo(() => {
+		if (!urlRawQuery) return null;
+		if (urlKeywords.length === 0) return urlRawQuery;
+		const [primary, longTail, ...secondary] = urlKeywords;
+		const parts = [`Primary keyword: ${primary}`];
+		if (longTail) parts.push(`Long-tail keyword: ${longTail}`);
+		if (secondary.length > 0) parts.push(`Secondary keywords: ${secondary.join(', ')}`);
+		return `${urlRawQuery}\n\nTarget SEO keywords:\n${parts.join('\n')}`;
+	}, [urlRawQuery, urlKeywords]);
 	const urlProjectType = searchParams.get('projectType') || 'app';
 	const urlSelectedTemplate = searchParams.get('selectedTemplate') || undefined;
 	const urlImageGeneration = searchParams.get('imageGeneration') !== '0';
@@ -69,7 +82,7 @@ export default function Chat() {
 	const { app, loading: appLoading, refetch: refetchApp } = useApp(urlChatId);
 
 	// If we have an existing app, use its data
-	const displayQuery = app ? app.originalPrompt || app.title : userQuery || '';
+	const displayQuery = app ? app.originalPrompt || app.title : urlRawQuery || '';
 	const appTitle = app?.title;
 
 	// Manual refresh trigger for preview
@@ -177,7 +190,7 @@ export default function Chat() {
 	const navigate = useNavigate();
 
 	const [activeFilePath, setActiveFilePath] = useState<string>();
-	const [view, setView] = useState<'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation'>(
+	const [view, setView] = useState<'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation' | 'seo'>(
 		'editor',
 	);
 
@@ -344,7 +357,7 @@ export default function Chat() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const handleViewModeChange = useCallback((mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation') => {
+	const handleViewModeChange = useCallback((mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo') => {
 		setView(mode);
 	}, []);
 
@@ -449,6 +462,10 @@ export default function Chat() {
     const hasDocumentation = useMemo(() => {
         return Object.values(contentDetection.Contents).some(bundle => bundle.type === 'markdown');
     }, [contentDetection]);
+
+	const hasSeoData = useMemo(() => {
+		return files.some(f => f.filePath === 'seo.json');
+	}, [files]);
 
 	// Preview available based on projectType and content
 	const previewAvailable = useMemo(() => {
@@ -910,6 +927,7 @@ export default function Chat() {
 								view={view}
 								onViewChange={handleViewModeChange}
 								hasDocumentation={hasDocumentation}
+								hasSeoData={hasSeoData}
 								contentDetection={contentDetection}
 								projectType={projectType}
 								previewUrl={previewUrl}

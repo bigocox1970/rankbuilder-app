@@ -873,6 +873,57 @@ FRONTEND_FIRST_CODING: `<PHASES GENERATION STRATEGY>
 </PHASES GENERATION STRATEGY>`, 
 }
 
+const SEO_FILE_INSTRUCTION = `
+
+## REQUIRED: SEO DATA FILE
+
+The user's request includes target SEO keywords. You MUST create a file named \`seo.json\` at the project root containing structured SEO data for every page of the site. This file is read by the RankBuilder SEO panel, Autopilot SEO, and the pre-render pipeline.
+
+Use this exact schema:
+
+\`\`\`json
+{
+  "pages": [
+    {
+      "path": "/",
+      "label": "Home",
+      "title": "Page title here (aim for 50–60 characters)",
+      "description": "Meta description here (aim for 150–160 characters, include primary keyword)",
+      "keywords": {
+        "primary": "short primary keyword (2–3 words, highest search intent)",
+        "longTail": "longer keyword phrase (4–7 words, specific to the business and location)",
+        "secondary": ["supporting keyword 1", "supporting keyword 2"]
+      },
+      "h1": "Primary H1 heading on this page",
+      "h2s": ["Section heading 1", "Section heading 2"],
+      "imageAlts": ["Descriptive alt text for hero image", "Alt text for other images"],
+      "canonicalUrl": "",
+      "hasOgTags": true,
+      "hasStructuredData": false
+    }
+  ]
+}
+\`\`\`
+
+Keyword rules:
+- \`primary\`: the core short-tail keyword (2–3 words). Should appear in the title, H1, and description. This is the single most important term.
+- \`longTail\`: one specific long-tail phrase (4–7 words) that captures a qualified searcher. More descriptive than the primary — include trade + location + qualifier.
+- \`secondary\`: 2–5 supporting keywords or variations. Used in H2s, body copy, and alt text.
+- Extract these from "Target SEO keywords:" in the user's request, inferring which are primary, long-tail, and secondary based on length and specificity. If only one keyword is provided, use it as \`primary\` and generate appropriate \`longTail\` and \`secondary\` variations.
+
+Other rules:
+- Include one entry per page/route. Single-page sites have one entry with path "/".
+- \`title\`: 50–60 characters, include \`primary\` keyword and location/business name.
+- \`description\`: 150–160 characters, include \`primary\` keyword and hint at the \`longTail\`.
+- \`h1\`: must match the actual H1 on the page exactly.
+- \`h2s\`: list every H2 heading on the page.
+- \`imageAlts\`: list the alt text of every significant image on the page.
+- \`hasOgTags\`: true if you added Open Graph meta tags to the HTML.
+- \`hasStructuredData\`: true if you added JSON-LD structured data.
+- For HTML sites: the title and description in seo.json must match \`{{META_TITLE}}\` and \`{{META_DESCRIPTION}}\` exactly. Also add \`<meta name="keywords" content="primary, longTail, secondary1, secondary2">\` to the \`<head>\`.
+- For React sites: update \`index.html\` \`<head>\` with the title, description, and a \`<meta name="keywords">\` tag with all keywords joined by commas.
+`;
+
 export interface GeneralSystemPromptBuilderParams {
     query: string,
     templateDetails?: TemplateDetails,
@@ -926,8 +977,14 @@ export function generalSystemPromptBuilder(
         variables.usecaseSpecificInstructions = getUsecaseSpecificInstructions(params.templateMetaInfo);
     }
 
-    const formattedPrompt = PROMPT_UTILS.replaceTemplateVariables(prompt, variables);
-    return PROMPT_UTILS.verifyPrompt(formattedPrompt);
+    let finalPrompt = PROMPT_UTILS.replaceTemplateVariables(prompt, variables);
+
+    // Inject SEO file generation instructions when keywords are present
+    if (params.query.includes('Target SEO keywords:') || params.query.includes('Primary keyword:')) {
+        finalPrompt += SEO_FILE_INSTRUCTION;
+    }
+
+    return PROMPT_UTILS.verifyPrompt(finalPrompt);
 }
 
 export function issuesPromptFormatter(issues: IssueReport): string {

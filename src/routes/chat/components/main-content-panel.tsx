@@ -7,6 +7,7 @@ import { Blueprint } from './blueprint';
 import { FileExplorer } from './file-explorer';
 import { PreviewIframe } from './preview-iframe';
 import { MarkdownDocsPreview } from './markdown-docs-preview';
+import { SeoPanel } from './seo-panel';
 import { ViewContainer } from './view-container';
 import { ViewHeader } from './view-header';
 import { PreviewHeaderActions } from './preview-header-actions';
@@ -19,11 +20,12 @@ import type { Edit } from '../hooks/use-chat';
 
 interface MainContentPanelProps {
 	// View state
-	view: 'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation';
-	onViewChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation') => void;
+	view: 'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation' | 'seo';
+	onViewChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo') => void;
 
 	// Content detection
 	hasDocumentation: boolean;
+	hasSeoData: boolean;
 	contentDetection: ContentDetectionResult;
 
 	// Preview state
@@ -79,6 +81,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		view,
 		onViewChange,
 		hasDocumentation,
+		hasSeoData,
 		contentDetection,
 		projectType,
 		previewUrl,
@@ -116,11 +119,12 @@ export function MainContentPanel(props: MainContentPanelProps) {
 	}, []);
 
 	const commonHeaderProps = {
-		view: view as 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation',
+		view: view as 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo',
 		onViewChange,
 		previewAvailable,
 		showTooltip,
 		hasDocumentation,
+		hasSeoData,
 		previewUrl,
 		projectType,
 	};
@@ -348,6 +352,13 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		);
 	};
 
+	const renderSeoView = () => {
+		const seoFile = allFiles.find(f => f.filePath === 'seo.json');
+		return renderViewWithHeader(
+			<SeoPanel seoFile={seoFile} isGenerating={isGenerating} />
+		);
+	};
+
 	const renderView = () => {
 		switch (view) {
 			case 'docs':
@@ -359,6 +370,8 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				return renderBlueprintView();
 			case 'editor':
 				return renderEditorView();
+			case 'seo':
+				return renderSeoView();
 			default:
 				return null;
 		}
