@@ -8,7 +8,6 @@ import { AppListContainer } from '@/components/shared/AppListContainer';
 import { AppFiltersForm } from '@/components/shared/AppFiltersForm';
 import { AppSortTabs } from '@/components/shared/AppSortTabs';
 import { VisibilityFilter } from '@/components/shared/VisibilityFilter';
-import { cn } from '@/lib/utils';
 import type { AppSortOption } from '@/api-types';
 
 export default function AppsPage() {
@@ -76,15 +75,15 @@ export default function AppsPage() {
 	};
 
 	return (
-		<div className="min-h-screen bg-bg-3">
-			<div className="container mx-auto px-4 py-8">
+		<div className="min-h-screen bg-bg-3 overflow-x-hidden">
+			<div className="container mx-auto px-4 py-8 max-w-full">
 				<motion.div
 					initial={{ opacity: 0, y: -20 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.5 }}
 				>
 					{/* Header */}
-					<div className="mb-8">
+					<div className="mb-6">
 						<div className="flex items-center gap-3 mb-2">
 							<button
 								onClick={() => navigate('/')}
@@ -104,32 +103,29 @@ export default function AppsPage() {
 						</p>
 					</div>
 
-					<div className="flex flex-col gap-4">
-						<div className="flex items-center gap-4">
-							<VisibilityFilter
-								value={filterVisibility}
-								onChange={handleVisibilityChange}
-							/>
-						</div>
-						
-						<div className="flex items-start gap-4 justify-between">
-							{/* Search and Filters */}
-							<AppFiltersForm
-								searchQuery={searchQuery}
-								onSearchChange={setSearchQuery}
-								onSearchSubmit={handleSearchSubmit}
-								searchPlaceholder="Search your apps..."
-								filterFramework={filterFramework}
-								onFrameworkChange={handleFrameworkChange}
-								filterVisibility={filterVisibility}
-								onVisibilityChange={handleVisibilityChange}
-								showVisibility={false}
-								period={period}
-								onPeriodChange={handlePeriodChange}
-								sortBy={sortBy}
-							/>
-
-							<div className="flex items-center gap-2">
+					<div className="flex flex-col gap-3 mb-4">
+						<VisibilityFilter
+							value={filterVisibility}
+							onChange={handleVisibilityChange}
+						/>
+						<div className="flex flex-wrap items-center gap-3">
+							<div className="flex-1 min-w-0" style={{ minWidth: '160px' }}>
+								<AppFiltersForm
+									searchQuery={searchQuery}
+									onSearchChange={setSearchQuery}
+									onSearchSubmit={handleSearchSubmit}
+									searchPlaceholder="Search your apps..."
+									filterFramework={filterFramework}
+									onFrameworkChange={handleFrameworkChange}
+									filterVisibility={filterVisibility}
+									onVisibilityChange={handleVisibilityChange}
+									showVisibility={false}
+									period={period}
+									onPeriodChange={handlePeriodChange}
+									sortBy={sortBy}
+								/>
+							</div>
+							<div className="flex items-center gap-2 flex-shrink-0">
 								<AppSortTabs
 									value={sortBy}
 									onValueChange={(v) => {
@@ -143,22 +139,13 @@ export default function AppsPage() {
 									}}
 									availableSorts={['recent', 'popular', 'trending', 'starred']}
 								/>
-								<div className="flex items-center rounded-md border border-border/50 overflow-hidden flex-shrink-0">
-									<button
-										onClick={() => handleViewModeChange('grid')}
-										className={cn("p-1.5 transition-colors", viewMode === 'grid' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
-										aria-label="Grid view"
-									>
-										<LayoutGrid className="h-4 w-4" />
-									</button>
-									<button
-										onClick={() => handleViewModeChange('list')}
-										className={cn("p-1.5 transition-colors", viewMode === 'list' ? "bg-bg-4 text-text-primary" : "text-text-tertiary hover:text-text-secondary")}
-										aria-label="List view"
-									>
-										<List className="h-4 w-4" />
-									</button>
-								</div>
+								<button
+									onClick={() => handleViewModeChange(viewMode === 'grid' ? 'list' : 'grid')}
+									className="p-1.5 rounded-md border border-border/50 text-text-secondary hover:text-text-primary hover:bg-bg-4 transition-colors flex-shrink-0"
+									aria-label={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+								>
+									{viewMode === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+								</button>
 							</div>
 						</div>
 					</div>
