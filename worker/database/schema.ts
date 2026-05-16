@@ -48,6 +48,11 @@ export const users = sqliteTable('users', {
     
     // Soft delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+
+    // Stripe billing
+    stripeCustomerId: text('stripe_customer_id'),
+    stripeSubscriptionId: text('stripe_subscription_id'),
+    stripeSubscriptionStatus: text('stripe_subscription_status'),
 }, (table) => ({
     emailIdx: index('users_email_idx').on(table.email),
     providerIdx: uniqueIndex('users_provider_unique_idx').on(table.provider, table.providerId),

@@ -202,7 +202,7 @@ export type {
 } from 'worker/agents/inferutils/config.types';
 
 export type { RateLimitError } from "worker/services/rate-limit/errors";
-export type { AgentPreviewResponse, CodeGenArgs, SiteContentPlan, SiteServicePlan } from 'worker/api/controllers/agent/types';
+export type { AgentPreviewResponse, CodeGenArgs, SiteContentPlan, SiteServicePlan, SiteTheme, SiteFont } from 'worker/api/controllers/agent/types';
 export { MAX_AGENT_QUERY_LENGTH } from 'worker/api/controllers/agent/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
@@ -325,3 +325,12 @@ export type {
 export type {
     UserPlanData,
 } from 'worker/api/controllers/user/types';
+
+// Stripe billing types
+export interface StripeCheckoutData {
+    url: string | null;
+}
+
+export interface StripePortalData {
+    url: string;
+}

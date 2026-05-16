@@ -17,6 +17,7 @@ import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
 import { setupLimitsRoutes } from './limitsRoutes';
 import { setupAdminRoutes } from './adminRoutes';
 import { setupPlanRoutes } from './planRoutes';
+import { setupStripeRoutes } from './stripeRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -87,4 +88,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Site plan generation (pre-build content planning)
     setupPlanRoutes(app);
+
+    // Stripe billing routes
+    setupStripeRoutes(app);
 }

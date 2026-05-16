@@ -16,11 +16,31 @@ interface Props {
 const LOADING_MESSAGES = [
     'Analysing your business...',
     'Planning your page content...',
+    'Choosing your design style...',
     'Writing your headlines...',
     'Designing your service list...',
     'Crafting image briefs...',
     'Finalising your plan...',
 ];
+
+const THEME_LABELS: Record<string, string> = {
+    craftsman: 'Craftsman',
+    industrial: 'Industrial',
+    'luxury-green': 'Luxury Green',
+    security: 'Security',
+    agency: 'Agency',
+    parchment: 'Parchment',
+    editorial: 'Editorial',
+    ivory: 'Ivory',
+};
+
+const FONT_LABELS: Record<string, string> = {
+    inter: 'Inter',
+    playfair: 'Playfair',
+    lora: 'Lora',
+    montserrat: 'Montserrat',
+    cormorant: 'Cormorant',
+};
 
 function LoadingStep() {
     const [messageIndex, setMessageIndex] = useState(0);
@@ -86,6 +106,13 @@ function ReviewStep({ plan, services, onServiceChange, onApprove, onBack }: Revi
                     {' · '}
                     CTA: <span className="text-text-secondary">"{plan.hero.cta}"</span>
                 </p>
+                {(plan.theme || plan.font) && (
+                    <p className="text-xs text-text-tertiary mt-0.5">
+                        {plan.theme && <>Theme: <span className="text-text-secondary">{THEME_LABELS[plan.theme] ?? plan.theme}</span></>}
+                        {plan.theme && plan.font && ' · '}
+                        {plan.font && <>Font: <span className="text-text-secondary">{FONT_LABELS[plan.font] ?? plan.font}</span></>}
+                    </p>
+                )}
             </div>
 
             {/* Services */}

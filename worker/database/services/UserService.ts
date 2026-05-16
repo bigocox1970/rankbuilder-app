@@ -242,4 +242,26 @@ export class UserService extends BaseService {
         return { totalApps, appsThisMonth };
     }
 
+    async updateStripeCustomer(userId: string, customerId: string): Promise<void> {
+        await this.database
+            .update(schema.users)
+            .set({ stripeCustomerId: customerId })
+            .where(eq(schema.users.id, userId));
+    }
+
+    async updateStripeSubscription(userId: string, data: {
+        customerId?: string;
+        subscriptionId?: string;
+        status?: string;
+    }): Promise<void> {
+        await this.database
+            .update(schema.users)
+            .set({
+                ...(data.customerId !== undefined && { stripeCustomerId: data.customerId }),
+                ...(data.subscriptionId !== undefined && { stripeSubscriptionId: data.subscriptionId }),
+                ...(data.status !== undefined && { stripeSubscriptionStatus: data.status }),
+            })
+            .where(eq(schema.users.id, userId));
+    }
+
 }

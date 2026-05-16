@@ -12,6 +12,8 @@ import type{
 	AdminKvStatusData,
 	AdminGatewayCostData,
 	UserPlanData,
+	StripeCheckoutData,
+	StripePortalData,
 	AppsListData,
 	PublicAppsData,
 	FavoriteToggleData,
@@ -1308,6 +1310,14 @@ class ApiClient {
 
 	async getUserPlan(): Promise<ApiResponse<UserPlanData>> {
 		return this.request<UserPlanData>('/api/user/plan');
+	}
+
+	async createCheckoutSession(): Promise<ApiResponse<StripeCheckoutData>> {
+		return this.request<StripeCheckoutData>('/api/stripe/create-checkout', { method: 'POST' });
+	}
+
+	async createPortalSession(): Promise<ApiResponse<StripePortalData>> {
+		return this.request<StripePortalData>('/api/stripe/portal', { method: 'POST' });
 	}
 
 	/**

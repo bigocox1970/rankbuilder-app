@@ -11,9 +11,14 @@ export interface SiteServicePlan {
     imagePrompt: string;
 }
 
+export type SiteTheme = 'craftsman' | 'industrial' | 'luxury-green' | 'security' | 'agency' | 'parchment' | 'editorial' | 'ivory';
+export type SiteFont = 'inter' | 'playfair' | 'lora' | 'montserrat' | 'cormorant';
+
 export interface SiteContentPlan {
     tagline: string;
     tone: string;
+    theme: SiteTheme;
+    font: SiteFont;
     hero: {
         headline: string;
         subheadline: string;

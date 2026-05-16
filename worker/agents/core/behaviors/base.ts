@@ -228,6 +228,32 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     /**
+     * Returns the effective set of files the LLM must never modify.
+     *
+     * Combines the template's declared dontTouchFiles with implicit protections
+     * for sandbox-mode (Vite/React) entry files. These implicit protections
+     * exist because a template imported from GitHub/Lovable may not declare a
+     * dontTouchFiles list, and the LLM regenerating `index.html` or
+     * `src/main.tsx` always breaks the React mount.
+     */
+    protected getEffectiveDontTouchFiles(): Set<string> {
+        const templateDetails = this.templateDetailsCache;
+        const declared = templateDetails?.dontTouchFiles || [];
+        const result = new Set<string>(declared);
+
+        const isBrowserMode = templateDetails?.renderMode === 'browser';
+        if (!isBrowserMode) {
+            // Vite entry chain: root index.html and src/main.tsx
+            // For React/Vite templates, the LLM has no legitimate reason to
+            // modify either — they only contain mount-point boilerplate.
+            // SEO meta must use react-helmet-async or prerender.mjs instead.
+            result.add('index.html');
+            result.add('src/main.tsx');
+        }
+        return result;
+    }
+
+    /**
      * Update bootstrap script when commands history changes
      * Called after significant command executions
      */
@@ -993,8 +1019,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     async regenerateFileByPath(path: string, issues: string[]): Promise<{ path: string; diff: string }> {
-        const templateDetails = this.getTemplateDetails();
-        if (templateDetails && templateDetails.dontTouchFiles && templateDetails.dontTouchFiles.includes(path)) {
+        this.getTemplateDetails(); // ensure cache is loaded
+        if (this.getEffectiveDontTouchFiles().has(path)) {
             return {
                 path,
                 diff: '<WRITE PROTECTED - TEMPLATE FILE, CANNOT MODIFY - SKIPPED - NO CHANGES MADE>'
@@ -1025,9 +1051,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const regenerated = await this.regenerateFile({ filePath: path, fileContents, filePurpose }, issues, 0);
         // Invalidate cache
         this.staticAnalysisCache = null;
-        // Persist to sandbox instance
-        // await this.getSandboxServiceClient().writeFiles(sandboxInstanceId, [{ filePath: regenerated.filePath, fileContents: regenerated.fileContents }], `Deep debugger fix: ${path}`);
-        await this.deploymentManager.deployToSandbox([regenerated])
+        // Route through the public deployToSandbox so browser-mode templates
+        // are handled correctly and DEPLOYMENT_* events are broadcast.
+        await this.deployToSandbox([regenerated]);
         return { path, diff: regenerated.lastDiff };
     }
 
@@ -1075,19 +1101,17 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         const skippedFiles: { path: string; purpose: string; diff: string }[] = [];
 
-        // Enforce template donttouch constraints
-        const templateDetails = this.getTemplateDetails();
-        if (templateDetails && templateDetails.dontTouchFiles) {
-            const dontTouchFiles = new Set<string>(templateDetails.dontTouchFiles);
-            files = files.filter(file => {
-                if (dontTouchFiles.has(file.path)) {
-                    this.logger.info('Skipping dont-touch file', { filePath: file.path });
-                    skippedFiles.push({ path: file.path, purpose: `WRITE-PROTECTED FILE, CANNOT MODIFY`, diff: "<WRITE PROTECTED - TEMPLATE FILE, CANNOT MODIFY - SKIPPED - NO CHANGES MADE>" });
-                    return false;
-                }
-                return true;
-            });
-        }
+        // Enforce template donttouch constraints (declared + implicit Vite-entry protection)
+        this.getTemplateDetails(); // ensure cache is loaded
+        const dontTouchFiles = this.getEffectiveDontTouchFiles();
+        files = files.filter(file => {
+            if (dontTouchFiles.has(file.path)) {
+                this.logger.info('Skipping dont-touch file', { filePath: file.path });
+                skippedFiles.push({ path: file.path, purpose: `WRITE-PROTECTED FILE, CANNOT MODIFY`, diff: "<WRITE PROTECTED - TEMPLATE FILE, CANNOT MODIFY - SKIPPED - NO CHANGES MADE>" });
+                return false;
+            }
+            return true;
+        });
 
         const savedFiles: FileState[] = [];
 

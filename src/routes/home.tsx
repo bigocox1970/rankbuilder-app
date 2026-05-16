@@ -143,9 +143,13 @@ export default function Home() {
 		const encodedQuery = encodeURIComponent(q);
 		const encodedMode = encodeURIComponent(mode);
 		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
-		const templateParam = stack === 'website' ? `&selectedTemplate=${WEBSITE_TEMPLATE}` : '';
+		// App flow must match vanilla VibeSDK exactly — no website-flow params bleed through.
+		if (stack !== 'website') {
+			return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}`;
+		}
+		const templateParam = `&selectedTemplate=${WEBSITE_TEMPLATE}`;
 		const imageGenEnabled = (() => { try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; } })();
-		const imageGenParam = (!imageGenEnabled || stack !== 'website') ? '&imageGeneration=0' : '';
+		const imageGenParam = imageGenEnabled ? '' : '&imageGeneration=0';
 		const keywordsParam = keywords.length > 0 ? `&keywords=${encodeURIComponent(keywords.join(','))}` : '';
 		return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${imageGenParam}${keywordsParam}`;
 	}, [images, stack, keywords]);

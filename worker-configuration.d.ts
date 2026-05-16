@@ -73,6 +73,10 @@ declare namespace Cloudflare {
 		ASSETS: Fetcher;
 		ENABLE_CLOUDFLARE_LIMITS: string;
 		CF_OAUTH_ENCRYPTION_KEY: string;
+		STRIPE_SECRET_KEY: string;
+		STRIPE_PUBLISHABLE_KEY: string;
+		STRIPE_WEBHOOK_SECRET: string;
+		STRIPE_PRO_PRICE_ID: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

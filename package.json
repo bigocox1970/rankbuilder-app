@@ -39,7 +39,6 @@
 		"knip:exports": "knip --exports"
 	},
 	"dependencies": {
-		"acorn": "^8.14.0",
 		"@ashishkumar472/cf-git": "1.0.5",
 		"@babel/generator": "^7.28.5",
 		"@babel/parser": "^7.28.5",
@@ -83,6 +82,7 @@
 		"@types/argon2-browser": "^1.18.4",
 		"@types/mdast": "^4.0.4",
 		"@vitejs/plugin-react": "^5.1.2",
+		"acorn": "^8.14.0",
 		"agents": "^0.2.32",
 		"class-variance-authority": "^0.7.1",
 		"cli-table3": "^0.6.5",
@@ -101,8 +101,8 @@
 		"framer-motion": "^12.23.26",
 		"hash-wasm": "^4.12.0",
 		"hono": "^4.11.0",
-		"htmlparser2": "^10.0.0",
 		"html2canvas-pro": "^1.5.13",
+		"htmlparser2": "^10.0.0",
 		"input-otp": "^1.4.2",
 		"inquirer": "^12.11.1",
 		"jose": "^5.10.0",
@@ -129,6 +129,7 @@
 		"remark-parse": "^11.0.0",
 		"rolldown-vite": "^7.2.11",
 		"sonner": "^2.0.7",
+		"stripe": "^22.1.1",
 		"tailwind-merge": "^3.4.0",
 		"unified": "^11.0.5",
 		"vaul": "^1.1.2",

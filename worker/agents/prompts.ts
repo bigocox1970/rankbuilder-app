@@ -1018,8 +1018,14 @@ export function generalSystemPromptBuilder(
 
     let finalPrompt = PROMPT_UTILS.replaceTemplateVariables(prompt, variables);
 
-    // Inject SEO and llms.txt generation instructions when keywords are present
-    if (params.query.includes('Target SEO keywords:') || params.query.includes('Primary keyword:')) {
+    // SEO + llms.txt generation is a browser-mode (website) feature only.
+    // Gating on renderMode guarantees these instructions can never reach a
+    // React/Vite (sandbox-mode) build, regardless of query content.
+    const isBrowserMode = params.templateDetails?.renderMode === 'browser';
+    const hasKeywords =
+        params.query.includes('Target SEO keywords:') ||
+        params.query.includes('Primary keyword:');
+    if (isBrowserMode && hasKeywords) {
         finalPrompt += SEO_FILE_INSTRUCTION;
         finalPrompt += LLMS_TXT_INSTRUCTION;
     }

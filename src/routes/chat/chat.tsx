@@ -49,10 +49,17 @@ export default function Chat() {
 
 	const [searchParams] = useSearchParams();
 	const urlRawQuery = searchParams.get('query');
+	const urlProjectType = searchParams.get('projectType') || 'app';
+	const urlSelectedTemplate = searchParams.get('selectedTemplate') || undefined;
+	const urlImageGeneration = searchParams.get('imageGeneration') !== '0';
+	// selectedTemplate is the only signal the website flow sets — app flow must behave like vanilla.
+	const isWebsiteFlow = !!urlSelectedTemplate;
+
 	const urlKeywords = useMemo(() => {
+		if (!isWebsiteFlow) return [];
 		const raw = searchParams.get('keywords');
 		return raw ? raw.split(',').map(k => k.trim()).filter(Boolean) : [];
-	}, [searchParams]);
+	}, [searchParams, isWebsiteFlow]);
 	const userQuery = useMemo(() => {
 		if (!urlRawQuery) return null;
 		if (urlKeywords.length === 0) return urlRawQuery;
@@ -62,13 +69,11 @@ export default function Chat() {
 		if (secondary.length > 0) parts.push(`Secondary keywords: ${secondary.join(', ')}`);
 		return `${urlRawQuery}\n\nTarget SEO keywords:\n${parts.join('\n')}`;
 	}, [urlRawQuery, urlKeywords]);
-	const urlProjectType = searchParams.get('projectType') || 'app';
-	const urlSelectedTemplate = searchParams.get('selectedTemplate') || undefined;
-	const urlImageGeneration = searchParams.get('imageGeneration') !== '0';
 
-	// Read site plan from sessionStorage (set by SitePlanner wizard on home page)
+	// Site plan only exists in the website flow (set by the SitePlanner wizard on home).
 	const sitePlan = useMemo<SiteContentPlan | undefined>(() => {
 		if (urlChatId) return undefined; // only for new chats
+		if (!isWebsiteFlow) return undefined;
 		try {
 			const raw = sessionStorage.getItem('rb_site_plan');
 			if (!raw) return undefined;

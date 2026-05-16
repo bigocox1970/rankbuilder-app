@@ -137,6 +137,7 @@ export default function SettingsPage() {
 	// User plan
 	const [planData, setPlanData] = useState<UserPlanData | null>(null);
 	const [planLoading, setPlanLoading] = useState(true);
+	const [billingLoading, setBillingLoading] = useState(false);
 
 	useEffect(() => {
 		if (!user) return;
@@ -145,6 +146,38 @@ export default function SettingsPage() {
 			.catch(() => { /* ignore */ })
 			.finally(() => setPlanLoading(false));
 	}, [user]);
+
+	const handleUpgrade = async () => {
+		setBillingLoading(true);
+		try {
+			const result = await apiClient.createCheckoutSession();
+			if (result.success && result.data?.url) {
+				window.location.href = result.data.url;
+			} else {
+				toast.error('Could not start checkout. Please try again.');
+			}
+		} catch {
+			toast.error('Could not start checkout. Please try again.');
+		} finally {
+			setBillingLoading(false);
+		}
+	};
+
+	const handleManageBilling = async () => {
+		setBillingLoading(true);
+		try {
+			const result = await apiClient.createPortalSession();
+			if (result.success && result.data?.url) {
+				window.location.href = result.data.url;
+			} else {
+				toast.error('Could not open billing portal. Please try again.');
+			}
+		} catch {
+			toast.error('Could not open billing portal. Please try again.');
+		} finally {
+			setBillingLoading(false);
+		}
+	};
 
 	const handleDeleteAccount = async () => {
 		toast.error('Account deletion is not yet implemented');
@@ -373,7 +406,8 @@ export default function SettingsPage() {
 											variant={planData?.plan === 'pro' ? 'outline' : 'default'}
 											size="sm"
 											className={planData?.plan === 'pro' ? '' : 'bg-accent text-black hover:bg-accent/90'}
-											onClick={() => toast.info('Stripe billing coming soon — subscriptions launching shortly.')}
+											disabled={billingLoading}
+											onClick={planData?.plan === 'pro' ? handleManageBilling : handleUpgrade}
 										>
 											{planData?.plan === 'pro' ? 'Manage subscription' : 'Upgrade'}
 										</Button>

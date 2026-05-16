@@ -174,6 +174,26 @@ Edit `/worker/agents/operations/UserConversationProcessor.ts` (system prompt lin
 - Utilities/Hooks: kebab-case.ts
 - Backend Services: PascalCase.ts
 
+## Stripe Billing Integration
+
+Status: DEPLOYED (2026-05-16). Do not rebuild — only complete the remaining config steps.
+
+**What is built and live:**
+- D1 migration `0007_stripe_subscriptions.sql` applied — users table has `stripe_customer_id`, `stripe_subscription_id`, `stripe_subscription_status`
+- `worker/api/controllers/stripe/controller.ts` — three methods: `createCheckoutSession`, `createPortalSession`, `handleWebhook`
+- `worker/api/routes/stripeRoutes.ts` — routes registered at `/api/stripe/create-checkout`, `/api/stripe/portal`, `/api/stripe/webhook`
+- `worker/database/services/UserService.ts` — `updateStripeCustomer()` and `updateStripeSubscription()` methods added
+- `src/lib/api-client.ts` — `createCheckoutSession()` and `createPortalSession()` methods added
+- `src/routes/settings/index.tsx` — Upgrade and Manage subscription buttons wired to real Stripe endpoints
+- Wrangler secrets set: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`
+- stripe@22.1.1 installed
+
+**Still needed (Chris to complete):**
+1. Create a Product + monthly recurring price in Stripe dashboard, then: `wrangler secret put STRIPE_PRO_PRICE_ID`
+2. Add webhook endpoint in Stripe dashboard: `https://app.rankbuilder.app/api/stripe/webhook` — events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` — then: `wrangler secret put STRIPE_WEBHOOK_SECRET`
+
+**KV config written on upgrade:** `user_config:{userId}` = `{"security":{"rateLimit":{"llmCalls":{"limit":500,"dailyLimit":500}}}}`
+
 ## Common Pitfalls
 
 **Don't:**

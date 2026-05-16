@@ -126,6 +126,29 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             ? query + buildImageContext(generatedImages)
             : query;
 
+        // Pre-fill theme and font from plan before the LLM sees the template.
+        // This guarantees a consistent, appropriate design regardless of what the LLM decides.
+        if (sitePlan?.theme || sitePlan?.font) {
+            const templateIndex = templateInfo.templateDetails.allFiles['public/index.html'];
+            if (templateIndex) {
+                let html = templateIndex;
+                if (sitePlan.theme) {
+                    html = html.replace(
+                        /href="\/themes\/[^"]+\.css"/,
+                        `href="/themes/${sitePlan.theme}.css"`
+                    );
+                }
+                if (sitePlan.font) {
+                    html = html.replace(
+                        /href="\/fonts\/[^"]+\.css"/,
+                        `href="/fonts/${sitePlan.font}.css"`
+                    );
+                }
+                templateInfo.templateDetails.allFiles['public/index.html'] = html;
+                this.logger.info('Pre-filled theme and font from plan', { theme: sitePlan.theme, font: sitePlan.font });
+            }
+        }
+
         if (generatedImages) {
             this.logger.info('Images generated and injected into context', {
                 hero: generatedImages.hero,
@@ -133,12 +156,10 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 work2: generatedImages.work2,
             });
 
-            // Pre-fill image tokens directly in the template HTML so the agent never
-            // has to copy URLs from the context block — it just sees real URLs already in place.
             const templateIndex = templateInfo.templateDetails.allFiles['public/index.html'];
             if (templateIndex) {
                 const heroOgUrl = generatedImages.hero.split('?')[0];
-                templateInfo.templateDetails.allFiles['public/index.html'] = templateIndex
+                let html = templateIndex
                     .replace(/\{\{OG_IMAGE_URL\}\}/g, heroOgUrl)
                     .replace(/\{\{HERO_IMAGE_URL\}\}/g, generatedImages.hero)
                     .replace(/\{\{ABOUT_IMAGE_URL\}\}/g, generatedImages.work1)
@@ -148,6 +169,21 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                     .replace(/\{\{PROJECT4_IMAGE_URL\}\}/g, generatedImages.project4)
                     .replace(/\{\{PROJECT5_IMAGE_URL\}\}/g, generatedImages.project5)
                     .replace(/\{\{PROJECT6_IMAGE_URL\}\}/g, generatedImages.project6);
+
+                // If we have a plan, also lock in project titles/categories/descriptions so the
+                // LLM cannot accidentally mismatch card text with pre-generated images.
+                if (sitePlan?.services?.length) {
+                    sitePlan.services.slice(0, 6).forEach((svc, i) => {
+                        const n = i + 1;
+                        html = html
+                            .replace(new RegExp(`\\{\\{PROJECT${n}_TITLE\\}\\}`, 'g'), svc.title)
+                            .replace(new RegExp(`\\{\\{PROJECT${n}_CATEGORY\\}\\}`, 'g'), svc.title)
+                            .replace(new RegExp(`\\{\\{PROJECT${n}_DESCRIPTION\\}\\}`, 'g'), svc.description);
+                    });
+                    this.logger.info('Pre-filled project card tokens from plan to lock image/title pairs');
+                }
+
+                templateInfo.templateDetails.allFiles['public/index.html'] = html;
                 this.logger.info('Pre-filled image tokens in template index.html');
             }
         }
@@ -696,16 +732,30 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         });
     
         const templateDetails = this.getTemplateDetails();
+
+        // Enforce donttouch BEFORE save. Without this, the LLM can overwrite
+        // root index.html / src/main.tsx during phase implementation — those
+        // contain the React entry chain and a wrong rewrite produces an empty
+        // body. The generateFiles() filter in base.ts isn't on this code path.
+        const dontTouchFiles = this.getEffectiveDontTouchFiles();
+        const finalFilesFiltered = finalFiles.filter((f) => {
+            if (dontTouchFiles.has(f.filePath)) {
+                this.logger.info('Phasic: skipping write to dont-touch file', { filePath: f.filePath });
+                return false;
+            }
+            return true;
+        });
+
         const safeFiles = templateDetails
             ? await runPreDeploySafetyGate({
-                  files: finalFiles,
+                  files: finalFilesFiltered,
                   env: this.env,
                   inferenceContext: this.getInferenceContext(),
                   query: this.state.query,
                   template: templateDetails,
                   phase,
               })
-            : finalFiles;
+            : finalFilesFiltered;
 
         await this.fileManager.saveGeneratedFiles(safeFiles, `feat: ${phase.name}\n\n${phase.description}`);
 
