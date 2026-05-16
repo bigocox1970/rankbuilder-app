@@ -5,6 +5,29 @@ import type { CredentialsPayload } from '../../../agents/inferutils/config.types
 
 export const MAX_AGENT_QUERY_LENGTH = 20_000;
 
+export interface SiteServicePlan {
+    title: string;
+    description: string;
+    imagePrompt: string;
+}
+
+export interface SiteContentPlan {
+    tagline: string;
+    tone: string;
+    hero: {
+        headline: string;
+        subheadline: string;
+        cta: string;
+        imagePrompt: string;
+    };
+    about: {
+        title: string;
+        body: string;
+        imagePrompt: string;
+    };
+    services: SiteServicePlan[];
+}
+
 export interface CodeGenArgs {
     query: string;
     language?: string;
@@ -14,6 +37,7 @@ export interface CodeGenArgs {
     projectType?: ProjectType;
     images?: ImageAttachment[];
     imageGenerationEnabled?: boolean;
+    sitePlan?: SiteContentPlan;
 
     /** Optional ephemeral credentials (BYOK / gateway override) for sdk */
     credentials?: CredentialsPayload;

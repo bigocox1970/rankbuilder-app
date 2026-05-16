@@ -4,7 +4,7 @@ import {
     FileOutputType,
     PhaseImplementationSchemaType,
 } from '../../schemas';
-import { generateTradeImages, buildImageContext } from '../../../services/imageGeneration/tradeImageGenerator';
+import { generateTradeImages, generateTradeImagesFromPlan, buildImageContext } from '../../../services/imageGeneration/tradeImageGenerator';
 import { StaticAnalysisResponse } from '../../../services/sandbox/sandboxTypes';
 import { CurrentDevState, MAX_PHASES, PhasicState } from '../state';
 import { AllIssues, AgentInitArgs, PhaseExecutionResult, UserContext } from '../types';
@@ -78,11 +78,14 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             this.logger.error('agentId missing from inferenceContext.metadata — skipping image generation');
         }
 
-        // Kick off image generation concurrently with blueprint (website template only)
-        // Use inferenceContext.metadata.agentId directly — state.metadata isn't set until setState() later in this method
-        const imageGenPromise = (isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages)
-            ? generateTradeImages(this.env, agentIdForImages, query)
-            : Promise.resolve(null);
+        // Kick off image generation (website template only).
+        // If the user approved a site plan, generate sequentially with per-image progress.
+        // Otherwise fall back to the parallel approach (concurrent with blueprint).
+        const sitePlan = initArgs.sitePlan;
+        const imageGenPromise: Promise<import('../../../services/imageGeneration/tradeImageGenerator').GeneratedTradeImages | null> =
+            (!sitePlan && isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages)
+                ? generateTradeImages(this.env, agentIdForImages, query)
+                : Promise.resolve(null);
 
         // Generate a blueprint
         this.logger.info('Generating blueprint', { query, queryLength: query.length, imagesCount: initArgs.images?.length || 0 });
@@ -106,8 +109,19 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             }
         });
 
-        // Await images (generation ran in parallel with blueprint)
-        const generatedImages = await imageGenPromise;
+        // Await images. If a site plan was provided, run sequential generation now (after blueprint
+        // so WebSocket connections are ready to receive progress events).
+        let generatedImages = await imageGenPromise;
+        if (isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages && sitePlan && !generatedImages) {
+            generatedImages = await generateTradeImagesFromPlan(
+                this.env,
+                agentIdForImages,
+                sitePlan,
+                ({ slot, label, index, total }) => {
+                    this.broadcast(WebSocketMessageResponses.IMAGE_GENERATING, { slot, label, index, total });
+                },
+            );
+        }
         const storedQuery = generatedImages
             ? query + buildImageContext(generatedImages)
             : query;

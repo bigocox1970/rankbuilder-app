@@ -49,7 +49,7 @@ export interface StreamEvent {
     timestamp: Date;
 }
 
-const templateDetailsCache: Record<string, TemplateDetails> = {};
+const templateDetailsCache: Record<string, { details: TemplateDetails; loadedAt: number }> = {};
   
 /**
  * Abstract base class providing complete RunnerService API compatibility
@@ -118,11 +118,13 @@ export abstract class BaseSandboxService {
      */
     static async getTemplateDetails(templateName: string, downloadDir?: string): Promise<TemplateDetailsResponse> {
         try {
-            if (templateDetailsCache[templateName]) {
+            const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+            const cached = templateDetailsCache[templateName];
+            if (cached && (Date.now() - cached.loadedAt) < CACHE_TTL_MS) {
                 console.log(`Template details for template: ${templateName} found in cache`);
                 return {
                     success: true,
-                    templateDetails: templateDetailsCache[templateName]
+                    templateDetails: cached.details
                 };
             }
             // Download template zip from R2
@@ -194,7 +196,7 @@ export abstract class BaseSandboxService {
                 slideDirectory: catalogInfo?.slideDirectory,
             };
 
-            templateDetailsCache[templateName] = templateDetails;
+            templateDetailsCache[templateName] = { details: templateDetails, loadedAt: Date.now() };
 
             return {
                 success: true,

@@ -110,6 +110,14 @@ type ImagesGeneratedMessage = {
     images: Record<string, string>;
 };
 
+type ImageGeneratingMessage = {
+    type: 'image_generating';
+    slot: string;
+    label: string;
+    index: number;
+    total: number;
+};
+
 type CommandExecutingMessage = {
 	type: 'command_executing';
 	message: string;
@@ -634,6 +642,7 @@ export type WebSocketMessage =
 	| VaultUnlockedMessage
 	| VaultLockedMessage
 	| ImagesGeneratedMessage
+    | ImageGeneratingMessage
 	| VaultRequiredMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)

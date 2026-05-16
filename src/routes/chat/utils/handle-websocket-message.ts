@@ -1115,6 +1115,16 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
+            case 'image_generating': {
+                const { label, index, total } = message;
+                sendMessage(createAIMessage(
+                    'image_generating',
+                    `Generating your images... ${index} of ${total}: ${label}`,
+                    true,
+                ));
+                break;
+            }
+
             // SDK-internal messages and screenshot events the UI doesn't need to act on
             case 'screenshot_capture_started':
             case 'screenshot_capture_success':

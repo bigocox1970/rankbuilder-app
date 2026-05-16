@@ -16,7 +16,7 @@ import { PhaseTimeline } from './components/phase-timeline';
 import { type DebugMessage } from './components/debug-panel';
 import { DeploymentControls } from './components/deployment-controls';
 import { useChat } from './hooks/use-chat';
-import { type ModelConfigsInfo, type BlueprintType, type PhasicBlueprint, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type FileType } from '@/api-types';
+import { type ModelConfigsInfo, type BlueprintType, type PhasicBlueprint, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type FileType, type SiteContentPlan } from '@/api-types';
 import { featureRegistry } from '@/features';
 import { useFileContentStream } from './hooks/use-file-content-stream';
 import { logger } from '@/utils/logger';
@@ -65,6 +65,20 @@ export default function Chat() {
 	const urlProjectType = searchParams.get('projectType') || 'app';
 	const urlSelectedTemplate = searchParams.get('selectedTemplate') || undefined;
 	const urlImageGeneration = searchParams.get('imageGeneration') !== '0';
+
+	// Read site plan from sessionStorage (set by SitePlanner wizard on home page)
+	const sitePlan = useMemo<SiteContentPlan | undefined>(() => {
+		if (urlChatId) return undefined; // only for new chats
+		try {
+			const raw = sessionStorage.getItem('rb_site_plan');
+			if (!raw) return undefined;
+			sessionStorage.removeItem('rb_site_plan'); // consume once
+			return JSON.parse(raw) as SiteContentPlan;
+		} catch {
+			return undefined;
+		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []); // read once on mount
 
 	// Extract images from URL params if present
 	const userImages = useMemo(() => {
@@ -179,6 +193,7 @@ export default function Chat() {
 		projectType: urlProjectType as ProjectType,
 		selectedTemplate: urlSelectedTemplate,
 		imageGenerationEnabled: urlImageGeneration,
+		sitePlan,
 		onDebugMessage: addDebugMessage,
 		onVaultUnlockRequired: handleVaultUnlockRequired,
 	});

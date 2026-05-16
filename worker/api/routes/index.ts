@@ -16,6 +16,7 @@ import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
 import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
 import { setupLimitsRoutes } from './limitsRoutes';
 import { setupAdminRoutes } from './adminRoutes';
+import { setupPlanRoutes } from './planRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -83,4 +84,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Admin routes (admin-only: cost dashboard, user management)
     setupAdminRoutes(app);
+
+    // Site plan generation (pre-build content planning)
+    setupPlanRoutes(app);
 }

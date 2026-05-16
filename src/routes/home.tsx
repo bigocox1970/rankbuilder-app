@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '@/contexts/auth-context';
 import { cn } from '@/lib/utils';
 import { ProjectModeSelector, type ProjectModeOption } from '../components/project-mode-selector';
-import { MAX_AGENT_QUERY_LENGTH, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType } from '@/api-types';
+import { MAX_AGENT_QUERY_LENGTH, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type SiteContentPlan } from '@/api-types';
 import { useFeature } from '@/features';
 import { useAuthGuard } from '../hooks/useAuthGuard';
 import { usePaginatedApps } from '@/hooks/use-paginated-apps';
@@ -19,6 +19,9 @@ import { toast } from 'sonner';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
+import { SitePlanner } from '@/components/SitePlanner';
+
+const SITE_PLAN_SESSION_KEY = 'rb_site_plan';
 
 type StackType = 'website' | 'app';
 
@@ -32,6 +35,7 @@ export default function Home() {
 	const [stack, setStack] = useState<StackType>('website');
 	const [query, setQuery] = useState('');
 	const [keywords, setKeywords] = useState<string[]>([]);
+	const [plannerQuery, setPlannerQuery] = useState<string | null>(null);
 
 	// Pre-fill prompt when arriving from Lovable import modal
 	useEffect(() => {
@@ -135,6 +139,25 @@ export default function Home() {
 		try { localStorage.setItem('discover.viewMode', mode); } catch { /* ignore */ }
 	};
 
+	const buildNavigationUrl = useCallback((q: string, mode: ProjectType) => {
+		const encodedQuery = encodeURIComponent(q);
+		const encodedMode = encodeURIComponent(mode);
+		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
+		const templateParam = stack === 'website' ? `&selectedTemplate=${WEBSITE_TEMPLATE}` : '';
+		const imageGenEnabled = (() => { try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; } })();
+		const imageGenParam = (!imageGenEnabled || stack !== 'website') ? '&imageGeneration=0' : '';
+		const keywordsParam = keywords.length > 0 ? `&keywords=${encodeURIComponent(keywords.join(','))}` : '';
+		return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${imageGenParam}${keywordsParam}`;
+	}, [images, stack, keywords]);
+
+	const navigateWithPlan = useCallback((q: string, mode: ProjectType, plan: SiteContentPlan) => {
+		try {
+			sessionStorage.setItem(SITE_PLAN_SESSION_KEY, JSON.stringify(plan));
+		} catch { /* ignore */ }
+		navigate(buildNavigationUrl(q, mode));
+		clearImages();
+	}, [buildNavigationUrl, navigate, clearImages]);
+
 	const handleCreateApp = (query: string, mode: ProjectType) => {
 		if (query.length > MAX_AGENT_QUERY_LENGTH) {
 			toast.error(
@@ -147,16 +170,7 @@ export default function Home() {
 			return;
 		}
 
-		const encodedQuery = encodeURIComponent(query);
-		const encodedMode = encodeURIComponent(mode);
-
-		// Encode images as JSON if present
-		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
-		const templateParam = stack === 'website' ? `&selectedTemplate=${WEBSITE_TEMPLATE}` : '';
-		const imageGenEnabled = (() => { try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; } })();
-		const imageGenParam = (!imageGenEnabled || stack !== 'website') ? '&imageGeneration=0' : '';
-		const keywordsParam = keywords.length > 0 ? `&keywords=${encodeURIComponent(keywords.join(','))}` : '';
-		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${imageGenParam}${keywordsParam}`;
+		const intendedUrl = buildNavigationUrl(query, mode);
 
 		if (
 			!requireAuth({
@@ -181,9 +195,15 @@ export default function Home() {
 			return;
 		}
 
-		// User is already authenticated, navigate immediately
+		// For website mode, show the planner wizard before navigating
+		const imageGenEnabled = (() => { try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; } })();
+		if (stack === 'website' && imageGenEnabled) {
+			setPlannerQuery(query);
+			return;
+		}
+
+		// App mode or image gen disabled — navigate immediately
 		navigate(intendedUrl);
-		// Clear images after navigation
 		clearImages();
 	};
 
@@ -278,7 +298,29 @@ export default function Home() {
 				</div>
 
 				<AnimatePresence>
-					{images.length > 0 && (
+					{plannerQuery && (
+						<motion.div
+							key="planner"
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: -10 }}
+							className="w-full max-w-2xl px-6 pb-4"
+						>
+							<SitePlanner
+								description={plannerQuery}
+								keywords={keywords}
+								onApprove={(plan) => {
+									setPlannerQuery(null);
+									navigateWithPlan(plannerQuery, projectMode, plan);
+								}}
+								onBack={() => setPlannerQuery(null)}
+							/>
+						</motion.div>
+					)}
+				</AnimatePresence>
+
+				<AnimatePresence>
+					{!plannerQuery && images.length > 0 && (
 						<motion.div
 							initial={{ opacity: 0, y: -10 }}
 							animate={{ opacity: 1, y: 0 }}

@@ -1,5 +1,6 @@
 import { getPublicUrlForR2Image } from 'worker/utils/images';
 import { createLogger } from 'worker/logger';
+import type { SiteContentPlan } from 'worker/api/controllers/agent/types';
 
 const logger = createLogger('TradeImageGenerator');
 
@@ -13,6 +14,7 @@ export interface GeneratedTradeImages {
     project4: string;
     project5: string;
     project6: string;
+    projectTitles: string[];
 }
 
 // Keep NO_TEXT minimal — mentioning "website/screenshot/UI" (even negated) causes
@@ -28,55 +30,55 @@ const IMAGE_SPECS: Array<{
 }> = [
     {
         key: 'hero',
-        promptSuffix: 'outdoors on an active job site, wide angle, natural daylight, DSLR photography, photorealistic',
+        promptSuffix: 'wide angle establishing shot, professional environment, natural daylight, DSLR photography, photorealistic',
         width: 1280,
         height: 640,
     },
     {
         key: 'work1',
-        promptSuffix: 'skilled worker carrying out hands-on trade work close up, natural daylight, shallow depth of field, DSLR photography',
+        promptSuffix: 'professional at work, close up, natural daylight, shallow depth of field, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'work2',
-        promptSuffix: 'high-quality finished trade work result, wide shot, natural light, DSLR photography',
+        promptSuffix: 'high-quality finished result, wide shot, natural light, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project1',
-        promptSuffix: 'completed outdoor project, golden hour lighting, wide angle, DSLR photography',
+        promptSuffix: 'completed professional project, warm golden hour lighting, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project2',
-        promptSuffix: 'close-up detail of expert craftsmanship and quality finish, macro lens, DSLR photography',
+        promptSuffix: 'close-up detail of expert quality and craftsmanship, macro lens, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project3',
-        promptSuffix: 'tradesperson actively working on location mid-task, natural daylight, DSLR photography',
+        promptSuffix: 'professional actively working on location, natural daylight, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project4',
-        promptSuffix: 'finished indoor work result, clean professional finish, bright natural light, DSLR photography',
+        promptSuffix: 'impressive finished result in a clean professional setting, bright natural light, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project5',
-        promptSuffix: 'professional tools and equipment arranged on a job site, overhead shot, DSLR photography',
+        promptSuffix: 'professional workspace with equipment and tools of the trade, overhead shot, DSLR photography',
         width: 768,
         height: 512,
     },
     {
         key: 'project6',
-        promptSuffix: 'dramatic before-and-after completed transformation, wide angle, bright natural light, DSLR photography',
+        promptSuffix: 'completed transformation showing outstanding final result, wide angle, bright natural light, DSLR photography',
         width: 768,
         height: 512,
     },
@@ -139,6 +141,31 @@ function extractBusinessContext(query: string): string {
     return context || 'a skilled tradesperson';
 }
 
+const PROJECT_KEYS = ['project1', 'project2', 'project3', 'project4', 'project5', 'project6'] as const;
+
+async function generateProjectTitles(env: Env, businessContext: string): Promise<string[]> {
+    try {
+        const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct' as Parameters<typeof env.AI.run>[0], {
+            prompt: `You are helping build a business website. List exactly 6 specific services or project examples for a "${businessContext}" business. Return ONLY a valid JSON array of 6 short titles (3–6 words each). No explanation, no markdown, no extra text — just the JSON array.
+
+Example for "gardener": ["Turfing and Lawn Edging","Tree Surgery and Pruning","Shrub Planting and Design","Patio and Pathway Laying","Hedge Trimming and Shaping","Garden Clearance and Tidying"]
+
+For "${businessContext}":`,
+            max_tokens: 200,
+        }) as { response: string };
+
+        const text = (response as { response: string }).response ?? '';
+        const match = text.match(/\[[\s\S]*?\]/);
+        if (!match) throw new Error('no JSON array in response');
+        const titles: unknown = JSON.parse(match[0]);
+        if (!Array.isArray(titles) || titles.length < 6) throw new Error('unexpected array length');
+        return (titles as unknown[]).slice(0, 6).map(t => String(t));
+    } catch (err) {
+        logger.warn('Project title generation failed, using generic titles', { err });
+        return PROJECT_KEYS.map((_, i) => `Project ${i + 1}`);
+    }
+}
+
 export async function generateTradeImages(
     env: Env,
     agentId: string,
@@ -148,24 +175,51 @@ export async function generateTradeImages(
     const businessContext = extractBusinessContext(query);
 
     try {
-        const results = await Promise.all(
-            IMAGE_SPECS.map(async ({ key, promptSuffix, width, height }) => {
-                const prompt = `${PHOTO_PREFIX} ${businessContext}, ${promptSuffix}`;
+        // Generate project card titles first, then use them as image prompts so
+        // images match the content the AI will write for each card.
+        const projectTitles = await generateProjectTitles(env, businessContext);
+        logger.info('Project titles for image generation', { projectTitles });
+
+        const nonProjectSpecs = IMAGE_SPECS.filter(s => !PROJECT_KEYS.includes(s.key as typeof PROJECT_KEYS[number]));
+        const projectSpecs = PROJECT_KEYS.map((key, i) => ({
+            key: key as keyof GeneratedTradeImages,
+            prompt: `${PHOTO_PREFIX} ${businessContext}, ${projectTitles[i]}, DSLR photography, photorealistic, ${NO_TEXT}`,
+            width: 768,
+            height: 512,
+        }));
+
+        const results = await Promise.all([
+            // Hero and about images use generic business-context prompts
+            ...nonProjectSpecs.map(async ({ key, promptSuffix, width, height }) => {
+                const prompt = `${PHOTO_PREFIX} ${businessContext}, ${promptSuffix}, ${NO_TEXT}`;
                 const bytes = await runFlux(env, prompt, width, height);
                 const r2Key = `generated-images/${agentId}/${key}.png`;
-
                 await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
                     httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },
                     customMetadata: { agentId },
                 });
-
                 const url = `${getPublicUrlForR2Image(env, r2Key)}?v=${Date.now()}`;
                 logger.info(`Generated image: ${key}`, { url });
                 return [key, url] as const;
-            })
-        );
+            }),
+            // Project images generated from the specific card titles
+            ...projectSpecs.map(async ({ key, prompt, width, height }) => {
+                const bytes = await runFlux(env, prompt, width, height);
+                const r2Key = `generated-images/${agentId}/${key}.png`;
+                await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
+                    httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },
+                    customMetadata: { agentId },
+                });
+                const url = `${getPublicUrlForR2Image(env, r2Key)}?v=${Date.now()}`;
+                logger.info(`Generated image: ${key}`, { url });
+                return [key, url] as const;
+            }),
+        ]);
 
-        return Object.fromEntries(results) as unknown as GeneratedTradeImages;
+        return {
+            ...(Object.fromEntries(results) as Omit<GeneratedTradeImages, 'projectTitles'>),
+            projectTitles,
+        };
     } catch (error) {
         logger.error('Image generation failed, continuing without images', { error });
         return null;
@@ -205,21 +259,96 @@ export async function regenerateTradeImage(
     return `${getPublicUrlForR2Image(env, r2Key)}?v=${Date.now()}`;
 }
 
+export interface ImageProgressEvent {
+    slot: string;
+    label: string;
+    index: number;
+    total: number;
+}
+
+/**
+ * Generate images sequentially using pre-planned prompts from the site plan.
+ * Emits progress events so the UI can show per-image status.
+ */
+export async function generateTradeImagesFromPlan(
+    env: Env,
+    agentId: string,
+    plan: SiteContentPlan,
+    onProgress: (event: ImageProgressEvent) => void,
+): Promise<GeneratedTradeImages | null> {
+    logger.info('Generating trade images from plan', { agentId });
+
+    const slots: Array<{ key: keyof GeneratedTradeImages; label: string; prompt: string; width: number; height: number }> = [
+        { key: 'hero',     label: plan.hero.headline || 'Hero',         prompt: plan.hero.imagePrompt,     width: 1280, height: 640 },
+        { key: 'work1',    label: plan.about.title || 'About',          prompt: plan.about.imagePrompt,    width: 768,  height: 512 },
+        { key: 'work2',    label: 'Team & Equipment',                    prompt: `${PHOTO_PREFIX} ${plan.hero.imagePrompt}, wide shot, professional environment, DSLR photography`, width: 768, height: 512 },
+        ...plan.services.slice(0, 6).map((svc, i) => ({
+            key: `project${i + 1}` as keyof GeneratedTradeImages,
+            label: svc.title,
+            prompt: svc.imagePrompt,
+            width: 768,
+            height: 512,
+        })),
+    ];
+
+    const total = slots.length;
+    const results: Array<readonly [keyof GeneratedTradeImages, string]> = [];
+    const projectTitles: string[] = plan.services.slice(0, 6).map(s => s.title);
+
+    try {
+        for (let i = 0; i < slots.length; i++) {
+            const { key, label, prompt, width, height } = slots[i];
+            onProgress({ slot: key as string, label, index: i + 1, total });
+
+            const safePrompt = prompt.startsWith(PHOTO_PREFIX) ? prompt : `${PHOTO_PREFIX} ${prompt}`;
+            const finalPrompt = safePrompt.includes('no watermarks') ? safePrompt : `${safePrompt}, ${NO_TEXT}`;
+
+            const bytes = await runFlux(env, finalPrompt, width, height);
+            const r2Key = `generated-images/${agentId}/${key}.png`;
+            await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
+                httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },
+                customMetadata: { agentId },
+            });
+            const url = `${getPublicUrlForR2Image(env, r2Key)}?v=${Date.now()}`;
+            logger.info(`Generated image from plan: ${key}`, { url });
+            results.push([key, url] as const);
+        }
+
+        return {
+            ...(Object.fromEntries(results) as Omit<GeneratedTradeImages, 'projectTitles'>),
+            projectTitles,
+        };
+    } catch (error) {
+        logger.error('Plan-based image generation failed, continuing without images', { error });
+        return null;
+    }
+}
+
 export function buildImageContext(images: GeneratedTradeImages): string {
+    const titles = images.projectTitles ?? PROJECT_KEYS.map((_, i) => `Project ${i + 1}`);
+
     return `
 
 [GENERATED IMAGES]
 CRITICAL: Exactly 9 real images have been generated for this site. These are the ONLY images you may use. Do NOT use placeholder images, stock photos, or URLs from unsplash.com, picsum.photos, placehold.it, or any other external image source.
 
-Token mapping — use exactly these URLs for the corresponding tokens:
+Token mapping — use exactly these URLs and titles:
 - {{HERO_IMAGE_URL}} → ${images.hero}
 - {{ABOUT_IMAGE_URL}} → ${images.work1}
 - {{PROJECT1_IMAGE_URL}} → ${images.project1}
+  USE THIS EXACT TITLE for {{PROJECT1_TITLE}}: "${titles[0]}"
 - {{PROJECT2_IMAGE_URL}} → ${images.project2}
+  USE THIS EXACT TITLE for {{PROJECT2_TITLE}}: "${titles[1]}"
 - {{PROJECT3_IMAGE_URL}} → ${images.project3}
+  USE THIS EXACT TITLE for {{PROJECT3_TITLE}}: "${titles[2]}"
 - {{PROJECT4_IMAGE_URL}} → ${images.project4}
+  USE THIS EXACT TITLE for {{PROJECT4_TITLE}}: "${titles[3]}"
 - {{PROJECT5_IMAGE_URL}} → ${images.project5}
+  USE THIS EXACT TITLE for {{PROJECT5_TITLE}}: "${titles[4]}"
 - {{PROJECT6_IMAGE_URL}} → ${images.project6}
+  USE THIS EXACT TITLE for {{PROJECT6_TITLE}}: "${titles[5]}"
+
+The project images were generated specifically to match these titles. You MUST use the exact titles above for the project cards — the images will not make sense with different titles.
 
 Rules:
 - Copy every URL character-for-character including any ?v= query string

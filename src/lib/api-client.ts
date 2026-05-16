@@ -57,6 +57,7 @@ import type{
 	CsrfTokenResponseData,
 	OAuthProvider,
 	CodeGenArgs,
+	SiteContentPlan,
 	AgentPreviewResponse,
 	PlatformStatusData,
 	RateLimitError,
@@ -600,6 +601,15 @@ class ApiClient {
 
 		const endpoint = `/api/user/apps${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
 		return this.request<UserAppsData>(endpoint);
+	}
+
+	async generateSitePlan(description: string, keywords?: string[]): Promise<SiteContentPlan> {
+		const result = await this.request<{ plan: SiteContentPlan }>('/api/generate-plan', {
+			method: 'POST',
+			body: { description, keywords: keywords ?? [] },
+		});
+		if (!result.data?.plan) throw new Error('No plan returned from server');
+		return result.data.plan;
 	}
 
 	async createAgentSession(args: CodeGenArgs): Promise<AgentStreamingResponse> {

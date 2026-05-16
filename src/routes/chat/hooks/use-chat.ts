@@ -12,6 +12,7 @@ import {
 	type BehaviorType,
 	type FileType,
 	type TemplateDetails,
+	type SiteContentPlan,
 	getBehaviorTypeForProject,
 } from '@/api-types';
 import {
@@ -54,6 +55,7 @@ export function useChat({
 	projectType = 'app',
 	selectedTemplate,
 	imageGenerationEnabled = true,
+	sitePlan,
 	onDebugMessage,
 	onTerminalMessage,
 	onVaultUnlockRequired,
@@ -64,6 +66,7 @@ export function useChat({
 	projectType?: ProjectType;
 	selectedTemplate?: string;
 	imageGenerationEnabled?: boolean;
+	sitePlan?: SiteContentPlan;
 	onDebugMessage?: (type: 'error' | 'warning' | 'info' | 'websocket', message: string, details?: string, source?: string, messageType?: string, rawMessage?: unknown) => void;
 	onTerminalMessage?: (log: { id: string; content: string; type: 'command' | 'stdout' | 'stderr' | 'info' | 'error' | 'warn' | 'debug'; timestamp: number; source?: string }) => void;
 	onVaultUnlockRequired?: (reason: string) => void;
@@ -491,6 +494,7 @@ export function useChat({
 						projectType,
 						selectedTemplate,
 						imageGenerationEnabled,
+						sitePlan,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
 					});
 

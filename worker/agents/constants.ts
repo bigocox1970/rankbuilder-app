@@ -87,6 +87,7 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     VAULT_REQUIRED: 'vault_required',
 
     IMAGES_GENERATED: 'images_generated',
+    IMAGE_GENERATING: 'image_generating',
 } as const satisfies Record<string, WebSocketMessageType>;
 
 // WebSocket message types
