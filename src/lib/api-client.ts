@@ -6,6 +6,10 @@
 
 import type{
 	ApiResponse,
+	AdminCostData,
+	AdminUsersData,
+	AdminUserActionData,
+	AdminKvStatusData,
 	AppsListData,
 	PublicAppsData,
 	FavoriteToggleData,
@@ -1272,6 +1276,82 @@ class ApiClient {
 	async deleteGeneratedImage(agentId: string, slot: string): Promise<ApiResponse<{ success: boolean }>> {
 		return this.request<{ success: boolean }>(`/api/generated-images/${agentId}/${slot}`, {
 			method: 'DELETE',
+		});
+	}
+
+	// ===============================
+	// Admin API Methods
+	// ===============================
+
+	/**
+	 * Get cost breakdown by model for a given period
+	 */
+	async getAdminCosts(period: '24h' | '7d' | '30d' | 'all'): Promise<ApiResponse<AdminCostData>> {
+		return this.request<AdminCostData>(`/api/admin/costs?period=${encodeURIComponent(period)}`);
+	}
+
+	/**
+	 * Get paginated user list with usage stats
+	 */
+	async getAdminUsers(params: {
+		search?: string;
+		page?: number;
+		limit?: number;
+		sort?: string;
+		order?: 'asc' | 'desc';
+		status?: 'all' | 'active' | 'suspended';
+	}): Promise<ApiResponse<AdminUsersData>> {
+		const queryParams = new URLSearchParams();
+		if (params.search) queryParams.set('search', params.search);
+		if (params.page) queryParams.set('page', params.page.toString());
+		if (params.limit) queryParams.set('limit', params.limit.toString());
+		if (params.sort) queryParams.set('sort', params.sort);
+		if (params.order) queryParams.set('order', params.order);
+		if (params.status) queryParams.set('status', params.status);
+		const qs = queryParams.toString();
+		return this.request<AdminUsersData>(`/api/admin/users${qs ? `?${qs}` : ''}`);
+	}
+
+	/**
+	 * Check if a user has a KV override (Pro tier)
+	 */
+	async getUserKvStatus(userId: string): Promise<ApiResponse<AdminKvStatusData>> {
+		return this.request<AdminKvStatusData>(`/api/admin/users/${encodeURIComponent(userId)}/kv`);
+	}
+
+	/**
+	 * Suspend a user account
+	 */
+	async suspendUser(userId: string): Promise<ApiResponse<AdminUserActionData>> {
+		return this.request<AdminUserActionData>(`/api/admin/users/${encodeURIComponent(userId)}/suspend`, {
+			method: 'POST',
+		});
+	}
+
+	/**
+	 * Unsuspend a user account
+	 */
+	async unsuspendUser(userId: string): Promise<ApiResponse<AdminUserActionData>> {
+		return this.request<AdminUserActionData>(`/api/admin/users/${encodeURIComponent(userId)}/unsuspend`, {
+			method: 'POST',
+		});
+	}
+
+	/**
+	 * Upgrade a user to Pro tier via KV override
+	 */
+	async upgradeUser(userId: string): Promise<ApiResponse<AdminUserActionData>> {
+		return this.request<AdminUserActionData>(`/api/admin/users/${encodeURIComponent(userId)}/upgrade`, {
+			method: 'POST',
+		});
+	}
+
+	/**
+	 * Remove a user's KV override (downgrade to free tier)
+	 */
+	async downgradeUser(userId: string): Promise<ApiResponse<AdminUserActionData>> {
+		return this.request<AdminUserActionData>(`/api/admin/users/${encodeURIComponent(userId)}/downgrade`, {
+			method: 'POST',
 		});
 	}
 }

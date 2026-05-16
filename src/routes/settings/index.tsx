@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
 	Smartphone,
 	Trash2,
@@ -9,6 +9,8 @@ import {
 	Check,
 	Eye,
 	EyeOff,
+	DollarSign,
+	Users,
 } from 'lucide-react';
 import { ModelConfigTabs } from '@/components/model-config-tabs';
 import type {
@@ -16,6 +18,9 @@ import type {
 	ModelConfigUpdate,
 	ActiveSessionsData,
 	ApiKeysData,
+	AdminCostData,
+	AdminUsersData,
+	AdminUserEntry,
 } from '@/api-types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -335,6 +340,137 @@ export default function SettingsPage() {
 		}
 	};
 
+	// -------------------------------------------------------
+	// Admin: Cost Dashboard
+	// -------------------------------------------------------
+	type CostPeriod = '24h' | '7d' | '30d' | 'all';
+	const [costPeriod, setCostPeriod] = useState<CostPeriod>('7d');
+	const [costData, setCostData] = useState<AdminCostData | null>(null);
+	const [costLoading, setCostLoading] = useState(false);
+
+	const loadCostData = React.useCallback(async (period: CostPeriod) => {
+		if (!isAdmin) return;
+		setCostLoading(true);
+		try {
+			const response = await apiClient.getAdminCosts(period);
+			if (response.success && response.data) {
+				setCostData(response.data);
+			}
+		} catch (error) {
+			console.error('Error loading cost data', error);
+			toast.error('Failed to load cost data');
+		} finally {
+			setCostLoading(false);
+		}
+	}, [isAdmin]);
+
+	// -------------------------------------------------------
+	// Admin: User Management
+	// -------------------------------------------------------
+	const [userSearch, setUserSearch] = useState('');
+	const [userStatus, setUserStatus] = useState<'all' | 'active' | 'suspended'>('all');
+	const [userPage, setUserPage] = useState(1);
+	const [usersData, setUsersData] = useState<AdminUsersData | null>(null);
+	const [usersLoading, setUsersLoading] = useState(false);
+	// Track per-user KV override state in component (userId -> hasOverride)
+	const [kvOverrides, setKvOverrides] = useState<Record<string, boolean>>({});
+	const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+	const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const loadUsers = React.useCallback(async (
+		search: string,
+		status: 'all' | 'active' | 'suspended',
+		page: number,
+	) => {
+		if (!isAdmin) return;
+		setUsersLoading(true);
+		try {
+			const response = await apiClient.getAdminUsers({ search, status, page, limit: 20 });
+			if (response.success && response.data) {
+				setUsersData(response.data);
+				// Fetch KV status for each user (fire sequentially to avoid hammering)
+				const overrides: Record<string, boolean> = {};
+				await Promise.all(
+					response.data.users.map(async (u: AdminUserEntry) => {
+						try {
+							const kv = await apiClient.getUserKvStatus(u.id);
+							overrides[u.id] = kv.data?.hasOverride ?? false;
+						} catch {
+							overrides[u.id] = false;
+						}
+					})
+				);
+				setKvOverrides((prev) => ({ ...prev, ...overrides }));
+			}
+		} catch (error) {
+			console.error('Error loading users', error);
+			toast.error('Failed to load users');
+		} finally {
+			setUsersLoading(false);
+		}
+	}, [isAdmin]);
+
+	const handleUserSearch = (value: string) => {
+		setUserSearch(value);
+		setUserPage(1);
+		if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+		searchDebounceRef.current = setTimeout(() => {
+			loadUsers(value, userStatus, 1);
+		}, 300);
+	};
+
+	const handleUserStatusFilter = (value: 'all' | 'active' | 'suspended') => {
+		setUserStatus(value);
+		setUserPage(1);
+		loadUsers(userSearch, value, 1);
+	};
+
+	const handleUserAction = async (
+		userId: string,
+		action: 'suspend' | 'unsuspend' | 'upgrade' | 'downgrade',
+	) => {
+		setActionLoading((prev) => ({ ...prev, [`${userId}:${action}`]: true }));
+		try {
+			let response;
+			if (action === 'suspend') response = await apiClient.suspendUser(userId);
+			else if (action === 'unsuspend') response = await apiClient.unsuspendUser(userId);
+			else if (action === 'upgrade') {
+				response = await apiClient.upgradeUser(userId);
+				if (response.success) setKvOverrides((prev) => ({ ...prev, [userId]: true }));
+			} else {
+				response = await apiClient.downgradeUser(userId);
+				if (response.success) setKvOverrides((prev) => ({ ...prev, [userId]: false }));
+			}
+
+			if (response?.success) {
+				toast.success(response.data?.message ?? 'Done');
+				// Reload the list to reflect suspend/unsuspend changes
+				if (action === 'suspend' || action === 'unsuspend') {
+					await loadUsers(userSearch, userStatus, userPage);
+				}
+			}
+		} catch (error) {
+			console.error(`Error performing ${action}`, error);
+			toast.error(`Failed to ${action} user`);
+		} finally {
+			setActionLoading((prev) => ({ ...prev, [`${userId}:${action}`]: false }));
+		}
+	};
+
+	// Load admin data on mount
+	React.useEffect(() => {
+		if (!isAdmin) return;
+		loadCostData(costPeriod);
+		loadUsers(userSearch, userStatus, userPage);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isAdmin]);
+
+	// Reload cost data when period changes
+	useEffect(() => {
+		if (!isAdmin) return;
+		loadCostData(costPeriod);
+	}, [costPeriod, isAdmin, loadCostData]);
+
 	const handleDeleteAccount = async () => {
 		toast.error('Account deletion is not yet implemented');
 	};
@@ -572,6 +708,263 @@ export default function SettingsPage() {
 
 					{/* Cloudflare Account & Gateway Selection — admin only */}
 					{isAdmin && <CloudflareAccountSelector />}
+
+					{/* Cost Dashboard — admin only */}
+					{isAdmin && (
+						<Card id="admin-costs">
+							<CardHeader variant="minimal">
+								<div className="flex items-center gap-3 border-b w-full py-3 text-text-primary">
+									<DollarSign className="h-5 w-5" />
+									<div>
+										<CardTitle>Cost Dashboard</CardTitle>
+									</div>
+								</div>
+							</CardHeader>
+							<CardContent className="space-y-4 px-6 mt-4">
+								{/* Period selector */}
+								<div className="flex gap-2">
+									{(['24h', '7d', '30d', 'all'] as const).map((p) => (
+										<Button
+											key={p}
+											size="sm"
+											variant={costPeriod === p ? 'default' : 'outline'}
+											onClick={() => setCostPeriod(p)}
+											className={costPeriod === p ? 'bg-accent text-black hover:bg-accent/90' : ''}
+										>
+											{p === 'all' ? 'All time' : p}
+										</Button>
+									))}
+								</div>
+
+								{costLoading ? (
+									<div className="flex items-center gap-3 py-4">
+										<Settings className="h-5 w-5 animate-spin text-text-tertiary" />
+										<span className="text-sm text-text-tertiary">Loading cost data...</span>
+									</div>
+								) : costData && costData.byModel.length > 0 ? (
+									<>
+										<p className="text-sm text-text-secondary">
+											<span className="font-semibold text-accent">{costData.totalCredits.toFixed(1)}</span>
+											{' '}credits consumed &middot;{' '}
+											<span className="font-semibold text-accent">${costData.estimatedCostUsd.toFixed(2)}</span>
+											{' '}estimated cost
+										</p>
+										<Table>
+											<TableHeader>
+												<TableRow>
+													<TableHead>Model</TableHead>
+													<TableHead>Provider</TableHead>
+													<TableHead className="text-right">Calls</TableHead>
+													<TableHead className="text-right">Credits</TableHead>
+													<TableHead className="text-right">Est. Cost</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{costData.byModel.map((entry) => (
+													<TableRow key={entry.model}>
+														<TableCell className="font-medium text-sm">{entry.modelName}</TableCell>
+														<TableCell className="text-text-secondary text-sm">{entry.provider}</TableCell>
+														<TableCell className="text-right text-sm">{entry.callCount.toLocaleString()}</TableCell>
+														<TableCell className="text-right text-sm">{entry.totalCredits.toFixed(1)}</TableCell>
+														<TableCell className="text-right text-sm text-accent">${entry.estimatedCostUsd.toFixed(2)}</TableCell>
+													</TableRow>
+												))}
+											</TableBody>
+										</Table>
+									</>
+								) : (
+									<div className="rounded-lg border border-dashed border-bg-4 bg-bg-2/50 p-6 text-center">
+										<p className="text-sm text-text-tertiary">No usage logged yet</p>
+									</div>
+								)}
+							</CardContent>
+						</Card>
+					)}
+
+					{/* User Management — admin only */}
+					{isAdmin && (
+						<Card id="admin-users">
+							<CardHeader variant="minimal">
+								<div className="flex items-center gap-3 border-b w-full py-3 text-text-primary">
+									<Users className="h-5 w-5" />
+									<div>
+										<CardTitle>User Management</CardTitle>
+									</div>
+								</div>
+							</CardHeader>
+							<CardContent className="space-y-4 px-6 mt-4">
+								{/* Filters */}
+								<div className="flex gap-3 items-center">
+									<Input
+										placeholder="Search by email or name..."
+										value={userSearch}
+										onChange={(e) => handleUserSearch(e.target.value)}
+										className="max-w-xs"
+									/>
+									<div className="flex gap-1">
+										{(['all', 'active', 'suspended'] as const).map((s) => (
+											<Button
+												key={s}
+												size="sm"
+												variant={userStatus === s ? 'default' : 'outline'}
+												onClick={() => handleUserStatusFilter(s)}
+												className={userStatus === s ? 'bg-accent text-black hover:bg-accent/90 capitalize' : 'capitalize'}
+											>
+												{s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+											</Button>
+										))}
+									</div>
+								</div>
+
+								{usersLoading ? (
+									<div className="flex items-center gap-3 py-4">
+										<Settings className="h-5 w-5 animate-spin text-text-tertiary" />
+										<span className="text-sm text-text-tertiary">Loading users...</span>
+									</div>
+								) : usersData && usersData.users.length > 0 ? (
+									<>
+										<Table>
+											<TableHeader>
+												<TableRow>
+													<TableHead>Email</TableHead>
+													<TableHead>Name</TableHead>
+													<TableHead>Provider</TableHead>
+													<TableHead>Signed up</TableHead>
+													<TableHead>Last active</TableHead>
+													<TableHead className="text-right">Apps</TableHead>
+													<TableHead className="text-right">Credits</TableHead>
+													<TableHead>Status</TableHead>
+													<TableHead className="text-right">Actions</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{usersData.users.map((u: AdminUserEntry) => {
+													const isSuspending = actionLoading[`${u.id}:suspend`] ?? false;
+													const isUnsuspending = actionLoading[`${u.id}:unsuspend`] ?? false;
+													const isUpgrading = actionLoading[`${u.id}:upgrade`] ?? false;
+													const isDowngrading = actionLoading[`${u.id}:downgrade`] ?? false;
+													const hasOverride = kvOverrides[u.id] ?? false;
+													return (
+														<TableRow key={u.id}>
+															<TableCell className="text-xs font-mono">{u.email}</TableCell>
+															<TableCell className="text-sm">{u.displayName}</TableCell>
+															<TableCell className="text-sm capitalize text-text-secondary">{u.provider}</TableCell>
+															<TableCell className="text-sm text-text-secondary">
+																{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+															</TableCell>
+															<TableCell className="text-sm text-text-secondary">
+																{u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleDateString() : '—'}
+															</TableCell>
+															<TableCell className="text-right text-sm">{u.appCount}</TableCell>
+															<TableCell className="text-right text-sm">{u.totalCredits.toFixed(1)}</TableCell>
+															<TableCell>
+																<div className="flex items-center gap-1">
+																	{u.isSuspended ? (
+																		<Badge variant="destructive" className="text-xs">Suspended</Badge>
+																	) : (
+																		<Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200 text-xs">Active</Badge>
+																	)}
+																	{hasOverride && (
+																		<Badge variant="secondary" className="bg-accent/20 text-accent text-xs">Pro</Badge>
+																	)}
+																</div>
+															</TableCell>
+															<TableCell className="text-right">
+																<div className="flex gap-1 justify-end">
+																	{u.isSuspended ? (
+																		<Button
+																			size="sm"
+																			variant="outline"
+																			disabled={isUnsuspending}
+																			onClick={() => handleUserAction(u.id, 'unsuspend')}
+																			className="text-xs"
+																		>
+																			{isUnsuspending ? 'Working...' : 'Unsuspend'}
+																		</Button>
+																	) : (
+																		<Button
+																			size="sm"
+																			variant="outline"
+																			disabled={isSuspending}
+																			onClick={() => handleUserAction(u.id, 'suspend')}
+																			className="text-xs text-destructive hover:text-destructive"
+																		>
+																			{isSuspending ? 'Working...' : 'Suspend'}
+																		</Button>
+																	)}
+																	{hasOverride ? (
+																		<Button
+																			size="sm"
+																			variant="outline"
+																			disabled={isDowngrading}
+																			onClick={() => handleUserAction(u.id, 'downgrade')}
+																			className="text-xs"
+																		>
+																			{isDowngrading ? 'Working...' : 'Downgrade'}
+																		</Button>
+																	) : (
+																		<Button
+																			size="sm"
+																			variant="outline"
+																			disabled={isUpgrading}
+																			onClick={() => handleUserAction(u.id, 'upgrade')}
+																			className="text-xs text-accent hover:text-accent"
+																		>
+																			{isUpgrading ? 'Working...' : 'Upgrade'}
+																		</Button>
+																	)}
+																</div>
+															</TableCell>
+														</TableRow>
+													);
+												})}
+											</TableBody>
+										</Table>
+
+										{/* Pagination */}
+										<div className="flex items-center justify-between pt-2">
+											<p className="text-sm text-text-tertiary">
+												{usersData.total} user{usersData.total !== 1 ? 's' : ''} total
+											</p>
+											<div className="flex gap-2">
+												<Button
+													size="sm"
+													variant="outline"
+													disabled={userPage <= 1 || usersLoading}
+													onClick={() => {
+														const newPage = userPage - 1;
+														setUserPage(newPage);
+														loadUsers(userSearch, userStatus, newPage);
+													}}
+												>
+													Prev
+												</Button>
+												<span className="text-sm text-text-secondary flex items-center px-2">
+													Page {userPage}
+												</span>
+												<Button
+													size="sm"
+													variant="outline"
+													disabled={!usersData.hasMore || usersLoading}
+													onClick={() => {
+														const newPage = userPage + 1;
+														setUserPage(newPage);
+														loadUsers(userSearch, userStatus, newPage);
+													}}
+												>
+													Next
+												</Button>
+											</div>
+										</div>
+									</>
+								) : (
+									<div className="rounded-lg border border-dashed border-bg-4 bg-bg-2/50 p-6 text-center">
+										<p className="text-sm text-text-tertiary">No users found</p>
+									</div>
+								)}
+							</CardContent>
+						</Card>
+					)}
 
 					{/* Model Configuration Section — admin only */}
 					{isAdmin && <Card id="model-configs">

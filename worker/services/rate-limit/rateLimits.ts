@@ -335,6 +335,14 @@ export class RateLimitService {
             const incrementBy = modelConfig.creditCost;
 
 			const result = await this.enforce(env, key, config, RateLimitType.LLM_CALLS, incrementBy);
+
+			if (result.success) {
+				// Fire and forget — don't await, never throw
+				env.DB.prepare(
+					'INSERT INTO ai_usage_logs (id, user_id, model, credit_cost, created_at) VALUES (?, ?, ?, ?, ?)'
+				).bind(crypto.randomUUID(), userId, model, incrementBy, Math.floor(Date.now() / 1000)).run().catch(() => {});
+			}
+
 			if (!result.success) {
 				this.logger.warn('LLM calls rate limit exceeded', {
 					identifier,

@@ -62,6 +62,7 @@ export function buildTools(
         createDeepDebuggerTool(agent, logger, toolRenderer, streamCb),
         createRegenerateImageTool(agent, logger),
         createRegenerateFileTool(agent, logger),
+        createReadFilesTool(agent, logger),
     ];
 }
 

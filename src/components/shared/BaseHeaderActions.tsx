@@ -1,31 +1,34 @@
 import type { RefObject } from 'react';
-import { GitBranch, Github, Expand, RefreshCw } from 'lucide-react';
-import { ModelConfigInfo } from '@/components/shared/ModelConfigInfo';
+import { GitBranch, Github, Expand, RefreshCw, Monitor, Tablet, Smartphone } from 'lucide-react';
 import { HeaderButton } from '@/components/shared/header-actions';
-import type { ModelConfigsInfo } from '@/api-types';
+import type { ViewportMode } from '@/features/core/types';
 
 export interface BaseHeaderActionsProps {
 	containerRef: RefObject<HTMLElement | null>;
-	modelConfigs?: ModelConfigsInfo;
-	onRequestConfigs: () => void;
-	loadingConfigs: boolean;
 	onGitCloneClick: () => void;
 	isGitHubExportReady: boolean;
 	onGitHubExportClick: () => void;
 	fallbackUrl?: string;
 	onManualRefresh?: () => void;
+	viewportMode?: ViewportMode;
+	onViewportChange?: (mode: ViewportMode) => void;
 }
+
+const VIEWPORT_BUTTONS: { mode: ViewportMode; Icon: typeof Monitor; title: string }[] = [
+	{ mode: 'desktop', Icon: Monitor, title: 'Desktop view' },
+	{ mode: 'tablet', Icon: Tablet, title: 'Tablet view (768px)' },
+	{ mode: 'mobile', Icon: Smartphone, title: 'Mobile view (390px)' },
+];
 
 export function BaseHeaderActions({
 	containerRef,
-	modelConfigs,
-	onRequestConfigs,
-	loadingConfigs,
 	onGitCloneClick,
 	isGitHubExportReady,
 	onGitHubExportClick,
 	fallbackUrl,
 	onManualRefresh,
+	viewportMode,
+	onViewportChange,
 }: BaseHeaderActionsProps) {
 	const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled;
 
@@ -48,11 +51,24 @@ export function BaseHeaderActions({
 					iconOnly
 				/>
 			)}
-			<ModelConfigInfo
-				configs={modelConfigs}
-				onRequestConfigs={onRequestConfigs}
-				loading={loadingConfigs}
-			/>
+			{viewportMode && onViewportChange && (
+				<div className="flex items-center border border-border-primary rounded-md overflow-hidden">
+					{VIEWPORT_BUTTONS.map(({ mode, Icon, title }) => (
+						<button
+							key={mode}
+							onClick={() => onViewportChange(mode)}
+							title={title}
+							className={`p-1.5 transition-colors duration-150 ${
+								viewportMode === mode
+									? 'bg-accent text-black'
+									: 'text-text-primary/50 hover:text-text-primary hover:bg-bg-4'
+							}`}
+						>
+							<Icon className="size-4" />
+						</button>
+					))}
+				</div>
+			)}
 			<HeaderButton
 				icon={GitBranch}
 				label="Clone"

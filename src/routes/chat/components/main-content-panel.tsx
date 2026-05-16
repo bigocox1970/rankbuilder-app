@@ -1,13 +1,17 @@
-import { type RefObject, type ReactNode, Suspense, useState, useCallback } from 'react';
+import { type RefObject, type ReactNode, Suspense, useState, useCallback, useEffect } from 'react';
+import type { ViewportMode } from '@/features/core/types';
 import { WebSocket } from 'partysocket';
 import { MonacoEditor } from '../../../components/monaco-editor/monaco-editor';
 import { motion } from 'framer-motion';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ChevronLeft } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Blueprint } from './blueprint';
 import { FileExplorer } from './file-explorer';
 import { PreviewIframe } from './preview-iframe';
 import { MarkdownDocsPreview } from './markdown-docs-preview';
 import { SeoPanel } from './seo-panel';
+import { SocialPreviewPanel } from './social-preview-panel';
+import { LlmsPanel } from './llms-panel';
 import { ViewContainer } from './view-container';
 import { ViewHeader } from './view-header';
 import { PreviewHeaderActions } from './preview-header-actions';
@@ -20,12 +24,13 @@ import type { Edit } from '../hooks/use-chat';
 
 interface MainContentPanelProps {
 	// View state
-	view: 'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation' | 'seo';
-	onViewChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo') => void;
+	view: 'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation' | 'seo' | 'social' | 'llms';
+	onViewChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo' | 'social' | 'llms') => void;
 
 	// Content detection
 	hasDocumentation: boolean;
 	hasSeoData: boolean;
+	hasLlmsTxt: boolean;
 	contentDetection: ContentDetectionResult;
 
 	// Preview state
@@ -74,6 +79,9 @@ interface MainContentPanelProps {
 	// Generated images
 	generatedImages?: Record<string, string>;
 	onDeleteGeneratedImage?: (slot: string) => void;
+
+	// SEO panel action
+	onSendMessage?: (msg: string) => void;
 }
 
 export function MainContentPanel(props: MainContentPanelProps) {
@@ -82,6 +90,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		onViewChange,
 		hasDocumentation,
 		hasSeoData,
+		hasLlmsTxt,
 		contentDetection,
 		projectType,
 		previewUrl,
@@ -110,7 +119,28 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		templateDetails,
 		generatedImages,
 		onDeleteGeneratedImage,
+		onSendMessage,
 	} = props;
+
+	const isMobile = useIsMobile();
+	const [mobileShowEditor, setMobileShowEditor] = useState(false);
+	const [viewportMode, setViewportMode] = useState<ViewportMode>('desktop');
+
+	// When switching away from editor, reset mobile view to file list
+	useEffect(() => {
+		if (view !== 'editor') setMobileShowEditor(false);
+	}, [view]);
+
+	// Reset viewport to desktop when leaving preview
+	useEffect(() => {
+		if (view !== 'preview') setViewportMode('desktop');
+	}, [view]);
+
+	// On mobile, clicking a file switches to editor view
+	const handleFileClickWrapped = useCallback((file: FileType) => {
+		onFileClick(file);
+		if (isMobile) setMobileShowEditor(true);
+	}, [onFileClick, isMobile]);
 
 	// Feature-specific state management
 	const [featureState, setFeatureStateInternal] = useState<Record<string, unknown>>({});
@@ -119,12 +149,13 @@ export function MainContentPanel(props: MainContentPanelProps) {
 	}, []);
 
 	const commonHeaderProps = {
-		view: view as 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo',
+		view: view as 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo' | 'social' | 'llms',
 		onViewChange,
 		previewAvailable,
 		showTooltip,
 		hasDocumentation,
 		hasSeoData,
+		hasLlmsTxt,
 		previewUrl,
 		projectType,
 	};
@@ -212,6 +243,18 @@ export function MainContentPanel(props: MainContentPanelProps) {
 			/>
 		);
 
+		// Wrap content in viewport stage when not in desktop mode
+		const viewportContent = viewportMode === 'desktop' ? previewContent : (
+			<div className="flex-1 flex justify-center bg-bg-2 overflow-hidden">
+				<div
+					className="flex flex-col overflow-hidden border-x border-border-primary shadow-inner"
+					style={{ width: viewportMode === 'tablet' ? '768px' : '390px' }}
+				>
+					{previewContent}
+				</div>
+			</div>
+		);
+
 		// Get lazy-loaded header actions component from feature registry
 		const FeatureHeaderActionsComponent = featureRegistry.getLazyHeaderActionsComponent(projectType);
 
@@ -242,24 +285,25 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					onGitHubExportClick={githubExport.openModal}
 					loadingConfigs={loadingConfigs}
 					onRequestConfigs={onRequestConfigs}
+					viewportMode={viewportMode}
+					onViewportChange={setViewportMode}
 				/>
 			</Suspense>
 		) : (
 			<PreviewHeaderActions
-				modelConfigs={modelConfigs}
-				onRequestConfigs={onRequestConfigs}
-				loadingConfigs={loadingConfigs}
 				onGitCloneClick={onGitCloneClick}
 				isGitHubExportReady={isGitHubExportReady}
 				onGitHubExportClick={githubExport.openModal}
 				previewRef={previewRef}
 				previewUrl={previewUrl}
 				onManualRefresh={onManualRefresh}
+				viewportMode={viewportMode}
+				onViewportChange={setViewportMode}
 			/>
 		);
 
 		return renderViewWithHeader(
-			previewContent,
+			viewportContent,
 			headerActions
 		);
 	};
@@ -277,7 +321,53 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		);
 
 	const renderEditorView = () => {
-		// Defensive fallback: show file explorer with empty editor if no activeFile
+		// Mobile: show file list OR editor, not both side-by-side
+		if (isMobile) {
+			if (!activeFile || !mobileShowEditor) {
+				return renderViewWithHeader(
+					<div className="flex-1 overflow-y-auto bg-bg-3">
+						<FileExplorer
+							files={allFiles}
+							currentFile={activeFile}
+							onFileClick={handleFileClickWrapped}
+							generatedImages={generatedImages}
+							onDeleteGeneratedImage={onDeleteGeneratedImage}
+						/>
+					</div>
+				);
+			}
+			return renderViewWithHeader(
+				<div className="flex-1 relative">
+					<div className="absolute inset-0" ref={editorRef}>
+						<MonacoEditor
+							className="h-full"
+							createOptions={{
+								value: activeFile.fileContents || '',
+								language: activeFile.language || 'plaintext',
+								readOnly: true,
+								minimap: { enabled: false },
+								lineNumbers: 'on',
+								scrollBeyondLastLine: false,
+								fontSize: 12,
+								theme: 'vibesdk',
+								automaticLayout: true,
+							}}
+							find={edit?.filePath === activeFile.filePath ? edit.search : undefined}
+							replace={edit?.filePath === activeFile.filePath ? edit.replacement : undefined}
+						/>
+					</div>
+				</div>,
+				<button
+					onClick={() => setMobileShowEditor(false)}
+					className="flex items-center gap-1 text-xs text-text-primary/60 hover:text-accent transition-colors px-1"
+				>
+					<ChevronLeft className="size-3.5" />
+					Files
+				</button>
+			);
+		}
+
+		// Desktop: file explorer sidebar + code editor side-by-side
 		if (!activeFile) {
 			return renderViewWithHeader(
 				<div className="flex-1 relative">
@@ -354,8 +444,30 @@ export function MainContentPanel(props: MainContentPanelProps) {
 
 	const renderSeoView = () => {
 		const seoFile = allFiles.find(f => f.filePath === 'seo.json');
+		const htmlFile = allFiles.find(f => f.filePath === 'index.html' || f.filePath === 'public/index.html');
 		return renderViewWithHeader(
-			<SeoPanel seoFile={seoFile} isGenerating={isGenerating} />
+			<SeoPanel seoFile={seoFile} htmlFile={htmlFile} isGenerating={isGenerating} onSendMessage={onSendMessage ?? (() => {})} />
+		);
+	};
+
+	const renderSocialView = () => {
+		const seoFile = allFiles.find(f => f.filePath === 'seo.json');
+		const htmlFile = allFiles.find(f => f.filePath === 'index.html' || f.filePath === 'public/index.html');
+		const faviconFile = allFiles.find(f =>
+			f.filePath === 'favicon.svg' ||
+			f.filePath === 'public/favicon.svg' ||
+			f.filePath.endsWith('/favicon.svg')
+		);
+		return renderViewWithHeader(
+			<SocialPreviewPanel seoFile={seoFile} htmlFile={htmlFile} faviconFile={faviconFile} onSendMessage={onSendMessage} />
+		);
+	};
+
+	const renderLlmsView = () => {
+		const llmsFile = allFiles.find(f => f.filePath === 'llms.txt');
+		const seoFile = allFiles.find(f => f.filePath === 'seo.json');
+		return renderViewWithHeader(
+			<LlmsPanel llmsFile={llmsFile} seoFile={seoFile} onSendMessage={onSendMessage ?? (() => {})} />
 		);
 	};
 
@@ -372,6 +484,10 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				return renderEditorView();
 			case 'seo':
 				return renderSeoView();
+			case 'social':
+				return renderSocialView();
+			case 'llms':
+				return renderLlmsView();
 			default:
 				return null;
 		}

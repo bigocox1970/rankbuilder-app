@@ -308,3 +308,13 @@ export type {
     GitHubExportOptions,
     GitHubExportResult,
 } from 'worker/services/github/types';
+
+// Admin API Types
+export type {
+    AdminCostEntry,
+    AdminCostData,
+    AdminUserEntry,
+    AdminUsersData,
+    AdminUserActionData,
+    AdminKvStatusData,
+} from 'worker/api/controllers/admin/types';

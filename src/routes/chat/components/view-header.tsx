@@ -4,12 +4,13 @@ import { HEADER_STYLES } from './view-header-styles';
 import type { ProjectType } from '@/api-types';
 
 interface ViewHeaderProps {
-	view: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo';
-	onViewChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo') => void;
+	view: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo' | 'social' | 'llms';
+	onViewChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo' | 'social' | 'llms') => void;
 	previewAvailable: boolean;
 	showTooltip: boolean;
 	hasDocumentation: boolean;
 	hasSeoData: boolean;
+	hasLlmsTxt: boolean;
 	previewUrl?: string;
 	rightActions?: React.ReactNode;
 	projectType?: ProjectType;
@@ -22,6 +23,7 @@ export function ViewHeader({
 	showTooltip,
 	hasDocumentation,
 	hasSeoData,
+	hasLlmsTxt,
 	previewUrl,
 	rightActions,
 	projectType,
@@ -36,6 +38,7 @@ export function ViewHeader({
 					showTooltip={showTooltip}
 					hasDocumentation={hasDocumentation}
 					hasSeoData={hasSeoData}
+					hasLlmsTxt={hasLlmsTxt}
 					previewUrl={previewUrl}
 					projectType={projectType}
 				/>

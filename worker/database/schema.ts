@@ -554,6 +554,27 @@ export const userModelProviders = sqliteTable('user_model_providers', {
 }));
 
 // ========================================
+// AI USAGE LOGGING
+// ========================================
+
+/**
+ * AI Usage Logs table - Track per-call AI model usage for admin cost reporting
+ */
+export const aiUsageLogs = sqliteTable('ai_usage_logs', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    model: text('model').notNull(),
+    agentAction: text('agent_action'),
+    creditCost: real('credit_cost').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    userIdIdx: index('ai_usage_logs_user_id_idx').on(table.userId),
+    modelIdx: index('ai_usage_logs_model_idx').on(table.model),
+    createdAtIdx: index('ai_usage_logs_created_at_idx').on(table.createdAt),
+    userCreatedIdx: index('ai_usage_logs_user_created_idx').on(table.userId, table.createdAt),
+}));
+
+// ========================================
 // SYSTEM CONFIGURATION
 // ========================================
 
@@ -629,3 +650,6 @@ export type NewUserModelProvider = typeof userModelProviders.$inferInsert;
 
 export type Star = typeof stars.$inferSelect;
 export type NewStar = typeof stars.$inferInsert;
+
+export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+export type NewAiUsageLog = typeof aiUsageLogs.$inferInsert;

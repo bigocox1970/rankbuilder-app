@@ -888,7 +888,7 @@ Use this exact schema:
       "path": "/",
       "label": "Home",
       "title": "Page title here (aim for 50–60 characters)",
-      "description": "Meta description here (aim for 150–160 characters, include primary keyword)",
+      "description": "Meta description here (140–160 characters, MUST NOT exceed 160, include primary keyword)",
       "keywords": {
         "primary": "short primary keyword (2–3 words, highest search intent)",
         "longTail": "longer keyword phrase (4–7 words, specific to the business and location)",
@@ -899,6 +899,8 @@ Use this exact schema:
       "imageAlts": ["Descriptive alt text for hero image", "Alt text for other images"],
       "canonicalUrl": "",
       "hasOgTags": true,
+      "hasOgImage": true,
+      "hasFavicon": false,
       "hasStructuredData": false
     }
   ]
@@ -914,14 +916,51 @@ Keyword rules:
 Other rules:
 - Include one entry per page/route. Single-page sites have one entry with path "/".
 - \`title\`: 50–60 characters, include \`primary\` keyword and location/business name.
-- \`description\`: 150–160 characters, include \`primary\` keyword and hint at the \`longTail\`.
+- \`description\`: 140–160 characters (MUST NOT exceed 160), include \`primary\` keyword and hint at the \`longTail\`.
 - \`h1\`: must match the actual H1 on the page exactly.
 - \`h2s\`: list every H2 heading on the page.
 - \`imageAlts\`: list the alt text of every significant image on the page.
-- \`hasOgTags\`: true if you added Open Graph meta tags to the HTML.
+- \`hasOgTags\`: true if you added og:title, og:description, og:url, og:type tags to the HTML head.
+- \`hasOgImage\`: true if you added \`<meta property="og:image">\` with a valid image URL. Always include og:image:width (1200) and og:image:height (630).
+- \`hasFavicon\`: true if you added \`<link rel="icon">\` to the HTML head. Always create a /favicon.svg (square, brand colour background, business initial in white) and add both \`<link rel="icon" href="/favicon.svg">\` and \`<link rel="apple-touch-icon" href="/favicon.svg">\`.
 - \`hasStructuredData\`: true if you added JSON-LD structured data.
 - For HTML sites: the title and description in seo.json must match \`{{META_TITLE}}\` and \`{{META_DESCRIPTION}}\` exactly. Also add \`<meta name="keywords" content="primary, longTail, secondary1, secondary2">\` to the \`<head>\`.
 - For React sites: update \`index.html\` \`<head>\` with the title, description, and a \`<meta name="keywords">\` tag with all keywords joined by commas.
+`;
+
+const LLMS_TXT_INSTRUCTION = `
+
+## REQUIRED: llms.txt FILE
+
+Create a file named \`llms.txt\` at the project root. This tells AI assistants and LLM-powered search tools (ChatGPT, Perplexity, Claude, etc.) what the site is about, helping the business get discovered via AI-driven search.
+
+Use the llmstxt.org standard format (pure markdown, no HTML):
+
+\`\`\`
+# [Business Name]
+
+> [1–2 sentence summary: trade, location, key USPs. Include the primary keyword naturally.]
+
+## Services
+- [List every service offered]
+
+## Service Areas
+- [Primary town/city]
+- [County or surrounding areas]
+
+## Contact
+- Phone: [phone number]
+- Website: [canonical URL from seo.json]
+
+## About
+[2–4 sentences: years of experience, qualifications, approach, why choose this business]
+\`\`\`
+
+Rules:
+- Pure markdown only — no HTML tags anywhere in the file
+- Keep under 2000 characters
+- Include the primary keyword naturally in the summary blockquote
+- Update this file whenever services, contact info, or about content changes
 `;
 
 export interface GeneralSystemPromptBuilderParams {
@@ -979,9 +1018,10 @@ export function generalSystemPromptBuilder(
 
     let finalPrompt = PROMPT_UTILS.replaceTemplateVariables(prompt, variables);
 
-    // Inject SEO file generation instructions when keywords are present
+    // Inject SEO and llms.txt generation instructions when keywords are present
     if (params.query.includes('Target SEO keywords:') || params.query.includes('Primary keyword:')) {
         finalPrompt += SEO_FILE_INSTRUCTION;
+        finalPrompt += LLMS_TXT_INSTRUCTION;
     }
 
     return PROMPT_UTILS.verifyPrompt(finalPrompt);

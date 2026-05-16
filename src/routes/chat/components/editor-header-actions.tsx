@@ -77,9 +77,6 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 export function EditorHeaderActions({
-	modelConfigs,
-	onRequestConfigs,
-	loadingConfigs,
 	onGitCloneClick,
 	isGitHubExportReady,
 	onGitHubExportClick,
@@ -112,9 +109,6 @@ export function EditorHeaderActions({
 			)}
 			<BaseHeaderActions
 				containerRef={editorRef}
-				modelConfigs={modelConfigs}
-				onRequestConfigs={onRequestConfigs}
-				loadingConfigs={loadingConfigs}
 				onGitCloneClick={onGitCloneClick}
 				isGitHubExportReady={isGitHubExportReady}
 				onGitHubExportClick={onGitHubExportClick}

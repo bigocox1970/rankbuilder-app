@@ -190,7 +190,7 @@ export default function Chat() {
 	const navigate = useNavigate();
 
 	const [activeFilePath, setActiveFilePath] = useState<string>();
-	const [view, setView] = useState<'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation' | 'seo'>(
+	const [view, setView] = useState<'editor' | 'preview' | 'docs' | 'blueprint' | 'terminal' | 'presentation' | 'seo' | 'social' | 'llms'>(
 		'editor',
 	);
 
@@ -357,7 +357,7 @@ export default function Chat() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const handleViewModeChange = useCallback((mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo') => {
+	const handleViewModeChange = useCallback((mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo' | 'social' | 'llms') => {
 		setView(mode);
 	}, []);
 
@@ -465,6 +465,10 @@ export default function Chat() {
 
 	const hasSeoData = useMemo(() => {
 		return files.some(f => f.filePath === 'seo.json');
+	}, [files]);
+
+	const hasLlmsTxt = useMemo(() => {
+		return files.some(f => f.filePath === 'llms.txt');
 	}, [files]);
 
 	// Preview available based on projectType and content
@@ -617,6 +621,16 @@ export default function Chat() {
 		accept: [...SUPPORTED_IMAGE_MIME_TYPES],
 		disabled: isChatDisabled,
 	});
+
+	const handleSendFromPanel = useCallback(
+		(message: string) => {
+			if (!websocket) return;
+			sendWebSocketMessage(websocket, 'user_suggestion', { message });
+			sendUserMessage(message);
+			requestAnimationFrame(() => scrollToBottom());
+		},
+		[websocket, sendUserMessage, scrollToBottom],
+	);
 
 	const onNewMessage = useCallback(
 		(e: FormEvent) => {
@@ -928,6 +942,7 @@ export default function Chat() {
 								onViewChange={handleViewModeChange}
 								hasDocumentation={hasDocumentation}
 								hasSeoData={hasSeoData}
+								hasLlmsTxt={hasLlmsTxt}
 								contentDetection={contentDetection}
 								projectType={projectType}
 								previewUrl={previewUrl}
@@ -956,6 +971,7 @@ export default function Chat() {
 								templateDetails={templateDetails}
 								generatedImages={generatedImageUrls}
 								onDeleteGeneratedImage={deleteGeneratedImage}
+								onSendMessage={handleSendFromPanel}
 							/>
 						</motion.div>
 					)}

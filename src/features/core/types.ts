@@ -62,6 +62,8 @@ export interface PreviewComponentProps extends FeatureContext {
 	className?: string;
 }
 
+export type ViewportMode = 'desktop' | 'tablet' | 'mobile';
+
 /**
  * Props for feature header action components
  */
@@ -71,6 +73,8 @@ export interface HeaderActionsProps extends FeatureContext {
 	onGitHubExportClick: () => void;
 	loadingConfigs: boolean;
 	onRequestConfigs: () => void;
+	viewportMode?: ViewportMode;
+	onViewportChange?: (mode: ViewportMode) => void;
 }
 
 /**

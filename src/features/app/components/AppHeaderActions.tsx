@@ -2,25 +2,25 @@ import { BaseHeaderActions } from '@/components/shared/BaseHeaderActions';
 import type { HeaderActionsProps } from '../../core/types';
 
 export function AppHeaderActions({
-	modelConfigs,
-	onRequestConfigs,
-	loadingConfigs,
 	onGitCloneClick,
 	isGitHubExportReady,
 	onGitHubExportClick,
 	previewRef,
+	previewUrl,
 	onManualRefresh,
+	viewportMode,
+	onViewportChange,
 }: HeaderActionsProps) {
 	return (
 		<BaseHeaderActions
 			containerRef={previewRef}
-			modelConfigs={modelConfigs}
-			onRequestConfigs={onRequestConfigs}
-			loadingConfigs={loadingConfigs}
 			onGitCloneClick={onGitCloneClick}
 			isGitHubExportReady={isGitHubExportReady}
 			onGitHubExportClick={onGitHubExportClick}
+			fallbackUrl={previewUrl}
 			onManualRefresh={onManualRefresh}
+			viewportMode={viewportMode}
+			onViewportChange={onViewportChange}
 		/>
 	);
 }
