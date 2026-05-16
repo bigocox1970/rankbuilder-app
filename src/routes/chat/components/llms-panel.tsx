@@ -5,6 +5,15 @@ import type { FileType } from '@/api-types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type FieldState = 'green' | 'amber' | 'red' | 'neutral';
+
+const STATE_BORDER: Record<FieldState, string> = {
+	green:   'border-emerald-400/50',
+	amber:   'border-yellow-400/50',
+	red:     'border-red-400/40',
+	neutral: 'border-text-primary/10',
+};
+
 interface LlmsCheck {
 	label: string;
 	passed: boolean;
@@ -233,6 +242,9 @@ export function LlmsPanel({ llmsFile, seoFile, onSendMessage }: LlmsPanelProps) 
 	const { checks, total, max } = useMemo(() => scoreLlmsTxt(content, primaryKeyword, seoPage), [content, primaryKeyword, seoPage]);
 	const failingChecks = checks.filter(c => !c.passed);
 
+	const checksPct = max > 0 ? Math.round((total / max) * 100) : 0;
+	const checksState: FieldState = !content ? 'neutral' : checksPct >= 90 ? 'green' : checksPct >= 70 ? 'amber' : 'red';
+
 	const handleGenerate = () => {
 		onSendMessage(
 			'Please create a `llms.txt` file at the project root following the llmstxt.org standard. ' +
@@ -356,7 +368,7 @@ export function LlmsPanel({ llmsFile, seoFile, onSendMessage }: LlmsPanelProps) 
 				{/* Checklist */}
 				<div>
 					<label className="text-xs font-medium text-text-primary/50 uppercase tracking-wider block mb-2">Checks</label>
-					<div className="rounded-md bg-bg-3 border border-text-primary/10 px-3 py-1">
+					<div className={clsx('rounded-md bg-bg-3 border px-3 py-1', STATE_BORDER[checksState])}>
 						{checks.map((c, i) => <CheckRow key={i} check={c} />)}
 					</div>
 				</div>
