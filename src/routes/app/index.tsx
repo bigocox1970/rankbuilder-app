@@ -786,41 +786,51 @@ export default function AppView() {
 									<CardTitle className="text-base flex-shrink-0">
 										Live Preview
 									</CardTitle>
-									{/* Preview URL action buttons */}
-									{appUrl && (
-										<div className="ml-auto flex items-center gap-0 flex-shrink-0">
+									<div className="ml-auto flex items-center gap-0 flex-shrink-0">
+										{appUrl && (
+											<>
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={handleCopyUrl}
+													className="gap-2"
+												>
+													{urlCopied ? (
+														<>
+															<Check className="h-3 w-3" />
+															Copied!
+														</>
+													) : (
+														<Copy className="h-3 w-3" />
+													)}
+												</Button>
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() =>
+														window.open(
+															appUrl,
+															'_blank',
+														)
+													}
+													className="gap-2"
+												>
+													<ExternalLink className="h-3 w-3" />
+												</Button>
+											</>
+										)}
+										{isOwner && (
 											<Button
 												variant="ghost"
 												size="sm"
-												onClick={handleCopyUrl}
-												className="gap-2"
-															>
-																{urlCopied ? (
-																	<>
-																		<Check className="h-3 w-3" />
-																		Copied!
-																	</>
-																) : (
-																	<>
-																		<Copy className="h-3 w-3" />
-																	</>
-																)}
-															</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() =>
-													window.open(
-														appUrl,
-														'_blank',
-													)
-												}
-												className="gap-2"
+												onClick={() => setIsDeleteDialogOpen(true)}
+												className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+												title="Delete app"
 											>
-												<ExternalLink className="h-3 w-3" />
+												<Trash2 className="h-3 w-3" />
 											</Button>
-										</div>
-									)}
+										)}
+									</div>
 								</div>
 							</CardHeader>
 							<CardContent className="p-0">
