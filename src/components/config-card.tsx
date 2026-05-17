@@ -10,9 +10,11 @@ interface ConfigCardProps {
   agent: AgentDisplayConfig;
   userConfig?: UserModelConfigWithMetadata;
   defaultConfig?: ModelConfig;
+  recommendations?: { gemini?: string; minimax?: string };
   onConfigure: () => void;
   onTest: () => void;
   onReset: () => void;
+  onQuickSelect?: (modelName: string) => void;
   isTesting: boolean;
 }
 
@@ -44,9 +46,11 @@ export function ConfigCard({
   agent,
   userConfig,
   defaultConfig,
+  recommendations,
   onConfigure,
   onTest,
   onReset,
+  onQuickSelect,
   isTesting
 }: ConfigCardProps) {
   const isCustomized = userConfig?.isUserOverride || false;
@@ -152,6 +156,42 @@ export function ConfigCard({
                 </TooltipProvider>
               ) : null}
             </div>
+
+            {/* Quick-pick recommendation chips — one-click swap between recommended Gemini and MiniMax */}
+            {recommendations && onQuickSelect && (recommendations.gemini || recommendations.minimax) && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {recommendations.gemini && (
+                  <button
+                    type="button"
+                    onClick={() => onQuickSelect(recommendations.gemini!)}
+                    disabled={currentModel === recommendations.gemini}
+                    className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+                      currentModel === recommendations.gemini
+                        ? 'bg-blue-500/20 border-blue-400/40 text-blue-300 cursor-default'
+                        : 'border-text-tertiary/30 text-text-tertiary hover:border-blue-400/60 hover:bg-blue-500/10 hover:text-blue-300'
+                    }`}
+                    title={`Switch to ${recommendations.gemini}`}
+                  >
+                    {currentModel === recommendations.gemini && '✓ '}Gemini
+                  </button>
+                )}
+                {recommendations.minimax && (
+                  <button
+                    type="button"
+                    onClick={() => onQuickSelect(recommendations.minimax!)}
+                    disabled={currentModel === recommendations.minimax}
+                    className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+                      currentModel === recommendations.minimax
+                        ? 'bg-accent/20 border-accent/40 text-accent cursor-default'
+                        : 'border-text-tertiary/30 text-text-tertiary hover:border-accent/60 hover:bg-accent/10 hover:text-accent'
+                    }`}
+                    title={`Switch to ${recommendations.minimax}`}
+                  >
+                    {currentModel === recommendations.minimax && '✓ '}MiniMax
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
         

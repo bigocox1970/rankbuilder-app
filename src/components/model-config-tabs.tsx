@@ -77,25 +77,38 @@ export function ModelConfigTabs({
     setIsModalOpen(false);
   };
 
-  // One-click preset that points every text-based agent at MiniMax's M2 models.
-  // M2.5 for code-heavy ops, M2.7 for chat/planning/reasoning. Skips vision/disabled agents.
-  const MINIMAX_PRESET: Record<string, string> = {
-    projectSetup: 'minimax/MiniMax-M2.7',
-    phaseGeneration: 'minimax/MiniMax-M2.7',
-    firstPhaseImplementation: 'minimax/MiniMax-M2.7',
-    phaseImplementation: 'minimax/MiniMax-M2.7',
-    agenticProjectBuilder: 'minimax/MiniMax-M2.7',
-    fileRegeneration: 'minimax/MiniMax-M2.7',
-    realtimeCodeFixer: 'minimax/MiniMax-M2.7',
-    fastCodeFixer: 'minimax/MiniMax-M2.7',
-    templateSelection: 'minimax/MiniMax-M2.7',
-    conversationalResponse: 'minimax/MiniMax-M2.7',
-    blueprint: 'minimax/MiniMax-M2.7',
-    deepDebugger: 'minimax/MiniMax-M2.7',
+  // Per-agent recommendations — one Gemini, one MiniMax. Each card shows both
+  // as one-click chips, and the "Use MiniMax" bulk button uses the minimax slot.
+  const RECOMMENDATIONS: Record<string, { gemini: string; minimax: string }> = {
+    projectSetup:             { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    phaseGeneration:          { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    firstPhaseImplementation: { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    phaseImplementation:      { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    agenticProjectBuilder:    { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    fileRegeneration:         { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    realtimeCodeFixer:        { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    fastCodeFixer:            { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    templateSelection:        { gemini: 'google-ai-studio/gemini-2.5-flash-lite', minimax: 'minimax/MiniMax-M2.7' },
+    conversationalResponse:   { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
+    blueprint:                { gemini: 'google-ai-studio/gemini-2.5-pro',        minimax: 'minimax/MiniMax-M2.7' },
+    deepDebugger:             { gemini: 'google-ai-studio/gemini-2.5-pro',        minimax: 'minimax/MiniMax-M2.7' },
+  };
+
+  const handleQuickSelect = async (agentKey: string, modelName: string) => {
+    try {
+      await onSaveConfig(agentKey, {
+        modelName,
+        fallbackModel: 'google-ai-studio/gemini-2.5-flash',
+        isUserOverride: true,
+      });
+      toast.success(`Switched to ${modelName.split('/').pop()}`);
+    } catch {
+      toast.error('Failed to switch model');
+    }
   };
 
   const handleApplyMiniMaxPreset = async () => {
-    const targets = agentConfigs.filter(c => MINIMAX_PRESET[c.key]);
+    const targets = agentConfigs.filter(c => RECOMMENDATIONS[c.key]?.minimax);
     if (targets.length === 0) {
       toast.info('No applicable agents found');
       return;
@@ -105,7 +118,7 @@ export function ModelConfigTabs({
     for (const config of targets) {
       try {
         await onSaveConfig(config.key, {
-          modelName: MINIMAX_PRESET[config.key],
+          modelName: RECOMMENDATIONS[config.key].minimax,
           fallbackModel: 'google-ai-studio/gemini-2.5-flash',
           isUserOverride: true,
         });
@@ -270,9 +283,11 @@ export function ModelConfigTabs({
                         agent={agent}
                         userConfig={modelConfigs[agent.key]}
                         defaultConfig={defaultConfigs[agent.key]}
+                        recommendations={RECOMMENDATIONS[agent.key]}
                         onConfigure={() => handleConfigureAgent(agent.key)}
                         onTest={() => onTestConfig(agent.key)}
                         onReset={() => onResetConfig(agent.key)}
+                        onQuickSelect={(model) => handleQuickSelect(agent.key, model)}
                         isTesting={testingConfig === agent.key}
                       />
                     ))}
