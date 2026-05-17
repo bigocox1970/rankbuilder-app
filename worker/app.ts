@@ -50,10 +50,16 @@ export function createApp(env: Env): Hono<AppEnv> {
     // CSRF protection using double-submit cookie pattern with proper GET handling
     app.use('*', async (c, next) => {
         const method = c.req.method.toUpperCase();
-        
+
         // Skip for WebSocket upgrades
         const upgradeHeader = c.req.header('upgrade');
         if (upgradeHeader?.toLowerCase() === 'websocket') {
+            return next();
+        }
+
+        // Skip for Stripe webhook — authenticated via stripe-signature header,
+        // verified by stripe.webhooks.constructEventAsync in the controller.
+        if (new URL(c.req.url).pathname === '/api/stripe/webhook') {
             return next();
         }
         
