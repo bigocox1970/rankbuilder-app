@@ -136,14 +136,14 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         temperature: 1,
     },
     projectSetup: {
-        name: AIModels.MINIMAX_M2_5,
+        name: AIModels.MINIMAX_M2_7,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,
         fallbackModel: AIModels.GEMINI_2_5_FLASH,
     },
     phaseGeneration: {
-        name: AIModels.MINIMAX_M2_5,
+        name: AIModels.MINIMAX_M2_7,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,
@@ -179,7 +179,7 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         fallbackModel: AIModels.GEMINI_2_5_FLASH_LITE,
     },
     agenticProjectBuilder: {
-        name: AIModels.MINIMAX_M2_5,
+        name: AIModels.MINIMAX_M2_7,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,
