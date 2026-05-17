@@ -184,28 +184,52 @@ export default function SettingsPage() {
 		if (!user) return;
 		refreshCredits();
 	}, [user, refreshCredits]);
-	// On return from Stripe Checkout, the webhook may take a moment to credit the account.
-	// Poll for up to 10 seconds until the balance changes, then settle.
+	// On return from Stripe Checkout, the webhook may take anywhere from a few seconds to a few
+	// minutes to credit the account (Stripe queue + Cloudflare cold paths). Set clear expectations
+	// upfront, then poll silently — don't alarm the user if it takes a while.
 	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
 		if (params.get('topup') !== 'success') return;
-		const baseline = credits?.balance ?? null;
-		let attempts = 0;
-		const tick = async () => {
-			attempts += 1;
-			const r = await apiClient.getCreditsBalance();
-			if (r.success && r.data) {
-				setCredits(r.data);
-				if (baseline === null || r.data.balance > baseline) return; // settled
-			}
-			if (attempts < 10) setTimeout(tick, 1000);
-		};
-		tick();
-		// One-shot — strip the query param so we don't re-trigger on re-render
+		// One-shot — strip the query param immediately so a re-render can't restart this effect
 		const url = new URL(window.location.href);
 		url.searchParams.delete('topup');
 		window.history.replaceState({}, '', url.toString());
-		toast.success('Top-up successful — credits added.');
+
+		toast.success(
+			'Payment received. Credits usually arrive within a minute or two — your balance will update automatically.',
+			{ duration: 8000 },
+		);
+
+		let cancelled = false;
+
+		(async () => {
+			const baselineRes = await apiClient.getCreditsBalance();
+			if (cancelled) return;
+			const baseline = baselineRes.success && baselineRes.data ? baselineRes.data.balance : 0;
+			if (baselineRes.success && baselineRes.data) setCredits(baselineRes.data);
+
+			// Poll for up to 5 minutes (every 3s). If it takes longer than that, the webhook is
+			// genuinely stuck and the user will notice on next page load anyway — no point alarming.
+			let attempts = 0;
+			const maxAttempts = 100;
+			const tick = async () => {
+				if (cancelled) return;
+				attempts += 1;
+				const r = await apiClient.getCreditsBalance();
+				if (cancelled) return;
+				if (r.success && r.data) {
+					setCredits(r.data);
+					if (r.data.balance > baseline) {
+						toast.success(`+${Math.round(r.data.balance - baseline)} credits added to your balance.`);
+						return;
+					}
+				}
+				if (attempts < maxAttempts) setTimeout(tick, 3000);
+			};
+			tick();
+		})();
+
+		return () => { cancelled = true; };
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 

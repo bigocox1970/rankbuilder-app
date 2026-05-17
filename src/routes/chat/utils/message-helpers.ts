@@ -86,8 +86,17 @@ export function handleRateLimitError(
     if (rateLimitError.suggestions && rateLimitError.suggestions.length > 0) {
         displayMessage += `\n\n💡 Suggestions:\n${rateLimitError.suggestions.map(s => `• ${s}`).join('\n')}`;
     }
-    
-    toast.error(displayMessage);
+
+    const isCreditLimit = rateLimitError.limitType === 'llmCalls';
+    toast.error(displayMessage, {
+        duration: 10000,
+        ...(isCreditLimit && {
+            action: {
+                label: 'Go to Settings',
+                onClick: () => { window.location.href = '/settings'; },
+            },
+        }),
+    });
     
     onDebugMessage?.(
         'error',

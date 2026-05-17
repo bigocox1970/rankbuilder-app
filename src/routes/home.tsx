@@ -206,10 +206,15 @@ export default function Home() {
 			const balance = await apiClient.getCreditsBalance();
 			if (balance.success && balance.data && balance.data.balance < 5) {
 				toast.error(
-					`Out of credits (${balance.data.balance}). Add credits in Settings to continue.`,
-					{ duration: 6000 },
+					`Out of credits (${balance.data.balance}). Add credits to continue.`,
+					{
+						duration: 10000,
+						action: {
+							label: 'Go to Settings',
+							onClick: () => navigate('/settings'),
+						},
+					},
 				);
-				navigate('/settings');
 				return;
 			}
 		} catch {
