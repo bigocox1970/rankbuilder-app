@@ -792,8 +792,9 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             }),
             tool_choice: 'auto' as const
         } : {};
-        // Request usage in final streaming chunk for direct-provider models (e.g. MiniMax)
-        const streamOpts = stream && modelConfig.directOverride
+        // Request usage in final streaming chunk for ALL streaming calls — needed for per-call
+        // credit deduction. OpenAI-compatible (Gemini, MiniMax, etc.) all honour stream_options.
+        const streamOpts = stream
             ? { stream_options: { include_usage: true } }
             : {};
 
@@ -891,6 +892,9 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 if (streamUsage && modelConfig.directOverride) {
                     await trackMiniMaxUsage(modelName, streamUsage.prompt_tokens, streamUsage.completion_tokens, env);
                 }
+                if (streamUsage) {
+                    await RateLimitService.recordActualUsage(env, metadata.userId, modelName, streamUsage.prompt_tokens, streamUsage.completion_tokens);
+                }
 
                 // Assemble toolCalls with preference for index ordering, else first-seen order
                 const assembled = assembleToolCalls(byIndex, byId);
@@ -946,6 +950,9 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             console.log(`Total tokens used in prompt: ${completionUsage?.total_tokens}`);
             if (completionUsage && modelConfig.directOverride) {
                 await trackMiniMaxUsage(modelName, completionUsage.prompt_tokens, completionUsage.completion_tokens, env);
+            }
+            if (completionUsage) {
+                await RateLimitService.recordActualUsage(env, metadata.userId, modelName, completionUsage.prompt_tokens, completionUsage.completion_tokens);
             }
         }
 

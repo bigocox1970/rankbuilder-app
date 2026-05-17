@@ -299,6 +299,52 @@ export class RateLimitService {
 	}
 
 	/**
+	 * Record actual token usage from an LLM call and deduct credits proportionally.
+	 * Called AFTER the LLM call returns. Fair to small prompts, scales for big ones.
+	 *
+	 * Formula: actualCredits = creditCost × max(0.1, (inputTokens + 4×outputTokens) / 30000)
+	 * - 30k-token average call ≈ 1× creditCost (matches old flat behaviour)
+	 * - Tiny "hello" message (≈100 tokens) ≈ 0.1× creditCost (minimum)
+	 * - Big 200k blueprint ≈ 7× creditCost (pays its real share)
+	 * - Output weighted 4× because output is typically 3-5× more expensive than input
+	 *
+	 * Fire-and-forget — never throws. Worst case: balance goes slightly negative.
+	 * Next pre-flight check will catch it.
+	 */
+	static async recordActualUsage(
+		env: Env,
+		userId: string,
+		model: AIModels | string,
+		inputTokens: number,
+		outputTokens: number,
+	): Promise<void> {
+		try {
+			const modelConfig = AI_MODEL_CONFIG[model as AIModels];
+			if (!modelConfig) {
+				this.logger.warn('Unknown model in recordActualUsage', { model });
+				return;
+			}
+			const weighted = inputTokens + (outputTokens * 4);
+			const sizeFactor = Math.max(0.1, weighted / 30000);
+			const actualCredits = modelConfig.creditCost * sizeFactor;
+
+			const creditKey = `user_credits:${userId}`;
+			const rawBalance = await env.VibecoderStore.get(creditKey);
+			const currentBalance = rawBalance === null ? 0 : parseFloat(rawBalance);
+			const newBalance = Math.max(0, currentBalance - actualCredits);
+			await env.VibecoderStore.put(creditKey, String(newBalance));
+
+			this.logger.debug('Recorded actual usage', {
+				userId, model, inputTokens, outputTokens,
+				actualCredits: actualCredits.toFixed(2),
+				newBalance: newBalance.toFixed(2),
+			});
+		} catch (error) {
+			this.logger.error('Failed to record actual usage', { error });
+		}
+	}
+
+	/**
 	 * Deduct credits for a non-inference operation (e.g. Workers AI image generation).
 	 * Throws RateLimitExceededError if balance is insufficient.
 	 */
@@ -357,28 +403,27 @@ export class RateLimitService {
 		const key = this.buildRateLimitKey(RateLimitType.LLM_CALLS, `${identifier}${suffix}`);
 		
 		try {
-            // Increment by model's credit cost
+            // Increment by model's credit cost (for the daily-limit DO counter — coarse safety net)
             const modelConfig = AI_MODEL_CONFIG[model as AIModels];
             const incrementBy = modelConfig.creditCost;
 
-            // ── Credit pool gate (purchased credits) ──
-            // Pre-check balance against this call's cost. Deduct atomically(ish) before the call.
-            // Skipped for BYOK/CF-connected users (handled by the early returns above).
+            // ── Credit pool pre-flight gate ──
+            // Just verify the user has > 0 credits. Actual deduction happens after the call
+            // in recordActualUsage() based on real token usage. This way "hello" doesn't cost
+            // the same as a 50-page prompt.
             const creditKey = `user_credits:${userId}`;
             const rawBalance = await env.VibecoderStore.get(creditKey);
             const currentBalance = rawBalance === null ? 0 : parseFloat(rawBalance);
-            if (currentBalance < incrementBy) {
-                this.logger.warn('Out of credits', { userId, balance: currentBalance, required: incrementBy, model });
+            if (currentBalance < 1) {
+                this.logger.warn('Out of credits (pre-flight)', { userId, balance: currentBalance, model });
                 throw new RateLimitExceededError(
-                    `Out of credits — you need ${incrementBy} but only have ${Math.floor(currentBalance)}. Top up to continue.`,
+                    `Out of credits. Top up to continue.`,
                     RateLimitType.LLM_CALLS,
                     undefined,
                     undefined,
                     ['Go to Settings → Add credits, or upgrade to Pro for 1,500 credits/month.'],
                 );
             }
-            const newBalance = Math.max(0, currentBalance - incrementBy);
-            await env.VibecoderStore.put(creditKey, String(newBalance));
 
 			const result = await this.enforce(env, key, config, RateLimitType.LLM_CALLS, incrementBy);
 
