@@ -70,14 +70,31 @@ function TopUpButton({
 	highlighted = false,
 	bestValue = false,
 }: {
-	amount: string;
+	amount: '10' | '20' | '50';
 	subtitle: string;
 	highlighted?: boolean;
 	bestValue?: boolean;
 }) {
+	const [loading, setLoading] = useState(false);
+	const handleClick = async () => {
+		setLoading(true);
+		try {
+			const result = await apiClient.createTopUpSession(amount);
+			if (result.success && result.data?.url) {
+				window.location.href = result.data.url;
+			} else {
+				toast.error('Could not start checkout. Please try again.');
+			}
+		} catch {
+			toast.error('Could not start checkout. Please try again.');
+		} finally {
+			setLoading(false);
+		}
+	};
 	return (
 		<button
-			onClick={() => toast.info('Credit top-ups coming soon.')}
+			disabled={loading}
+			onClick={handleClick}
 			className={
 				bestValue
 					? 'relative flex flex-col items-start px-4 py-3 rounded-lg border border-accent/60 bg-accent/8 hover:border-accent hover:bg-accent/15 transition-colors cursor-pointer group min-w-[120px]'
@@ -86,8 +103,8 @@ function TopUpButton({
 						: 'relative flex flex-col items-start px-4 py-3 rounded-lg border border-bg-4 bg-bg-2 hover:border-accent/60 hover:bg-accent/5 transition-colors cursor-pointer group min-w-[120px]'
 			}
 		>
-			<span className={bestValue ? 'text-xl font-bold text-accent' : 'text-xl font-bold text-text-primary group-hover:text-accent transition-colors'}>{amount}</span>
-			<span className="text-xs text-text-tertiary mt-1">{subtitle}</span>
+			<span className={bestValue ? 'text-xl font-bold text-accent' : 'text-xl font-bold text-text-primary group-hover:text-accent transition-colors'}>£{amount}</span>
+			<span className="text-xs text-text-tertiary mt-1">{loading ? 'Loading…' : subtitle}</span>
 		</button>
 	);
 }
@@ -155,6 +172,15 @@ export default function SettingsPage() {
 		}
 	};
 
+	// Credit balance
+	const [credits, setCredits] = useState<{ balance: number; buildCost: number } | null>(null);
+	useEffect(() => {
+		if (!user) return;
+		apiClient.getCreditsBalance()
+			.then(r => { if (r.success && r.data) setCredits(r.data); })
+			.catch(() => { /* ignore */ });
+	}, [user]);
+
 	// Image generation toggle
 	const [imageGenEnabled, setImageGenEnabled] = useState<boolean>(() => {
 		try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; }
@@ -166,7 +192,7 @@ export default function SettingsPage() {
 
 	// User plan
 	const [planData, setPlanData] = useState<UserPlanData | null>(null);
-	const [planLoading, setPlanLoading] = useState(true);
+	const [, setPlanLoading] = useState(true);
 	const [billingLoading, setBillingLoading] = useState(false);
 
 	useEffect(() => {
@@ -350,94 +376,77 @@ export default function SettingsPage() {
 							</div>
 						</CardHeader>
 						<CardContent className="px-6 py-5 space-y-5">
-							{planLoading ? (
-								<div className="flex items-center gap-2">
-									<Settings className="h-4 w-4 animate-spin text-text-tertiary" />
-									<span className="text-sm text-text-tertiary">Loading plan info...</span>
-								</div>
-							) : planData?.plan === 'pro' ? (
-								<>
-									{/* Pro hero — prominent active-plan treatment */}
-									<div className="rounded-lg bg-gradient-to-br from-accent/15 via-accent/8 to-transparent border border-accent/40 p-5">
-										<div className="flex items-start justify-between gap-4 flex-wrap">
-											<div className="flex items-center gap-3">
-												<div className="size-10 rounded-full bg-accent/20 flex items-center justify-center">
-													<Sparkles className="size-5 text-accent" />
-												</div>
-												<div>
-													<div className="flex items-center gap-2">
-														<span className="text-lg font-bold text-text-primary">Pro</span>
-														<Badge className="bg-accent text-black text-[10px] px-2 py-0 font-bold uppercase tracking-wider">Active</Badge>
-													</div>
-													<p className="text-xs text-text-tertiary mt-0.5">Priority AI models · Premium image generation · Priority support</p>
-												</div>
-											</div>
-											<Button
-												variant="outline"
-												size="sm"
-												className="border-accent/40 hover:border-accent hover:bg-accent/10"
-												disabled={billingLoading}
-												onClick={handleManageBilling}
-											>
-												Manage subscription
-											</Button>
-										</div>
-									</div>
-
-									<Separator />
-
-									{/* Top-up credits */}
-									<div className="space-y-2">
-										<div className="flex items-center gap-2">
-											<Zap className="size-4 text-text-secondary" />
-											<p className="text-sm font-medium text-text-primary">Top up credits</p>
-										</div>
-										<p className="text-xs text-text-tertiary">
-											Need more this month? Add credits to your account. They never expire.
-										</p>
-										<div className="flex flex-wrap gap-3 pt-1">
-											<TopUpButton amount="£10" subtitle="Starter pack" />
-											<TopUpButton amount="£20" subtitle="Most popular" highlighted />
-											<TopUpButton amount="£50" subtitle="Best value" bestValue />
-										</div>
-									</div>
-								</>
-							) : (
-								<>
-									{/* Free state */}
+							{/* Credit balance */}
+							<div className="rounded-lg bg-gradient-to-br from-accent/15 via-accent/8 to-transparent border border-accent/40 p-5">
+								<div className="flex items-start justify-between gap-4 flex-wrap">
 									<div className="flex items-center gap-3">
-										<Badge variant="secondary" className="text-sm px-3 py-1">Free</Badge>
-										<span className="text-sm text-text-secondary">
-											Standard AI models · Limited daily usage
-										</span>
-									</div>
-
-									<Separator />
-
-									<div className="rounded-lg bg-gradient-to-br from-accent/10 to-transparent border border-accent/30 p-5">
-										<div className="flex items-start justify-between gap-4 flex-wrap">
-											<div className="flex items-start gap-3 flex-1 min-w-0">
-												<div className="size-10 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
-													<Sparkles className="size-5 text-accent" />
-												</div>
-												<div className="min-w-0">
-													<p className="text-base font-semibold text-text-primary">Upgrade to Pro</p>
-													<p className="text-xs text-text-tertiary mt-0.5">Priority AI models, premium image generation, priority support. Top up credits anytime.</p>
-													<p className="text-sm font-medium text-accent mt-2">£10 / month</p>
-												</div>
-											</div>
-											<Button
-												size="sm"
-												className="bg-accent text-black hover:bg-accent/90"
-												disabled={billingLoading}
-												onClick={handleUpgrade}
-											>
-												Upgrade
-											</Button>
+										<div className="size-10 rounded-full bg-accent/20 flex items-center justify-center">
+											<Zap className="size-5 text-accent" />
+										</div>
+										<div>
+											<p className="text-xs uppercase tracking-wider text-text-tertiary">Credit balance</p>
+											<p className="text-2xl font-bold text-text-primary">
+												{credits === null ? '—' : credits.balance.toLocaleString()}
+											</p>
+											<p className="text-xs text-text-tertiary mt-0.5">
+												{credits === null ? 'Loading…' : `${credits.buildCost} credits per new app`}
+											</p>
 										</div>
 									</div>
-								</>
+									{planData?.plan === 'pro' && (
+										<Button
+											variant="outline"
+											size="sm"
+											className="border-accent/40 hover:border-accent hover:bg-accent/10"
+											disabled={billingLoading}
+											onClick={handleManageBilling}
+										>
+											Manage subscription
+										</Button>
+									)}
+								</div>
+							</div>
+
+							<Separator />
+
+							{/* Pro subscription upsell — only when NOT a Pro subscriber */}
+							{planData?.plan !== 'pro' && (
+								<div className="rounded-lg bg-gradient-to-br from-accent/10 to-transparent border border-accent/30 p-5">
+									<div className="flex items-start justify-between gap-4 flex-wrap">
+										<div className="flex items-start gap-3 flex-1 min-w-0">
+											<div className="size-10 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+												<Sparkles className="size-5 text-accent" />
+											</div>
+											<div className="min-w-0">
+												<p className="text-base font-semibold text-text-primary">Pro · best value</p>
+												<p className="text-xs text-text-tertiary mt-0.5">1,500 credits every month, automatically. 50% more credits than the same in top-ups.</p>
+												<p className="text-sm font-medium text-accent mt-2">£20 / month</p>
+											</div>
+										</div>
+										<Button
+											size="sm"
+											className="bg-accent text-black hover:bg-accent/90"
+											disabled={billingLoading}
+											onClick={handleUpgrade}
+										>
+											Upgrade
+										</Button>
+									</div>
+								</div>
 							)}
+
+							<div className="space-y-2">
+								<div className="flex items-center gap-2">
+									<Sparkles className="size-4 text-text-secondary" />
+									<p className="text-sm font-medium text-text-primary">Or buy a top-up</p>
+								</div>
+								<p className="text-xs text-text-tertiary">One-off credit packs. Never expire.</p>
+								<div className="flex flex-wrap gap-3 pt-1">
+									<TopUpButton amount="10" subtitle="400 credits" />
+									<TopUpButton amount="20" subtitle="1,000 credits" highlighted />
+									<TopUpButton amount="50" subtitle="2,500 credits" bestValue />
+								</div>
+							</div>
 						</CardContent>
 					</Card>
 

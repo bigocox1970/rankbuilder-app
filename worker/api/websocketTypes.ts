@@ -118,6 +118,10 @@ type ImageGeneratingMessage = {
     total: number;
 };
 
+type PongMessage = {
+    type: 'pong';
+};
+
 type CommandExecutingMessage = {
 	type: 'command_executing';
 	message: string;
@@ -643,7 +647,8 @@ export type WebSocketMessage =
 	| VaultLockedMessage
 	| ImagesGeneratedMessage
     | ImageGeneratingMessage
-	| VaultRequiredMessage;
+	| VaultRequiredMessage
+	| PongMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

@@ -11,6 +11,9 @@ import {
   ChatAnalyticsData,
   TimeRange,
   CloudflareAnalyticsResponse,
+  CloudflareBreakdownResponse,
+  ChatBreakdownData,
+  ChatBreakdownRow,
   GraphQLQueryVariables,
   GraphQLQuery,
   QueryResult,
@@ -374,6 +377,93 @@ export class AiGatewayAnalyticsService {
     return {
       ...analyticsData,
       chatId
+    };
+  }
+
+  /**
+   * Get per-model breakdown for a single chat. Used for credit-cost benchmarking.
+   * Groups by model + provider dimensions, filtered to one chatId via metadata.
+   */
+  async getChatBreakdown(chatId: string, days?: number): Promise<ChatBreakdownData> {
+    this.logger.info('Getting chat breakdown', { chatId, days: days || '30 days (default)' });
+
+    const timeRange = this.getTimeRange(days);
+    const query: GraphQLQuery = {
+      operationName: null,
+      variables: {
+        accountTag: this.config.accountId,
+        gateway: this.config.gateway,
+        start: timeRange.start,
+        end: timeRange.end,
+        limit: 100,
+      },
+      query: `{
+        viewer {
+          scope: accounts(filter: {accountTag: $accountTag}) {
+            rows: aiGatewayRequestsAdaptiveGroups(limit: $limit, filter: {gateway: $gateway, metadataValues_has: "${chatId}", datetimeHour_geq: $start, datetimeHour_leq: $end}) {
+              count
+              sum {
+                cost
+                uncachedTokensIn
+                uncachedTokensOut
+                cachedTokensIn
+                cachedTokensOut
+              }
+              dimensions {
+                model
+                provider
+              }
+            }
+          }
+        }
+      }`,
+    };
+
+    const response = await fetch(this.config.graphqlEndpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.config.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(query),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new AnalyticsError(`HTTP ${response.status}: ${errorText}`, 'HTTP_ERROR', response.status);
+    }
+
+    const data = await response.json() as CloudflareBreakdownResponse;
+    if (data.errors && data.errors.length > 0) {
+      const e = data.errors[0];
+      throw new AnalyticsError(e.message || 'GraphQL error', e.extensions?.code || 'GRAPHQL_ERROR', 500);
+    }
+
+    const rows = data.data?.viewer?.scope?.[0]?.rows ?? [];
+    const byModel: ChatBreakdownRow[] = rows.map(r => ({
+      model: r.dimensions.model,
+      provider: r.dimensions.provider,
+      count: r.count,
+      cost: r.sum.cost,
+      tokensIn: r.sum.uncachedTokensIn + r.sum.cachedTokensIn,
+      tokensOut: r.sum.uncachedTokensOut + r.sum.cachedTokensOut,
+    })).sort((a, b) => b.cost - a.cost);
+
+    const totals = byModel.reduce(
+      (acc, r) => ({
+        totalRequests: acc.totalRequests + r.count,
+        totalCost: acc.totalCost + r.cost,
+        tokensIn: acc.tokensIn + r.tokensIn,
+        tokensOut: acc.tokensOut + r.tokensOut,
+      }),
+      { totalRequests: 0, totalCost: 0, tokensIn: 0, tokensOut: 0 },
+    );
+
+    return {
+      chatId,
+      ...totals,
+      byModel,
+      timeRange,
     };
   }
 

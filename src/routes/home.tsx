@@ -3,6 +3,7 @@ import { ArrowRight, Info } from 'react-feather';
 import { Loader2, LayoutGrid, List, Code2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '@/contexts/auth-context';
+import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { ProjectModeSelector, type ProjectModeOption } from '../components/project-mode-selector';
 import { MAX_AGENT_QUERY_LENGTH, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type SiteContentPlan } from '@/api-types';
@@ -162,7 +163,7 @@ export default function Home() {
 		clearImages();
 	}, [buildNavigationUrl, navigate, clearImages]);
 
-	const handleCreateApp = (query: string, mode: ProjectType) => {
+	const handleCreateApp = async (query: string, mode: ProjectType) => {
 		if (query.length > MAX_AGENT_QUERY_LENGTH) {
 			toast.error(
 				`Prompt too large (${query.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`,
@@ -196,6 +197,24 @@ export default function Home() {
 
 		if (!limitCheck.canProceed) {
 			setShowLimitDialog(limitCheck.dialogComponent || null);
+			return;
+		}
+
+		// Credit gate: each build deducts credits up-front. Insufficient → prompt top-up.
+		try {
+			const credit = await apiClient.consumeBuildCredits();
+			if (!credit.success || !credit.data?.consumed) {
+				const balance = credit.data?.balance ?? 0;
+				const cost = credit.data?.buildCost ?? 50;
+				toast.error(
+					`Not enough credits (you have ${balance}, you need ${cost} to start a new app). Add credits in Settings to continue.`,
+					{ duration: 6000 },
+				);
+				navigate('/settings');
+				return;
+			}
+		} catch {
+			toast.error('Could not verify credits. Please try again.');
 			return;
 		}
 

@@ -2,12 +2,16 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { initSentry } from './utils/sentry';
+import { installChunkReloadGuard } from './utils/chunk-reload';
 
 import { routes } from './routes.ts';
 import './index.css';
 
 // Initialize Sentry before rendering
 initSentry();
+
+// Catch stale-chunk 404s after a fresh deploy and trigger a single auto-reload.
+installChunkReloadGuard();
 
 // Type for React Router hydration data  
 import type { RouterState } from 'react-router';

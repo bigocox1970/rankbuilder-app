@@ -77,6 +77,9 @@ declare namespace Cloudflare {
 		STRIPE_PUBLISHABLE_KEY: string;
 		STRIPE_WEBHOOK_SECRET: string;
 		STRIPE_PRO_PRICE_ID: string;
+		STRIPE_TOPUP_PRICE_10: string;
+		STRIPE_TOPUP_PRICE_20: string;
+		STRIPE_TOPUP_PRICE_50: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

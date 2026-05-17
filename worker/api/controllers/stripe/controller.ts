@@ -22,6 +22,31 @@ const PRO_KV_CONFIG = JSON.stringify({
     },
 });
 
+// Credit packs (frontend amount → KV credit count)
+const TOPUP_PACKS: Record<string, { credits: number; label: string }> = {
+    '10': { credits: 400, label: 'Top-up · 400 credits' },
+    '20': { credits: 1000, label: 'Top-up · 1,000 credits' },
+    '50': { credits: 2500, label: 'Top-up · 2,500 credits' },
+};
+
+// Pro subscription monthly credit refresh (added each renewal period)
+const PRO_MONTHLY_CREDITS = 1500;
+
+function topupPriceId(env: Env, amount: '10' | '20' | '50'): string | undefined {
+    if (amount === '10') return env.STRIPE_TOPUP_PRICE_10;
+    if (amount === '20') return env.STRIPE_TOPUP_PRICE_20;
+    if (amount === '50') return env.STRIPE_TOPUP_PRICE_50;
+    return undefined;
+}
+
+async function addCredits(env: Env, userId: string, amount: number): Promise<number> {
+    const key = `user_credits:${userId}`;
+    const current = parseInt((await env.VibecoderStore.get(key)) ?? '0', 10);
+    const next = current + amount;
+    await env.VibecoderStore.put(key, String(next));
+    return next;
+}
+
 function getStripe(env: Env): Stripe {
     return new Stripe(env.STRIPE_SECRET_KEY, {
         httpClient: Stripe.createFetchHttpClient(),
@@ -80,6 +105,72 @@ export class StripeController extends BaseController {
             logger.error('Error creating checkout session', error);
             return StripeController.createErrorResponse(
                 error instanceof Error ? error.message : 'Failed to create checkout session',
+                500,
+            );
+        }
+    }
+
+    /**
+     * POST /api/stripe/topup
+     * One-time credit purchase. Body: { amount: '10' | '20' | '50' }
+     */
+    static async createTopUpSession(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        const user = context.user;
+        if (!user) {
+            return StripeController.createErrorResponse('Authentication required', 401);
+        }
+
+        const body = await request.json().catch(() => ({})) as { amount?: string };
+        const amount = body.amount;
+        if (amount !== '10' && amount !== '20' && amount !== '50') {
+            return StripeController.createErrorResponse('Invalid top-up amount', 400);
+        }
+        const priceId = topupPriceId(env, amount);
+        if (!priceId) {
+            return StripeController.createErrorResponse('Top-up price not configured', 500);
+        }
+        const pack = TOPUP_PACKS[amount];
+
+        try {
+            const stripe = getStripe(env);
+            const userService = new UserService(env);
+            const dbUser = await userService.findUser({ id: user.id });
+
+            let customerId = dbUser?.stripeCustomerId ?? undefined;
+            if (!customerId) {
+                const customer = await stripe.customers.create({
+                    email: user.email,
+                    metadata: { userId: user.id },
+                });
+                customerId = customer.id;
+                await userService.updateStripeCustomer(user.id, customerId);
+            }
+
+            const appUrl = getAppUrl(env);
+            const session = await stripe.checkout.sessions.create({
+                mode: 'payment',
+                customer: customerId,
+                line_items: [{ price: priceId, quantity: 1 }],
+                success_url: `${appUrl}/settings?topup=success`,
+                cancel_url: `${appUrl}/settings`,
+                client_reference_id: user.id,
+                metadata: {
+                    type: 'topup',
+                    userId: user.id,
+                    credits: String(pack.credits),
+                },
+            });
+
+            return StripeController.createSuccessResponse({ url: session.url });
+        } catch (error) {
+            logger.error('Error creating top-up session', error);
+            return StripeController.createErrorResponse(
+                error instanceof Error ? error.message : 'Failed to create top-up session',
                 500,
             );
         }
@@ -164,6 +255,17 @@ export class StripeController extends BaseController {
                     const userId = session.client_reference_id;
                     if (!userId) break;
 
+                    // Top-up purchase (one-time payment)
+                    if (session.metadata?.type === 'topup') {
+                        const credits = parseInt(session.metadata.credits ?? '0', 10);
+                        if (credits > 0) {
+                            const newBalance = await addCredits(env, userId, credits);
+                            logger.info('Credits added via top-up', { userId, credits, newBalance });
+                        }
+                        break;
+                    }
+
+                    // Subscription checkout (recurring) — initial Pro signup grants first month's credits
                     const customerId = typeof session.customer === 'string'
                         ? session.customer
                         : session.customer?.id ?? null;
@@ -176,8 +278,29 @@ export class StripeController extends BaseController {
                         subscriptionId: subscriptionId ?? undefined,
                         status: 'active',
                     });
-                    await env.VibecoderStore.put(`user_config:${userId}`, PRO_KV_CONFIG);
-                    logger.info('User upgraded to Pro via checkout', { userId });
+                    const newBalance = await addCredits(env, userId, PRO_MONTHLY_CREDITS);
+                    logger.info('Pro subscription started, monthly credits granted', { userId, credits: PRO_MONTHLY_CREDITS, newBalance });
+                    break;
+                }
+
+                case 'invoice.payment_succeeded': {
+                    const invoice = event.data.object as Stripe.Invoice;
+                    // Only credit on actual monthly renewals (not the initial signup, which is handled by checkout.session.completed)
+                    if (invoice.billing_reason !== 'subscription_cycle') break;
+
+                    const customerId = typeof invoice.customer === 'string'
+                        ? invoice.customer
+                        : invoice.customer?.id ?? null;
+                    if (!customerId) break;
+
+                    const customer = await stripe.customers.retrieve(customerId);
+                    if (customer.deleted) break;
+
+                    const userId = (customer as Stripe.Customer).metadata?.userId;
+                    if (!userId) break;
+
+                    const newBalance = await addCredits(env, userId, PRO_MONTHLY_CREDITS);
+                    logger.info('Pro subscription renewed, monthly credits granted', { userId, credits: PRO_MONTHLY_CREDITS, newBalance });
                     break;
                 }
 

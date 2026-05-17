@@ -188,7 +188,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
         } = deps;
 
         // Log messages except for frequent ones
-        if (message.type !== 'file_chunk_generated' && message.type !== 'cf_agent_state' && message.type.length <= 50) {
+        if (message.type !== 'file_chunk_generated' && message.type !== 'cf_agent_state' && message.type !== 'pong' && message.type.length <= 50) {
             logger.info('received message', message.type, message);
             onDebugMessage?.('websocket',
                 `${message.type}`,
@@ -1141,6 +1141,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'deterministic_code_fix_completed':
             case 'model_configs_info':
             case 'terminal_command':
+            case 'pong':
                 break;
 
             default: {

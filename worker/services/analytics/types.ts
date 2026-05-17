@@ -91,6 +91,64 @@ export interface ChatAnalyticsData extends AnalyticsData {
 }
 
 /**
+ * Per-model row in a chat-scoped breakdown
+ */
+export interface ChatBreakdownRow {
+  model: string;
+  provider: string;
+  count: number;
+  cost: number;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+/**
+ * Chat breakdown: total plus per-model rows
+ */
+export interface ChatBreakdownData {
+  chatId: string;
+  totalRequests: number;
+  totalCost: number;
+  tokensIn: number;
+  tokensOut: number;
+  byModel: ChatBreakdownRow[];
+  timeRange: TimeRange;
+}
+
+/**
+ * Raw GraphQL response for breakdown queries (dimensions on model + provider)
+ */
+export interface CloudflareBreakdownResponse {
+  data: {
+    viewer: {
+      scope: Array<{
+        rows: Array<{
+          count: number;
+          sum: {
+            cost: number;
+            uncachedTokensIn: number;
+            uncachedTokensOut: number;
+            cachedTokensIn: number;
+            cachedTokensOut: number;
+          };
+          dimensions: {
+            model: string;
+            provider: string;
+          };
+        }>;
+      }>;
+    };
+  };
+  errors?: Array<{
+    message: string;
+    path?: string;
+    extensions?: {
+      code: string;
+    };
+  }>;
+}
+
+/**
  * Analytics service configuration
  */
 export interface AnalyticsConfig {

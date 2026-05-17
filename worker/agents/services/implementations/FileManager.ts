@@ -7,6 +7,7 @@ import { BaseProjectState, FileState } from 'worker/agents/core/state';
 import { TemplateDetails } from '../../../services/sandbox/sandboxTypes';
 import { GitVersionControl } from 'worker/agents/git';
 import { isFileModifiable } from '../../../services/sandbox/utils';
+import { sanitizeLucideIconsInFiles } from '../../utils/sanitizeLucideIcons';
 
 /**
  * Manages file operations for code generation
@@ -102,10 +103,15 @@ export class FileManager implements IFileManager {
         const templateDetails = this.getTemplateDetailsFunc();
         const dontTouchFiles = templateDetails?.dontTouchFiles || new Set<string>();
 
+        // Strip hallucinated Lucide icon names from any HTML content before
+        // it lands in state or git. Idempotent for files that don't use
+        // data-lucide or only use valid names, so safe on every save path.
+        const sanitized = sanitizeLucideIconsInFiles(files);
+
         const filesMap = { ...this.stateManager.getState().generatedFilesMap };
         const fileStates: FileState[] = [];
 
-        for (const file of files) {
+        for (const file of sanitized) {
             if (!isFileModifiable(file.filePath, dontTouchFiles).allowed && !overwrite) {
                 console.warn(`[FileManager] Skipping protected file ${file.filePath}`);
                 continue;

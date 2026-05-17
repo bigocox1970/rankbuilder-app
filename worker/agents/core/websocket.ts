@@ -28,8 +28,16 @@ export async function handleWebSocketMessage(
     message: string
 ): Promise<void> {
     try {
-        logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
         const parsedMessage = JSON.parse(message) as IncomingWebSocketMessage;
+
+        // Fast-path heartbeat: don't log, don't touch any state — just reply.
+        // The point is to keep traffic on the WS so CF's edge doesn't drop it as idle.
+        if (parsedMessage.type === WebSocketMessageRequests.PING) {
+            sendToConnection(connection, WebSocketMessageResponses.PONG, {});
+            return;
+        }
+
+        logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
 
         switch (parsedMessage.type) {
             case WebSocketMessageRequests.SESSION_INIT: {

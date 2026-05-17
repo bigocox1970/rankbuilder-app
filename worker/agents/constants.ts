@@ -88,6 +88,9 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
 
     IMAGES_GENERATED: 'images_generated',
     IMAGE_GENERATING: 'image_generating',
+
+    // Keepalive
+    PONG: 'pong',
 } as const satisfies Record<string, WebSocketMessageType>;
 
 // WebSocket message types
@@ -122,6 +125,9 @@ export const WebSocketMessageRequests = {
     // Vault session sync (SK sent to vault WebSocket, only sessionId here)
     VAULT_UNLOCKED: 'vault_unlocked',
     VAULT_LOCKED: 'vault_locked',
+
+    // Keepalive heartbeat sent by the client every ~25s so CF's edge doesn't drop the WS as idle.
+    PING: 'ping',
 };
 
 export const PREVIEW_EXPIRED_ERROR = 'Preview expired, attempting redeploy. Please try again after a minute or refresh the page';

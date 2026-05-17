@@ -68,10 +68,10 @@ export class PlanController extends BaseController {
         request: Request,
         env: Env,
         _ctx: ExecutionContext,
-        _context: RouteContext,
+        context: RouteContext,
     ): Promise<Response> {
         try {
-            const body = await request.json() as { description?: string; keywords?: string[] };
+            const body = await request.json() as { description?: string; keywords?: string[]; agentId?: string };
             const description = (body.description ?? '').trim();
             if (!description) {
                 return Response.json({ error: 'description is required' }, { status: 400 });
@@ -86,25 +86,36 @@ export class PlanController extends BaseController {
 
             const prompt = buildPlanPrompt(description, keywords);
 
-            const geminiResponse = await fetch(
-                'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`,
-                    },
-                    body: JSON.stringify({
-                        model: 'gemini-2.5-flash-lite',
-                        messages: [
-                            { role: 'system', content: PLAN_SYSTEM_PROMPT },
-                            { role: 'user', content: prompt },
-                        ],
-                        temperature: 0.7,
-                        max_tokens: 2048,
-                    }),
-                }
-            );
+            const gatewayBase = (env.CLOUDFLARE_AI_GATEWAY_URL
+                || `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.CLOUDFLARE_AI_GATEWAY}`).replace(/\/+$/, '');
+            const planUrl = `${gatewayBase}/google-ai-studio/v1beta/openai/chat/completions`;
+
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'cf-aig-metadata': JSON.stringify({
+                    chatId: body.agentId ?? 'pre-agent',
+                    userId: context.user?.id ?? 'anonymous',
+                    actionKey: 'planGeneration',
+                }),
+            };
+            if (env.CLOUDFLARE_AI_GATEWAY_TOKEN) {
+                headers['cf-aig-authorization'] = `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`;
+            }
+
+            const geminiResponse = await fetch(planUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash-lite',
+                    messages: [
+                        { role: 'system', content: PLAN_SYSTEM_PROMPT },
+                        { role: 'user', content: prompt },
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 2048,
+                }),
+            });
 
             if (!geminiResponse.ok) {
                 const errText = await geminiResponse.text();

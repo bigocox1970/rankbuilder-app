@@ -1320,6 +1320,22 @@ class ApiClient {
 		return this.request<StripePortalData>('/api/stripe/portal', { method: 'POST' });
 	}
 
+	async createTopUpSession(amount: '10' | '20' | '50'): Promise<ApiResponse<StripeCheckoutData>> {
+		return this.request<StripeCheckoutData>('/api/stripe/topup', {
+			method: 'POST',
+			body: JSON.stringify({ amount }),
+			headers: { 'Content-Type': 'application/json' },
+		});
+	}
+
+	async getCreditsBalance(): Promise<ApiResponse<{ balance: number; buildCost: number }>> {
+		return this.request<{ balance: number; buildCost: number }>('/api/credits/balance');
+	}
+
+	async consumeBuildCredits(): Promise<ApiResponse<{ consumed: boolean; balance: number; buildCost: number; reason?: string }>> {
+		return this.request<{ consumed: boolean; balance: number; buildCost: number; reason?: string }>('/api/credits/consume-build', { method: 'POST' });
+	}
+
 	/**
 	 * Get paginated user list with usage stats
 	 */

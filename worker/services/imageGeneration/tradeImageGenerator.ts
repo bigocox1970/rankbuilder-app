@@ -94,13 +94,22 @@ function base64ToBytes(base64: string): Uint8Array {
     return bytes;
 }
 
-async function runFlux(env: Env, prompt: string, width: number, height: number): Promise<Uint8Array> {
+function gatewayOpts(env: Env, agentId: string, actionKey: string) {
+    return {
+        gateway: {
+            id: env.CLOUDFLARE_AI_GATEWAY,
+            metadata: { chatId: agentId, actionKey },
+        },
+    } as const;
+}
+
+async function runFlux(env: Env, agentId: string, prompt: string, width: number, height: number): Promise<Uint8Array> {
     const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
         prompt,
         num_steps: 4,
         width,
         height,
-    });
+    }, gatewayOpts(env, agentId, 'imageGeneration.flux'));
 
     if (!response.image) {
         throw new Error('Flux returned no image data');
@@ -109,12 +118,12 @@ async function runFlux(env: Env, prompt: string, width: number, height: number):
     return base64ToBytes(response.image);
 }
 
-async function runPremiumModel(env: Env, prompt: string): Promise<Uint8Array> {
+async function runPremiumModel(env: Env, agentId: string, prompt: string): Promise<Uint8Array> {
     // SDXL produces significantly more detailed and photorealistic results at higher compute cost
     const response = await env.AI.run('@cf/stabilityai/stable-diffusion-xl-base-1.0', {
         prompt,
         num_steps: 20,
-    }) as unknown as ReadableStream<Uint8Array>;
+    }, gatewayOpts(env, agentId, 'imageGeneration.sdxl')) as unknown as ReadableStream<Uint8Array>;
 
     const resp = new Response(response);
     const buffer = await resp.arrayBuffer();
@@ -143,7 +152,7 @@ function extractBusinessContext(query: string): string {
 
 const PROJECT_KEYS = ['project1', 'project2', 'project3', 'project4', 'project5', 'project6'] as const;
 
-async function generateProjectTitles(env: Env, businessContext: string): Promise<string[]> {
+async function generateProjectTitles(env: Env, agentId: string, businessContext: string): Promise<string[]> {
     try {
         const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct' as Parameters<typeof env.AI.run>[0], {
             prompt: `You are helping build a business website. List exactly 6 specific services or project examples for a "${businessContext}" business. Return ONLY a valid JSON array of 6 short titles (3–6 words each). No explanation, no markdown, no extra text — just the JSON array.
@@ -152,7 +161,7 @@ Example for "gardener": ["Turfing and Lawn Edging","Tree Surgery and Pruning","S
 
 For "${businessContext}":`,
             max_tokens: 200,
-        }) as { response: string };
+        }, gatewayOpts(env, agentId, 'imageGeneration.titles')) as { response: string };
 
         const text = (response as { response: string }).response ?? '';
         const match = text.match(/\[[\s\S]*?\]/);
@@ -177,7 +186,7 @@ export async function generateTradeImages(
     try {
         // Generate project card titles first, then use them as image prompts so
         // images match the content the AI will write for each card.
-        const projectTitles = await generateProjectTitles(env, businessContext);
+        const projectTitles = await generateProjectTitles(env, agentId, businessContext);
         logger.info('Project titles for image generation', { projectTitles });
 
         const nonProjectSpecs = IMAGE_SPECS.filter(s => !PROJECT_KEYS.includes(s.key as typeof PROJECT_KEYS[number]));
@@ -192,7 +201,7 @@ export async function generateTradeImages(
             // Hero and about images use generic business-context prompts
             ...nonProjectSpecs.map(async ({ key, promptSuffix, width, height }) => {
                 const prompt = `${PHOTO_PREFIX} ${businessContext}, ${promptSuffix}, ${NO_TEXT}`;
-                const bytes = await runFlux(env, prompt, width, height);
+                const bytes = await runFlux(env, agentId, prompt, width, height);
                 const r2Key = `generated-images/${agentId}/${key}.png`;
                 await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
                     httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },
@@ -204,7 +213,7 @@ export async function generateTradeImages(
             }),
             // Project images generated from the specific card titles
             ...projectSpecs.map(async ({ key, prompt, width, height }) => {
-                const bytes = await runFlux(env, prompt, width, height);
+                const bytes = await runFlux(env, agentId, prompt, width, height);
                 const r2Key = `generated-images/${agentId}/${key}.png`;
                 await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
                     httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },
@@ -247,8 +256,8 @@ export async function regenerateTradeImage(
     const basePrompt = prompt.startsWith(PHOTO_PREFIX) ? prompt : `${PHOTO_PREFIX} ${prompt}`;
     const safePrompt = basePrompt.includes('no watermarks') ? basePrompt : `${basePrompt}, ${NO_TEXT}`;
     const bytes = quality === 'premium'
-        ? await runPremiumModel(env, safePrompt)
-        : await runFlux(env, safePrompt, width, height);
+        ? await runPremiumModel(env, agentId, safePrompt)
+        : await runFlux(env, agentId, safePrompt, width, height);
     const r2Key = `generated-images/${agentId}/${slot}.png`;
 
     await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
@@ -303,7 +312,7 @@ export async function generateTradeImagesFromPlan(
             const safePrompt = prompt.startsWith(PHOTO_PREFIX) ? prompt : `${PHOTO_PREFIX} ${prompt}`;
             const finalPrompt = safePrompt.includes('no watermarks') ? safePrompt : `${safePrompt}, ${NO_TEXT}`;
 
-            const bytes = await runFlux(env, finalPrompt, width, height);
+            const bytes = await runFlux(env, agentId, finalPrompt, width, height);
             const r2Key = `generated-images/${agentId}/${key}.png`;
             await env.TEMPLATES_BUCKET.put(r2Key, bytes, {
                 httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000, immutable' },

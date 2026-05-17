@@ -1,0 +1,87 @@
+/**
+ * Credits Controller
+ * Balance lookup, build-start credit consumption, free-tier grant.
+ */
+
+import { BaseController } from '../baseController';
+import { RouteContext } from '../../types/route-context';
+import { createLogger } from '../../../logger';
+
+const logger = createLogger('CreditsController');
+
+const FREE_SIGNUP_CREDITS = 100;
+const BUILD_COST_CREDITS = 50;
+
+function key(userId: string) {
+    return `user_credits:${userId}`;
+}
+
+async function writeBalance(env: Env, userId: string, balance: number): Promise<void> {
+    await env.VibecoderStore.put(key(userId), String(Math.max(0, balance)));
+}
+
+export class CreditsController extends BaseController {
+    /**
+     * GET /api/credits/balance
+     * Returns current credit balance. Grants free signup credits on first read.
+     */
+    static async getBalance(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        const user = context.user;
+        if (!user) {
+            return CreditsController.createErrorResponse('Authentication required', 401);
+        }
+
+        const raw = await env.VibecoderStore.get(key(user.id));
+        if (raw === null) {
+            // First-time grant
+            await writeBalance(env, user.id, FREE_SIGNUP_CREDITS);
+            logger.info('Free signup credits granted', { userId: user.id, credits: FREE_SIGNUP_CREDITS });
+            return CreditsController.createSuccessResponse({ balance: FREE_SIGNUP_CREDITS, buildCost: BUILD_COST_CREDITS });
+        }
+        return CreditsController.createSuccessResponse({ balance: parseInt(raw, 10), buildCost: BUILD_COST_CREDITS });
+    }
+
+    /**
+     * POST /api/credits/consume-build
+     * Deducts BUILD_COST_CREDITS atomically. Returns insufficient if not enough.
+     */
+    static async consumeBuild(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        const user = context.user;
+        if (!user) {
+            return CreditsController.createErrorResponse('Authentication required', 401);
+        }
+
+        // Read-grant-if-new for first-time builders
+        const raw = await env.VibecoderStore.get(key(user.id));
+        const balance = raw === null ? FREE_SIGNUP_CREDITS : parseInt(raw, 10);
+
+        if (balance < BUILD_COST_CREDITS) {
+            return CreditsController.createSuccessResponse({
+                consumed: false,
+                balance,
+                buildCost: BUILD_COST_CREDITS,
+                reason: 'insufficient_credits',
+            });
+        }
+
+        const newBalance = balance - BUILD_COST_CREDITS;
+        await writeBalance(env, user.id, newBalance);
+        logger.info('Build credits consumed', { userId: user.id, consumed: BUILD_COST_CREDITS, newBalance });
+
+        return CreditsController.createSuccessResponse({
+            consumed: true,
+            balance: newBalance,
+            buildCost: BUILD_COST_CREDITS,
+        });
+    }
+}

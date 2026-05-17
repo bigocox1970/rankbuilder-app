@@ -411,6 +411,36 @@ export class AdminController extends BaseController {
         }
     }
 
+    /**
+     * GET /api/admin/gateway-costs/chat/:chatId
+     * Returns per-model cost breakdown for a single chat (benchmarking).
+     */
+    static async getChatGatewayCosts(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        try {
+            const chatId = context.pathParams.chatId;
+            if (!chatId) {
+                return AdminController.createErrorResponse('chatId is required', 400);
+            }
+            const daysParam = context.queryParams.get('days');
+            const days = daysParam ? Math.max(1, Math.min(30, parseInt(daysParam, 10) || 7)) : 7;
+
+            const analytics = new AiGatewayAnalyticsService(env);
+            const breakdown = await analytics.getChatBreakdown(chatId, days);
+            return AdminController.createSuccessResponse(breakdown);
+        } catch (error) {
+            AdminController.logger.error('Error getting chat breakdown', error);
+            return AdminController.createErrorResponse(
+                error instanceof Error ? error.message : 'Failed to get chat breakdown',
+                500,
+            );
+        }
+    }
+
     private static async readMiniMaxCosts(env: Env, days: number): Promise<MiniMaxCostData | null> {
         const now = new Date();
         const keys = Array.from({ length: days }, (_, i) => {

@@ -24,6 +24,13 @@ export function setupAdminRoutes(app: Hono<AppEnv>): void {
         adaptController(AdminController, AdminController.getGatewayCosts),
     );
 
+    // Per-chat AI Gateway breakdown (benchmarking)
+    app.get(
+        '/api/admin/gateway-costs/chat/:chatId',
+        setAuthLevel(AuthConfig.adminOnly),
+        adaptController(AdminController, AdminController.getChatGatewayCosts),
+    );
+
     // User management
     app.get(
         '/api/admin/users',

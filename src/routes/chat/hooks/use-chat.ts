@@ -332,6 +332,16 @@ export function useChat({
 					}
 				}, 30000);
 
+				// Heartbeat — CF's edge drops idle WS at ~100s. Send a small ping every 25s
+				// while the connection is open so the underlying TCP socket stays alive.
+				let heartbeatId: ReturnType<typeof setInterval> | null = null;
+				const stopHeartbeat = () => {
+					if (heartbeatId !== null) {
+						clearInterval(heartbeatId);
+						heartbeatId = null;
+					}
+				};
+
 				ws.addEventListener('open', () => {
 					// Ignore stale open events
 					if (!shouldReconnectRef.current) {
@@ -339,17 +349,24 @@ export function useChat({
 						return;
 					}
 					if (myAttemptId !== connectAttemptIdRef.current) return;
-					
+
 					clearTimeout(connectionTimeout);
 					logger.info('✅ WebSocket connection established successfully!');
 					connectionStatus.current = 'connected';
-					
+
 					// Reset retry count on successful connection
 					retryCount.current = 0;
-					
+
 					// Clear any pending retry timeouts
 					retryTimeouts.current.forEach(clearTimeout);
 					retryTimeouts.current = [];
+
+					stopHeartbeat();
+					heartbeatId = setInterval(() => {
+						if (ws.readyState === WebSocket.OPEN) {
+							sendWebSocketMessage(ws, 'ping');
+						}
+					}, 25_000);
 
 					// Send success message to user
 					if (isRetry) {
@@ -381,6 +398,7 @@ export function useChat({
 
 				ws.addEventListener('error', (error) => {
 					clearTimeout(connectionTimeout);
+					stopHeartbeat();
 					// Only handle error for the latest attempt and when we should reconnect
 					if (myAttemptId !== connectAttemptIdRef.current) return;
 					if (!shouldReconnectRef.current) return;
@@ -390,6 +408,7 @@ export function useChat({
 
 				ws.addEventListener('close', (event) => {
 					clearTimeout(connectionTimeout);
+					stopHeartbeat();
 					logger.info(
 						`🔌 WebSocket connection closed with code ${event.code}: ${event.reason || 'No reason provided'}`,
 						event,
@@ -403,6 +422,7 @@ export function useChat({
 
 				return function disconnect() {
 					clearTimeout(connectionTimeout);
+					stopHeartbeat();
 					ws.close();
 				};
 			} catch (error) {
