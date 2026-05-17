@@ -235,6 +235,15 @@ export default function Chat() {
 		'editor',
 	);
 
+	// True for the lifetime of the chat session when this chat was opened from
+	// the GitHub-import success redirect. Used so the preview auto-switches as
+	// soon as the boot deploy reports a URL (the phasic isPhase1Complete gate
+	// doesn't fire for imports, which run zero phases).
+	const isGitHubImport = useMemo(
+		() => searchParams.get('github_import') === 'success',
+		[searchParams],
+	);
+
 	// Terminal state
 	// const [terminalLogs, setTerminalLogs] = useState<TerminalLog[]>([]);
 
@@ -571,7 +580,8 @@ export default function Chat() {
 			const shouldSwitch =
 				behaviorType === 'agentic' ||
 				(behaviorType === 'phasic' && isPhase1Complete) ||
-				(isExistingChat && behaviorType !== 'phasic');
+				(isExistingChat && behaviorType !== 'phasic') ||
+				isGitHubImport;
 
 			if (shouldSwitch) {
 				setView('preview');
@@ -585,7 +595,7 @@ export default function Chat() {
 
 		// Update ref for next comparison
 		prevMarkdownCountRef.current = markdownFiles.length;
-	}, [previewUrl, isPhase1Complete, isStaticContent, files, activeFilePath, behaviorType, hasDocumentation, projectType, urlChatId]);
+	}, [previewUrl, isPhase1Complete, isStaticContent, files, activeFilePath, behaviorType, hasDocumentation, projectType, urlChatId, isGitHubImport]);
 
 	useEffect(() => {
 		if (chatId) {

@@ -267,27 +267,32 @@ export class SandboxSdkClient extends BaseSandboxService {
 
         // Generate shell script
         const scriptLines = ['#!/bin/bash'];
-        
+
         for (const { filePath, fileContents } of files) {
-            const utf8Bytes = new TextEncoder().encode(fileContents);
-            
-            // Convert bytes to base64 in chunks to avoid stack overflow
-            const chunkSize = 8192;
-            const base64Chunks: string[] = [];
-            
-            for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
-                const chunk = utf8Bytes.slice(i, i + chunkSize);
-                // Convert chunk to binary string
-                let binaryString = '';
-                for (let j = 0; j < chunk.length; j++) {
-                    binaryString += String.fromCharCode(chunk[j]);
+            // Binary files arrive as `base64:<payload>` strings (from ZipExtractor or
+            // R2-stored GitHub imports). The shell script base64-decodes its embedded
+            // payload, so the existing base64 IS the on-disk bytes — pass it through
+            // directly. UTF-8 encoding it first would write the literal text
+            // "base64:iVBOR..." to disk and break any served image/font.
+            let base64: string;
+            if (fileContents.startsWith('base64:')) {
+                base64 = fileContents.slice('base64:'.length).replace(/\s+/g, '');
+            } else {
+                const utf8Bytes = new TextEncoder().encode(fileContents);
+                // Convert bytes to base64 in chunks to avoid stack overflow
+                const chunkSize = 8192;
+                const base64Chunks: string[] = [];
+                for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+                    const chunk = utf8Bytes.slice(i, i + chunkSize);
+                    let binaryString = '';
+                    for (let j = 0; j < chunk.length; j++) {
+                        binaryString += String.fromCharCode(chunk[j]);
+                    }
+                    base64Chunks.push(btoa(binaryString));
                 }
-                // Encode chunk to base64
-                base64Chunks.push(btoa(binaryString));
+                base64 = base64Chunks.join('');
             }
-            
-            const base64 = base64Chunks.join('');
-            
+
             scriptLines.push(
                 `mkdir -p "$(dirname "${filePath}")" && echo '${base64}' | base64 -d > "${filePath}" && echo "OK:${filePath}" || echo "FAIL:${filePath}"`
             );

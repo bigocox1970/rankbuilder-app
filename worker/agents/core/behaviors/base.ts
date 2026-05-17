@@ -320,12 +320,46 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             isPrivate,
         });
 
+        // Surface what's happening to the user. The cold deploy is ~60-90s
+        // (bun install + first vite boot) and silence in the chat pane reads
+        // as "broken". These three messages narrate the wait.
+        this.broadcast(WebSocketMessageResponses.GITHUB_IMPORT_PROGRESS, {
+            message: `Imported ${repoFullName} (${files.length} files). Booting your preview now — this takes about a minute on first boot while dependencies install.`,
+            step: 'booting',
+        });
+
+        // Schedule mid-flight reassurance in case the deploy takes the full
+        // ~90s. Use a guard so we don't post the "still installing" message
+        // after the deploy has already completed.
+        let deployFinished = false;
+        setTimeout(() => {
+            if (deployFinished) return;
+            this.broadcast(WebSocketMessageResponses.GITHUB_IMPORT_PROGRESS, {
+                message: 'Still installing dependencies… give it another moment.',
+                step: 'installing',
+            });
+        }, 35_000);
+        setTimeout(() => {
+            if (deployFinished) return;
+            this.broadcast(WebSocketMessageResponses.GITHUB_IMPORT_PROGRESS, {
+                message: 'Starting the dev server…',
+                step: 'starting',
+            });
+        }, 70_000);
+
         // Fire-and-forget deploy. Frontend tracks via DEPLOYMENT_* WS events.
         this.deployToSandbox([], false, `Boot imported project: ${repoFullName}`)
             .then(async (result) => {
+                deployFinished = true;
                 this.logger.info('[IMPORT-DIAG] Initial deploy promise resolved', {
                     previewURL: result?.previewURL,
                     sandboxInstanceId: this.state.sandboxInstanceId,
+                });
+                this.broadcast(WebSocketMessageResponses.GITHUB_IMPORT_PROGRESS, {
+                    message: result?.previewURL
+                        ? 'Preview is live — tell me what you want to change.'
+                        : 'Preview boot finished but no URL came back. Try a redeploy if it does not appear.',
+                    step: 'ready',
                 });
                 // Wait a beat for the dev server to either come up or crash,
                 // then dump whatever it printed to the worker log so we can
@@ -349,6 +383,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 }
             })
             .catch((error: unknown) => {
+                deployFinished = true;
                 this.logger.error('[IMPORT-DIAG] Initial deploy promise rejected', { error });
                 this.broadcastError('Imported preview deploy failed', error);
             });

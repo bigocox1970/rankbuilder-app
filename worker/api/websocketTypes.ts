@@ -339,6 +339,12 @@ type GitHubExportErrorMessage = {
 	error: string;
 };
 
+type GitHubImportProgressMessage = {
+	type: 'github_import_progress';
+	message: string;
+	step: 'booting' | 'installing' | 'starting' | 'ready';
+};
+
 type UserSuggestionsProcessingMessage = {
 	type: 'user_suggestions_processing';
 	message: string;
@@ -628,6 +634,7 @@ export type WebSocketMessage =
 	| GitHubExportProgressMessage
 	| GitHubExportCompletedMessage
 	| GitHubExportErrorMessage
+	| GitHubImportProgressMessage
 	| ErrorMessage
     | RateLimitErrorMessage
 	| UserSuggestionsProcessingMessage

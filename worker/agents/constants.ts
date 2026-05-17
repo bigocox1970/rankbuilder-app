@@ -62,6 +62,10 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     GITHUB_EXPORT_PROGRESS: 'github_export_progress',
     GITHUB_EXPORT_COMPLETED: 'github_export_completed',
     GITHUB_EXPORT_ERROR: 'github_export_error',
+
+    // GitHub import boot progress (surfaced as chat AI messages so the user
+    // isn't staring at a silent screen during the ~60-90s cold deploy).
+    GITHUB_IMPORT_PROGRESS: 'github_import_progress',
     
     // Conversational AI messages
     USER_SUGGESTIONS_PROCESSING: 'user_suggestions_processing',

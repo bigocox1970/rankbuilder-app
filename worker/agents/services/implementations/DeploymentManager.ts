@@ -17,6 +17,7 @@ import { validateAndCleanBootstrapCommands } from 'worker/agents/utils/common';
 import { DeploymentTarget } from '../../core/types';
 import { BaseProjectState } from '../../core/state';
 import { resolvePreviewUrl } from '../../../utils/urls';
+import { fetchImportedBinaries } from '../../../services/github/importedBinaries';
 
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
@@ -466,6 +467,18 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         // Determine which files to deploy
         const filesToWrite = this.getFilesToDeploy(files, redeployed);
 
+        // When the sandbox was just (re)created, createNewInstance already wrote
+        // the imported binaries — no need to write them again. When we're writing
+        // a full state snapshot to an existing instance (post-cold-start without
+        // a fresh sandbox), pull the binaries from R2 so the FS isn't missing
+        // image/font assets the components reference.
+        if (filesToWrite.length > 0 && !redeployed && (!files || files.length === 0)) {
+            const importedBinaries = await this.getImportedBinaryFiles();
+            if (importedBinaries.length > 0) {
+                filesToWrite.push(...importedBinaries);
+            }
+        }
+
         // Write files if any
         if (filesToWrite.length > 0) {
             const writeResponse = await this.getClient().writeFiles(
@@ -574,10 +587,14 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         }
 
         // Get latest files
-        const files = this.fileManager.getAllFiles();
+        const stateFiles = this.fileManager.getAllFiles();
+        const importedBinaries = await this.getImportedBinaryFiles();
+        const files = [...stateFiles, ...importedBinaries];
 
         this.getLog().info('Files to deploy', {
-            files: files.map(f => f.filePath)
+            files: files.map(f => f.filePath),
+            stateFileCount: stateFiles.length,
+            importedBinaryCount: importedBinaries.length,
         });
 
         // Create instance
@@ -615,7 +632,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         redeployed: boolean
     ): Array<{ filePath: string; fileContents: string }> {
         const state = this.getState();
-        
+
         // If no files requested or redeploying, use all generated files from state
         if (!requestedFiles || requestedFiles.length === 0 || redeployed) {
             requestedFiles = Object.values(state.generatedFilesMap);
@@ -625,6 +642,29 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             filePath: file.filePath,
             fileContents: file.fileContents
         }));
+    }
+
+    /**
+     * Fetch GitHub-imported binary assets (images, fonts) from R2. They're stored
+     * outside DO state to avoid the 2MB SQLite row limit; they need to be written
+     * to the sandbox filesystem at deploy time so Vite can serve them. Returns
+     * `base64:`-prefixed TemplateFile entries that writeFilesViaScript decodes.
+     */
+    private async getImportedBinaryFiles(): Promise<Array<{ filePath: string; fileContents: string }>> {
+        const state = this.getState();
+        const paths = state.importedBinaryPaths ?? [];
+        if (paths.length === 0) return [];
+        try {
+            const binaries = await fetchImportedBinaries({
+                env: this.env,
+                agentId: state.metadata.agentId,
+                paths,
+            });
+            return binaries.map(b => ({ filePath: b.filePath, fileContents: b.fileContents }));
+        } catch (err) {
+            this.getLog().warn('Failed to fetch imported binaries for deploy', { err });
+            return [];
+        }
     }
     
     /**

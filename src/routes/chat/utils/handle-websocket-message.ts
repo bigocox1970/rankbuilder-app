@@ -917,7 +917,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 sendMessage(createAIMessage('github_export_error', `❌ GitHub export failed: ${message.error}`));
 
                 toast.error(`Error: ${message.error}`);
-                
+
+                break;
+            }
+
+            case 'github_import_progress': {
+                // One message per step. Use a stable id per step so React renders
+                // them as four distinct chat bubbles, not one mutating bubble.
+                sendMessage(createAIMessage(`github_import_${message.step}`, message.message));
                 break;
             }
 
