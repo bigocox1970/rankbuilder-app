@@ -4,12 +4,50 @@ import { AuthButton } from '../auth/auth-button';
 import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
-import { ChevronRight, AlertCircle, Zap } from 'lucide-react';
+import { ChevronRight, AlertCircle, Zap, Coins } from 'lucide-react';
 import { usePlatformStatus } from '@/hooks/use-platform-status';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UsageLimitsBadge } from '../usage-limits-badge';
 import { LovableImportModal } from '../lovable-import-modal';
+import { apiClient } from '@/lib/api-client';
+import { useNavigate, useLocation } from 'react-router';
+
+function CreditBalanceBadge() {
+	const navigate = useNavigate();
+	const location = useLocation();
+	const [balance, setBalance] = useState<number | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		const fetchBalance = async () => {
+			try {
+				const r = await apiClient.getCreditsBalance();
+				if (!cancelled && r.success && r.data) setBalance(r.data.balance);
+			} catch { /* ignore */ }
+		};
+		fetchBalance();
+		// Poll more frequently on chat pages where credits actively deplete
+		const interval = location.pathname.startsWith('/chat/') ? 5000 : 30000;
+		const id = setInterval(fetchBalance, interval);
+		return () => { cancelled = true; clearInterval(id); };
+	}, [location.pathname]);
+
+	const low = balance !== null && balance < 20;
+	return (
+		<button
+			onClick={() => navigate('/settings')}
+			title="Credit balance — click to manage"
+			className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors border ${
+				low
+					? 'text-red-400 border-red-400/40 hover:bg-red-400/10'
+					: 'text-text-primary border-border-primary/50 hover:border-accent/40 hover:text-accent hover:bg-accent/10'
+			}`}
+		>
+			<Coins className="h-3.5 w-3.5" />
+			<span>{balance === null ? '—' : balance.toLocaleString()}</span>
+		</button>
+	);
+}
 
 export function GlobalHeader() {
 	const { user } = useAuth();
@@ -96,6 +134,7 @@ export function GlobalHeader() {
 								variant="inline"
 							/>
 						)} */}
+							{user && <CreditBalanceBadge />}
 							{user && (
 								<UsageLimitsBadge
 									onConnect={() => {
