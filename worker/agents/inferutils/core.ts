@@ -672,6 +672,14 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         // Remove [*.] from model name
         modelName = modelName.replace(/\[.*?\]/, '');
 
+        // For direct-provider calls (not AI Gateway), the API expects the bare
+        // model id (e.g. "MiniMax-Text-01"), not the gateway-style
+        // "minimax/MiniMax-Text-01". Use a separate var so the prefixed name is
+        // still available for provider detection and cost-tracking lookup below.
+        const apiModelName = modelConfig.directOverride && modelName.includes('/')
+            ? modelName.slice(modelName.indexOf('/') + 1)
+            : modelName;
+
         const client = new OpenAI({ apiKey, baseURL: baseURL, defaultHeaders });
         const schemaObj =
             schema && schemaName && !format
@@ -795,7 +803,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 ...extraBody,
                 ...toolsOpts,
                 ...streamOpts,
-                model: modelName,
+                model: apiModelName,
                 messages: messagesToPass as OpenAI.ChatCompletionMessageParam[],
                 max_completion_tokens: maxTokens || 150000,
                 stream: stream ? true : false,
