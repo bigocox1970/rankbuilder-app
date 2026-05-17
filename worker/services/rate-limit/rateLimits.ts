@@ -298,6 +298,33 @@ export class RateLimitService {
 		return remaining > 0;
 	}
 
+	/**
+	 * Deduct credits for a non-inference operation (e.g. Workers AI image generation).
+	 * Throws RateLimitExceededError if balance is insufficient.
+	 */
+	static async deductCredits(
+		env: Env,
+		userId: string,
+		amount: number,
+		opName: string,
+	): Promise<void> {
+		const creditKey = `user_credits:${userId}`;
+		const rawBalance = await env.VibecoderStore.get(creditKey);
+		const currentBalance = rawBalance === null ? 0 : parseFloat(rawBalance);
+		if (currentBalance < amount) {
+			this.logger.warn('Out of credits for operation', { userId, balance: currentBalance, required: amount, opName });
+			throw new RateLimitExceededError(
+				`Out of credits — ${opName} needs ${amount} but you only have ${Math.floor(currentBalance)}. Top up to continue.`,
+				RateLimitType.LLM_CALLS,
+				undefined,
+				undefined,
+				['Go to Settings → Add credits.'],
+			);
+		}
+		const newBalance = Math.max(0, currentBalance - amount);
+		await env.VibecoderStore.put(creditKey, String(newBalance));
+	}
+
 	static async enforceLLMCallsRateLimit(
         env: Env,
 		config: RateLimitSettings,
@@ -333,6 +360,25 @@ export class RateLimitService {
             // Increment by model's credit cost
             const modelConfig = AI_MODEL_CONFIG[model as AIModels];
             const incrementBy = modelConfig.creditCost;
+
+            // ── Credit pool gate (purchased credits) ──
+            // Pre-check balance against this call's cost. Deduct atomically(ish) before the call.
+            // Skipped for BYOK/CF-connected users (handled by the early returns above).
+            const creditKey = `user_credits:${userId}`;
+            const rawBalance = await env.VibecoderStore.get(creditKey);
+            const currentBalance = rawBalance === null ? 0 : parseFloat(rawBalance);
+            if (currentBalance < incrementBy) {
+                this.logger.warn('Out of credits', { userId, balance: currentBalance, required: incrementBy, model });
+                throw new RateLimitExceededError(
+                    `Out of credits — you need ${incrementBy} but only have ${Math.floor(currentBalance)}. Top up to continue.`,
+                    RateLimitType.LLM_CALLS,
+                    undefined,
+                    undefined,
+                    ['Go to Settings → Add credits, or upgrade to Pro for 1,500 credits/month.'],
+                );
+            }
+            const newBalance = Math.max(0, currentBalance - incrementBy);
+            await env.VibecoderStore.put(creditKey, String(newBalance));
 
 			const result = await this.enforce(env, key, config, RateLimitType.LLM_CALLS, incrementBy);
 

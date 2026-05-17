@@ -8,6 +8,7 @@ import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
 import { successResponse } from '../../responses';
+import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import type { SiteContentPlan, SiteTheme, SiteFont } from '../agent/types';
 
 const logger = createLogger('PlanController');
@@ -82,6 +83,15 @@ export class PlanController extends BaseController {
             if (!apiKey) {
                 logger.error('GOOGLE_AI_STUDIO_API_KEY not configured');
                 return Response.json({ error: 'AI not configured' }, { status: 500 });
+            }
+
+            // Credit deduction — plan generation uses Flash Lite (creditCost 0.4 rounded to 1).
+            if (context.user?.id) {
+                try {
+                    await RateLimitService.deductCredits(env, context.user.id, 1, 'site plan generation');
+                } catch (e) {
+                    return Response.json({ error: e instanceof Error ? e.message : 'Out of credits' }, { status: 402 });
+                }
             }
 
             const prompt = buildPlanPrompt(description, keywords);

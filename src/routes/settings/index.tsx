@@ -60,7 +60,7 @@ import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Switch } from '@/components/ui/switch';
-import { ImageIcon } from 'lucide-react';
+import { ImageIcon, Info } from 'lucide-react';
 
 const ADMIN_EMAIL = 'perimeter.uk@gmail.com';
 
@@ -104,7 +104,8 @@ function TopUpButton({
 			}
 		>
 			<span className={bestValue ? 'text-xl font-bold text-accent' : 'text-xl font-bold text-text-primary group-hover:text-accent transition-colors'}>£{amount}</span>
-			<span className="text-xs text-text-tertiary mt-1">{loading ? 'Loading…' : subtitle}</span>
+			<span className={bestValue ? 'text-base font-semibold text-accent mt-1' : 'text-base font-semibold text-text-primary mt-1'}>{loading ? '…' : subtitle}</span>
+			<span className="text-[10px] uppercase tracking-wider text-text-tertiary mt-1">One-time</span>
 		</button>
 	);
 }
@@ -384,25 +385,77 @@ export default function SettingsPage() {
 											<Zap className="size-5 text-accent" />
 										</div>
 										<div>
-											<p className="text-xs uppercase tracking-wider text-text-tertiary">Credit balance</p>
-											<p className="text-2xl font-bold text-text-primary">
+											<div className="flex items-center gap-1.5">
+												<p className="text-xs uppercase tracking-wider text-text-tertiary">Credit balance</p>
+												<Dialog>
+													<DialogTrigger asChild>
+														<button
+															type="button"
+															className="text-text-tertiary hover:text-accent transition-colors"
+															aria-label="What are credits?"
+														>
+															<Info className="size-3.5" />
+														</button>
+													</DialogTrigger>
+													<DialogContent className="max-w-md">
+														<DialogHeader>
+															<DialogTitle>How credits work</DialogTitle>
+															<DialogDescription>
+																Credits deduct in real time as the AI works — different operations cost different amounts.
+															</DialogDescription>
+														</DialogHeader>
+														<div className="space-y-3 text-sm text-text-secondary">
+															<p className="text-text-secondary">Rough guide:</p>
+															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
+																<span>A simple new app (small prompt, one-shot)</span>
+																<span className="font-mono text-text-primary">~10–20</span>
+															</div>
+															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
+																<span>A typical app build (with images + a few fixes)</span>
+																<span className="font-mono text-text-primary">~30–80</span>
+															</div>
+															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
+																<span>A complex app with many bug-fix cycles</span>
+																<span className="font-mono text-text-primary">100+</span>
+															</div>
+															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
+																<span>A single image regeneration</span>
+																<span className="font-mono text-text-primary">~2</span>
+															</div>
+															<div className="flex justify-between gap-4">
+																<span>A small chat message to Orange</span>
+																<span className="font-mono text-text-primary">~1</span>
+															</div>
+															<p className="text-xs text-text-tertiary pt-2">
+																Every AI call deducts credits proportional to the model + work done. You'll see your balance tick down. When it can't cover the next call, the chat halts and we prompt you to top up.
+															</p>
+														</div>
+													</DialogContent>
+												</Dialog>
+											</div>
+											<p className="text-2xl font-bold text-text-primary mt-0.5">
 												{credits === null ? '—' : credits.balance.toLocaleString()}
-											</p>
-											<p className="text-xs text-text-tertiary mt-0.5">
-												{credits === null ? 'Loading…' : `${credits.buildCost} credits per new app`}
 											</p>
 										</div>
 									</div>
 									{planData?.plan === 'pro' && (
-										<Button
-											variant="outline"
-											size="sm"
-											className="border-accent/40 hover:border-accent hover:bg-accent/10"
-											disabled={billingLoading}
-											onClick={handleManageBilling}
-										>
-											Manage subscription
-										</Button>
+										<div className="flex flex-col items-end gap-1.5">
+											<div className="flex items-center gap-2">
+												<Sparkles className="size-4 text-accent" />
+												<span className="text-sm font-semibold text-text-primary">Pro</span>
+												<Badge className="bg-accent text-black text-[10px] px-2 py-0 font-bold uppercase tracking-wider">Active</Badge>
+											</div>
+											<p className="text-xs text-text-tertiary">£20/mo · 1,500 credits monthly</p>
+											<Button
+												variant="outline"
+												size="sm"
+												className="mt-1 border-accent/40 hover:border-accent hover:bg-accent/10"
+												disabled={billingLoading}
+												onClick={handleManageBilling}
+											>
+												Manage subscription
+											</Button>
+										</div>
 									)}
 								</div>
 							</div>
@@ -411,25 +464,33 @@ export default function SettingsPage() {
 
 							{/* Pro subscription upsell — only when NOT a Pro subscriber */}
 							{planData?.plan !== 'pro' && (
-								<div className="rounded-lg bg-gradient-to-br from-accent/10 to-transparent border border-accent/30 p-5">
+								<div className="rounded-lg bg-gradient-to-br from-accent/15 via-accent/8 to-transparent border-2 border-accent/50 p-5 relative">
+									<Badge className="absolute -top-2 left-4 bg-accent text-black text-[10px] px-2 py-0 font-bold uppercase tracking-wider">Best value</Badge>
 									<div className="flex items-start justify-between gap-4 flex-wrap">
 										<div className="flex items-start gap-3 flex-1 min-w-0">
-											<div className="size-10 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+											<div className="size-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
 												<Sparkles className="size-5 text-accent" />
 											</div>
 											<div className="min-w-0">
-												<p className="text-base font-semibold text-text-primary">Pro · best value</p>
-												<p className="text-xs text-text-tertiary mt-0.5">1,500 credits every month, automatically. 50% more credits than the same in top-ups.</p>
-												<p className="text-sm font-medium text-accent mt-2">£20 / month</p>
+												<p className="text-2xl font-bold text-text-primary">
+													1,500 credits
+													<span className="text-sm font-normal text-text-tertiary"> / month</span>
+												</p>
+												<p className="text-sm text-text-secondary mt-1">
+													<span className="font-semibold text-accent">£20 / month</span> — automatically refreshes
+												</p>
+												<p className="text-xs text-text-tertiary mt-2">
+													50% more credits than a £20 one-time top-up (1,000). Cancel anytime.
+												</p>
 											</div>
 										</div>
 										<Button
 											size="sm"
-											className="bg-accent text-black hover:bg-accent/90"
+											className="bg-accent text-black hover:bg-accent/90 font-semibold"
 											disabled={billingLoading}
 											onClick={handleUpgrade}
 										>
-											Upgrade
+											Upgrade to Pro
 										</Button>
 									</div>
 								</div>

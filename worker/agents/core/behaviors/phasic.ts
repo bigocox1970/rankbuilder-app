@@ -5,6 +5,7 @@ import {
     PhaseImplementationSchemaType,
 } from '../../schemas';
 import { generateTradeImages, generateTradeImagesFromPlan, buildImageContext } from '../../../services/imageGeneration/tradeImageGenerator';
+import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { StaticAnalysisResponse } from '../../../services/sandbox/sandboxTypes';
 import { CurrentDevState, MAX_PHASES, PhasicState } from '../state';
 import { AllIssues, AgentInitArgs, PhaseExecutionResult, UserContext } from '../types';
@@ -82,8 +83,18 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         // If the user approved a site plan, generate sequentially with per-image progress.
         // Otherwise fall back to the parallel approach (concurrent with blueprint).
         const sitePlan = initArgs.sitePlan;
+        const willGenerateImages = isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages;
+        // Pre-deduct image-gen credits up front so out-of-credits users don't burn API budget.
+        // 9 Flux images (2 credits each) + 1 Llama title-gen (1 credit) = 19 credits per build.
+        if (willGenerateImages) {
+            try {
+                await RateLimitService.deductCredits(this.env, inferenceContext.metadata.userId, 19, 'image generation (9 images)');
+            } catch (e) {
+                this.logger.warn('Image gen skipped — insufficient credits', { err: e });
+            }
+        }
         const imageGenPromise: Promise<import('../../../services/imageGeneration/tradeImageGenerator').GeneratedTradeImages | null> =
-            (!sitePlan && isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages)
+            (!sitePlan && willGenerateImages)
                 ? generateTradeImages(this.env, agentIdForImages, query)
                 : Promise.resolve(null);
 

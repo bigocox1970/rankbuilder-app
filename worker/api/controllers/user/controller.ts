@@ -112,13 +112,20 @@ export class UserController extends BaseController {
     static async getPlan(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<UserPlanData>>> {
         try {
             const user = context.user!;
+
+            // Plan is determined by Stripe subscription status in D1 — single source of truth.
+            const userService = new UserService(env);
+            const dbUser = await userService.findUser({ id: user.id });
+            const isPro = dbUser?.stripeSubscriptionStatus === 'active';
+
+            // hasKvOverride is reported for legacy admin-debug visibility but does NOT determine plan.
             const kvValue = await env.VibecoderStore.get(`user_config:${user.id}`);
             const hasKvOverride = kvValue !== null;
 
             const data: UserPlanData = {
-                plan: hasKvOverride ? 'pro' : 'free',
+                plan: isPro ? 'pro' : 'free',
                 hasKvOverride,
-                dailyBuildLimit: hasKvOverride ? 200 : 10,
+                dailyBuildLimit: isPro ? 200 : 10,
             };
 
             return UserController.createSuccessResponse(data);

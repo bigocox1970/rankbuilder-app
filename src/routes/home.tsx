@@ -200,22 +200,20 @@ export default function Home() {
 			return;
 		}
 
-		// Credit gate: each build deducts credits up-front. Insufficient → prompt top-up.
+		// Credit gate: pre-flight check — block the build if balance is too low to do anything useful.
+		// Per-call deduction during the build is handled in worker/services/rate-limit/rateLimits.ts.
 		try {
-			const credit = await apiClient.consumeBuildCredits();
-			if (!credit.success || !credit.data?.consumed) {
-				const balance = credit.data?.balance ?? 0;
-				const cost = credit.data?.buildCost ?? 50;
+			const balance = await apiClient.getCreditsBalance();
+			if (balance.success && balance.data && balance.data.balance < 5) {
 				toast.error(
-					`Not enough credits (you have ${balance}, you need ${cost} to start a new app). Add credits in Settings to continue.`,
+					`Out of credits (${balance.data.balance}). Add credits in Settings to continue.`,
 					{ duration: 6000 },
 				);
 				navigate('/settings');
 				return;
 			}
 		} catch {
-			toast.error('Could not verify credits. Please try again.');
-			return;
+			// Don't block the build if the credit check fails — fail open. Per-call deduction will catch it.
 		}
 
 		// For website mode, show the planner wizard before navigating

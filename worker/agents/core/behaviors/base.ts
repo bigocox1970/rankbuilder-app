@@ -44,6 +44,7 @@ import { getPreviewDomain, getProtocolForHost } from 'worker/utils/urls';
 import { isDev } from 'worker/utils/envs';
 import { InMemoryAnalyzer } from '../../../services/static-analysis';
 import { regenerateTradeImage } from '../../../services/imageGeneration/tradeImageGenerator';
+import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { buildDeploymentConfig, deployToDispatch, deployWorker, parseWranglerConfig } from '../../../services/deployer/deploy';
 import { createAssetManifest } from '../../../services/deployer/utils/index';
 
@@ -1062,6 +1063,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         if (!agentId || agentId === 'undefined') {
             throw new Error('Agent is not fully initialized yet — please wait a moment and try again');
         }
+        // Credit deduction for single-image regen: Flux=2, SDXL=5.
+        const cost = quality === 'premium' ? 5 : 2;
+        await RateLimitService.deductCredits(this.env, this.state.metadata.userId, cost, quality === 'premium' ? 'premium image regeneration' : 'image regeneration');
         const prompt = description;
         const url = await regenerateTradeImage(this.env, agentId, slot, prompt, quality);
         const updatedUrls = { ...(this.state.generatedImageUrls || {}), [slot]: url };
