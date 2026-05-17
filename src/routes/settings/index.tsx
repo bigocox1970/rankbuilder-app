@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
 	Smartphone,
 	Trash2,
@@ -175,12 +175,39 @@ export default function SettingsPage() {
 
 	// Credit balance
 	const [credits, setCredits] = useState<{ balance: number; buildCost: number } | null>(null);
-	useEffect(() => {
-		if (!user) return;
+	const refreshCredits = useCallback(() => {
 		apiClient.getCreditsBalance()
 			.then(r => { if (r.success && r.data) setCredits(r.data); })
 			.catch(() => { /* ignore */ });
-	}, [user]);
+	}, []);
+	useEffect(() => {
+		if (!user) return;
+		refreshCredits();
+	}, [user, refreshCredits]);
+	// On return from Stripe Checkout, the webhook may take a moment to credit the account.
+	// Poll for up to 10 seconds until the balance changes, then settle.
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		if (params.get('topup') !== 'success') return;
+		const baseline = credits?.balance ?? null;
+		let attempts = 0;
+		const tick = async () => {
+			attempts += 1;
+			const r = await apiClient.getCreditsBalance();
+			if (r.success && r.data) {
+				setCredits(r.data);
+				if (baseline === null || r.data.balance > baseline) return; // settled
+			}
+			if (attempts < 10) setTimeout(tick, 1000);
+		};
+		tick();
+		// One-shot — strip the query param so we don't re-trigger on re-render
+		const url = new URL(window.location.href);
+		url.searchParams.delete('topup');
+		window.history.replaceState({}, '', url.toString());
+		toast.success('Top-up successful — credits added.');
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// Image generation toggle
 	const [imageGenEnabled, setImageGenEnabled] = useState<boolean>(() => {
@@ -401,34 +428,42 @@ export default function SettingsPage() {
 														<DialogHeader>
 															<DialogTitle>How credits work</DialogTitle>
 															<DialogDescription>
-																Credits deduct in real time as the AI works — different operations cost different amounts.
+																Credits deduct in real time as the AI works. What you pay scales with the size of each task.
 															</DialogDescription>
 														</DialogHeader>
 														<div className="space-y-3 text-sm text-text-secondary">
-															<p className="text-text-secondary">Rough guide:</p>
+															<p className="text-text-secondary font-medium">Rough guide (approximations):</p>
 															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
-																<span>A simple new app (small prompt, one-shot)</span>
-																<span className="font-mono text-text-primary">~10–20</span>
-															</div>
-															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
-																<span>A typical app build (with images + a few fixes)</span>
-																<span className="font-mono text-text-primary">~30–80</span>
-															</div>
-															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
-																<span>A complex app with many bug-fix cycles</span>
-																<span className="font-mono text-text-primary">100+</span>
-															</div>
-															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
-																<span>A single image regeneration</span>
-																<span className="font-mono text-text-primary">~2</span>
-															</div>
-															<div className="flex justify-between gap-4">
-																<span>A small chat message to Orange</span>
+																<span>Short chat with Orange ("change the heading")</span>
 																<span className="font-mono text-text-primary">~1</span>
 															</div>
-															<p className="text-xs text-text-tertiary pt-2">
-																Every AI call deducts credits proportional to the model + work done. You'll see your balance tick down. When it can't cover the next call, the chat halts and we prompt you to top up.
-															</p>
+															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
+																<span>Single image regeneration</span>
+																<span className="font-mono text-text-primary">~2</span>
+															</div>
+															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
+																<span>Simple new app (small prompt, one-shot)</span>
+																<span className="font-mono text-text-primary">~10–25</span>
+															</div>
+															<div className="flex justify-between gap-4 border-b border-bg-3 pb-2">
+																<span>Typical app build with images + a few fixes</span>
+																<span className="font-mono text-text-primary">~30–80</span>
+															</div>
+															<div className="flex justify-between gap-4">
+																<span>Complex app with many bug-fix cycles</span>
+																<span className="font-mono text-text-primary">100+</span>
+															</div>
+															<div className="rounded-md bg-bg-2 border border-bg-3 px-3 py-2.5 mt-2 space-y-1.5">
+																<p className="text-xs text-text-secondary">
+																	<span className="font-semibold text-text-primary">Your real cost depends on the size of your prompt and the AI's reply</span> — bigger inputs and longer outputs cost proportionally more.
+																</p>
+																<p className="text-xs text-text-secondary">
+																	<span className="font-semibold text-text-primary">Failed AI calls don't cost you credits</span> — you only pay for work that actually completes.
+																</p>
+																<p className="text-xs text-text-secondary">
+																	<span className="font-semibold text-text-primary">When your balance can't cover the next call</span>, the chat pauses and we prompt you to top up. You'll never go below zero.
+																</p>
+															</div>
 														</div>
 													</DialogContent>
 												</Dialog>

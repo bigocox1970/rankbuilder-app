@@ -37,13 +37,20 @@ export class CreditsController extends BaseController {
         }
 
         const raw = await env.VibecoderStore.get(key(user.id));
+        let balance: number;
         if (raw === null) {
             // First-time grant
             await writeBalance(env, user.id, FREE_SIGNUP_CREDITS);
             logger.info('Free signup credits granted', { userId: user.id, credits: FREE_SIGNUP_CREDITS });
-            return CreditsController.createSuccessResponse({ balance: FREE_SIGNUP_CREDITS, buildCost: BUILD_COST_CREDITS });
+            balance = FREE_SIGNUP_CREDITS;
+        } else {
+            balance = parseFloat(raw);
         }
-        return CreditsController.createSuccessResponse({ balance: parseInt(raw, 10), buildCost: BUILD_COST_CREDITS });
+        // Round to integer for display; underlying KV stores fractional credits from per-call deduction
+        const response = CreditsController.createSuccessResponse({ balance: Math.floor(balance), buildCost: BUILD_COST_CREDITS });
+        // Never cache — balance changes per call.
+        response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return response;
     }
 
     /**
