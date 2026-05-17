@@ -57,6 +57,32 @@ function getAppUrl(env: Env): string {
     return `https://app.${env.CUSTOM_PREVIEW_DOMAIN}`;
 }
 
+/**
+ * Returns a valid Stripe customer ID for the user in the current Stripe mode (live or test).
+ * If a stored ID doesn't resolve (e.g. it was created in Sandbox/test mode but we're now on live keys),
+ * a new customer is created and persisted, replacing the stale ID.
+ */
+async function ensureStripeCustomer(
+    stripe: Stripe,
+    userService: UserService,
+    userId: string,
+    email: string,
+    storedId: string | undefined,
+): Promise<string> {
+    if (storedId) {
+        try {
+            const existing = await stripe.customers.retrieve(storedId);
+            if (!existing.deleted) return storedId;
+        } catch (e) {
+            const code = (e as { code?: string })?.code;
+            if (code !== 'resource_missing') throw e;
+        }
+    }
+    const customer = await stripe.customers.create({ email, metadata: { userId } });
+    await userService.updateStripeCustomer(userId, customer.id);
+    return customer.id;
+}
+
 export class StripeController extends BaseController {
     static logger = createLogger('StripeController');
 
@@ -80,15 +106,13 @@ export class StripeController extends BaseController {
             const userService = new UserService(env);
             const dbUser = await userService.findUser({ id: user.id });
 
-            let customerId = dbUser?.stripeCustomerId ?? undefined;
-            if (!customerId) {
-                const customer = await stripe.customers.create({
-                    email: user.email,
-                    metadata: { userId: user.id },
-                });
-                customerId = customer.id;
-                await userService.updateStripeCustomer(user.id, customerId);
-            }
+            const customerId = await ensureStripeCustomer(
+                stripe,
+                userService,
+                user.id,
+                user.email,
+                dbUser?.stripeCustomerId ?? undefined,
+            );
 
             const appUrl = getAppUrl(env);
             const session = await stripe.checkout.sessions.create({
@@ -141,15 +165,13 @@ export class StripeController extends BaseController {
             const userService = new UserService(env);
             const dbUser = await userService.findUser({ id: user.id });
 
-            let customerId = dbUser?.stripeCustomerId ?? undefined;
-            if (!customerId) {
-                const customer = await stripe.customers.create({
-                    email: user.email,
-                    metadata: { userId: user.id },
-                });
-                customerId = customer.id;
-                await userService.updateStripeCustomer(user.id, customerId);
-            }
+            const customerId = await ensureStripeCustomer(
+                stripe,
+                userService,
+                user.id,
+                user.email,
+                dbUser?.stripeCustomerId ?? undefined,
+            );
 
             const appUrl = getAppUrl(env);
             const session = await stripe.checkout.sessions.create({
@@ -198,6 +220,21 @@ export class StripeController extends BaseController {
 
             if (!dbUser?.stripeCustomerId) {
                 return StripeController.createErrorResponse('No billing account found', 404);
+            }
+
+            // Verify the stored customer ID exists in the current Stripe mode.
+            // (A Sandbox/test-mode ID won't resolve once we're on live keys.)
+            try {
+                const existing = await stripe.customers.retrieve(dbUser.stripeCustomerId);
+                if (existing.deleted) {
+                    return StripeController.createErrorResponse('No billing account found', 404);
+                }
+            } catch (e) {
+                const code = (e as { code?: string })?.code;
+                if (code === 'resource_missing') {
+                    return StripeController.createErrorResponse('No billing account found', 404);
+                }
+                throw e;
             }
 
             const appUrl = getAppUrl(env);
