@@ -12,6 +12,8 @@ import {
 	CreditCard,
 	ShieldCheck,
 	ChevronRight,
+	Sparkles,
+	Zap,
 } from 'lucide-react';
 import { Link } from 'react-router';
 import type {
@@ -61,6 +63,34 @@ import { Switch } from '@/components/ui/switch';
 import { ImageIcon } from 'lucide-react';
 
 const ADMIN_EMAIL = 'perimeter.uk@gmail.com';
+
+function TopUpButton({
+	amount,
+	subtitle,
+	highlighted = false,
+	bestValue = false,
+}: {
+	amount: string;
+	subtitle: string;
+	highlighted?: boolean;
+	bestValue?: boolean;
+}) {
+	return (
+		<button
+			onClick={() => toast.info('Credit top-ups coming soon.')}
+			className={
+				bestValue
+					? 'relative flex flex-col items-start px-4 py-3 rounded-lg border border-accent/60 bg-accent/8 hover:border-accent hover:bg-accent/15 transition-colors cursor-pointer group min-w-[120px]'
+					: highlighted
+						? 'relative flex flex-col items-start px-4 py-3 rounded-lg border border-accent/40 bg-accent/5 hover:border-accent hover:bg-accent/10 transition-colors cursor-pointer group min-w-[120px]'
+						: 'relative flex flex-col items-start px-4 py-3 rounded-lg border border-bg-4 bg-bg-2 hover:border-accent/60 hover:bg-accent/5 transition-colors cursor-pointer group min-w-[120px]'
+			}
+		>
+			<span className={bestValue ? 'text-xl font-bold text-accent' : 'text-xl font-bold text-text-primary group-hover:text-accent transition-colors'}>{amount}</span>
+			<span className="text-xs text-text-tertiary mt-1">{subtitle}</span>
+		</button>
+	);
+}
 
 export default function SettingsPage() {
 	const { user } = useAuth();
@@ -309,7 +339,10 @@ export default function SettingsPage() {
 					</div>
 
 					{/* Credits & Plan */}
-					<Card id="plan">
+					<Card
+						id="plan"
+						className={planData?.plan === 'pro' ? 'border-accent/60 shadow-[0_0_0_1px_rgba(0,230,118,0.25),0_4px_24px_-8px_rgba(0,230,118,0.35)]' : undefined}
+					>
 						<CardHeader variant="minimal">
 							<div className="flex items-center gap-3 border-b w-full py-3 text-text-primary">
 								<CreditCard className="h-5 w-5" />
@@ -322,95 +355,86 @@ export default function SettingsPage() {
 									<Settings className="h-4 w-4 animate-spin text-text-tertiary" />
 									<span className="text-sm text-text-tertiary">Loading plan info...</span>
 								</div>
-							) : (
+							) : planData?.plan === 'pro' ? (
 								<>
-									{/* Plan badge */}
-									<div className="flex items-center gap-3">
-										{planData?.plan === 'pro' ? (
-											<Badge className="bg-accent text-black text-sm px-3 py-1 font-semibold">Pro</Badge>
-										) : (
-											<Badge variant="secondary" className="text-sm px-3 py-1">Free</Badge>
-										)}
-										<span className="text-sm text-text-secondary">
-											{planData?.plan === 'pro'
-												? 'Unlimited builds · Priority AI models'
-												: `${planData?.dailyBuildLimit ?? 10} builds per day · Standard AI models`}
-										</span>
+									{/* Pro hero — prominent active-plan treatment */}
+									<div className="rounded-lg bg-gradient-to-br from-accent/15 via-accent/8 to-transparent border border-accent/40 p-5">
+										<div className="flex items-start justify-between gap-4 flex-wrap">
+											<div className="flex items-center gap-3">
+												<div className="size-10 rounded-full bg-accent/20 flex items-center justify-center">
+													<Sparkles className="size-5 text-accent" />
+												</div>
+												<div>
+													<div className="flex items-center gap-2">
+														<span className="text-lg font-bold text-text-primary">Pro</span>
+														<Badge className="bg-accent text-black text-[10px] px-2 py-0 font-bold uppercase tracking-wider">Active</Badge>
+													</div>
+													<p className="text-xs text-text-tertiary mt-0.5">Priority AI models · Premium image generation · Priority support</p>
+												</div>
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												className="border-accent/40 hover:border-accent hover:bg-accent/10"
+												disabled={billingLoading}
+												onClick={handleManageBilling}
+											>
+												Manage subscription
+											</Button>
+										</div>
 									</div>
 
 									<Separator />
 
 									{/* Top-up credits */}
 									<div className="space-y-2">
-										<p className="text-sm font-medium text-text-primary">Top up credits</p>
+										<div className="flex items-center gap-2">
+											<Zap className="size-4 text-text-secondary" />
+											<p className="text-sm font-medium text-text-primary">Top up credits</p>
+										</div>
 										<p className="text-xs text-text-tertiary">
-											One-time credit packs. Credits never expire and stack with your monthly allowance.
+											Need more this month? Add credits to your account. They never expire.
 										</p>
 										<div className="flex flex-wrap gap-3 pt-1">
-											{/* £10 — base */}
-											<button
-												onClick={() => toast.info('Stripe billing coming soon — top-ups will be available shortly.')}
-												className="relative flex flex-col items-start px-4 py-3 rounded-lg border border-bg-4 bg-bg-2 hover:border-accent/60 hover:bg-accent/5 transition-colors cursor-pointer group min-w-[120px]"
-											>
-												<span className="text-xl font-bold text-text-primary group-hover:text-accent transition-colors">£10</span>
-												<span className="text-xs text-text-tertiary mt-1">500 credits</span>
-											</button>
-
-											{/* £20 — 10% bonus */}
-											<button
-												onClick={() => toast.info('Stripe billing coming soon — top-ups will be available shortly.')}
-												className="relative flex flex-col items-start px-4 py-3 rounded-lg border border-accent/40 bg-accent/5 hover:border-accent hover:bg-accent/10 transition-colors cursor-pointer group min-w-[120px]"
-											>
-												<span className="absolute -top-2 right-3 text-[10px] font-bold bg-accent text-black px-2 py-0.5 rounded-full">+10% free</span>
-												<span className="text-xl font-bold text-text-primary group-hover:text-accent transition-colors">£20</span>
-												<span className="text-xs text-text-tertiary mt-1">
-													<span className="line-through opacity-50">1,000</span>
-													{' '}1,100 credits
-												</span>
-											</button>
-
-											{/* £50 — 20% bonus */}
-											<button
-												onClick={() => toast.info('Stripe billing coming soon — top-ups will be available shortly.')}
-												className="relative flex flex-col items-start px-4 py-3 rounded-lg border border-accent/60 bg-accent/8 hover:border-accent hover:bg-accent/15 transition-colors cursor-pointer group min-w-[120px]"
-											>
-												<span className="absolute -top-2 right-3 text-[10px] font-bold bg-accent text-black px-2 py-0.5 rounded-full">+20% free</span>
-												<span className="text-xl font-bold text-accent">£50</span>
-												<span className="text-xs text-text-tertiary mt-1">
-													<span className="line-through opacity-50">2,500</span>
-													{' '}3,000 credits
-												</span>
-												<span className="text-[10px] text-accent font-medium mt-0.5">Best value</span>
-											</button>
+											<TopUpButton amount="£10" subtitle="Starter pack" />
+											<TopUpButton amount="£20" subtitle="Most popular" highlighted />
+											<TopUpButton amount="£50" subtitle="Best value" bestValue />
 										</div>
-										<p className="text-xs text-text-tertiary pt-1">
-											~15 credits per website build &middot; 500 credits ≈ 33 builds
-										</p>
+									</div>
+								</>
+							) : (
+								<>
+									{/* Free state */}
+									<div className="flex items-center gap-3">
+										<Badge variant="secondary" className="text-sm px-3 py-1">Free</Badge>
+										<span className="text-sm text-text-secondary">
+											Standard AI models · Limited daily usage
+										</span>
 									</div>
 
 									<Separator />
 
-									{/* Upgrade / downgrade */}
-									<div className="flex items-center justify-between">
-										<div>
-											<p className="text-sm font-medium text-text-primary">
-												{planData?.plan === 'pro' ? 'Pro subscription' : 'Upgrade to Pro'}
-											</p>
-											<p className="text-xs text-text-tertiary mt-0.5">
-												{planData?.plan === 'pro'
-													? 'Unlimited daily builds, faster AI, priority support'
-													: 'Unlimited daily builds, faster AI, priority support — from £10/month'}
-											</p>
+									<div className="rounded-lg bg-gradient-to-br from-accent/10 to-transparent border border-accent/30 p-5">
+										<div className="flex items-start justify-between gap-4 flex-wrap">
+											<div className="flex items-start gap-3 flex-1 min-w-0">
+												<div className="size-10 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+													<Sparkles className="size-5 text-accent" />
+												</div>
+												<div className="min-w-0">
+													<p className="text-base font-semibold text-text-primary">Upgrade to Pro</p>
+													<p className="text-xs text-text-tertiary mt-0.5">Priority AI models, premium image generation, priority support. Top up credits anytime.</p>
+													<p className="text-sm font-medium text-accent mt-2">£10 / month</p>
+												</div>
+											</div>
+											<Button
+												size="sm"
+												className="bg-accent text-black hover:bg-accent/90"
+												disabled={billingLoading}
+												onClick={handleUpgrade}
+											>
+												Upgrade
+											</Button>
 										</div>
-										<Button
-											variant={planData?.plan === 'pro' ? 'outline' : 'default'}
-											size="sm"
-											className={planData?.plan === 'pro' ? '' : 'bg-accent text-black hover:bg-accent/90'}
-											disabled={billingLoading}
-											onClick={planData?.plan === 'pro' ? handleManageBilling : handleUpgrade}
-										>
-											{planData?.plan === 'pro' ? 'Manage subscription' : 'Upgrade'}
-										</Button>
 									</div>
 								</>
 							)}
