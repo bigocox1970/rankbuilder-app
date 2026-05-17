@@ -191,13 +191,13 @@ function CheckRow({ check }: { check: ScoreCheck }) {
 			? <AlertCircle className="size-4 text-yellow-400 flex-shrink-0" />
 			: <XCircle className="size-4 text-red-400/70 flex-shrink-0" />;
 	return (
-		<div className="flex items-center gap-2.5 py-1.5 border-b border-text-primary/5 last:border-0">
+		<div className="flex items-center gap-2.5 py-1.5 border-b border-text-primary/5 last:border-0 min-w-0">
 			{icon}
-			<span className={clsx('text-xs flex-1', check.passed ? 'text-text-primary/80' : check.partial ? 'text-text-primary/60' : 'text-text-primary/40')}>
+			<span className={clsx('text-xs flex-1 min-w-0 break-words', check.passed ? 'text-text-primary/80' : check.partial ? 'text-text-primary/60' : 'text-text-primary/40')}>
 				{check.label}
 			</span>
-			{check.detail && <span className="text-xs text-text-primary/30 tabular-nums">{check.detail}</span>}
-			<span className="text-xs tabular-nums text-text-primary/30 w-8 text-right">+{check.earned}</span>
+			{check.detail && <span className="text-xs text-text-primary/30 tabular-nums flex-shrink-0 truncate max-w-[40%]">{check.detail}</span>}
+			<span className="text-xs tabular-nums text-text-primary/30 w-8 text-right flex-shrink-0">+{check.earned}</span>
 		</div>
 	);
 }
@@ -230,16 +230,16 @@ function CharCounter({ value, min, max }: { value: string; min: number; max: num
 
 function SerpPreview({ title, description, url, state }: { title: string; description: string; url: string; state?: FieldState }) {
 	return (
-		<div className={clsx('rounded-lg bg-white/5 border p-4 text-left transition-colors', STATE_BORDER[state ?? 'neutral'])}>
+		<div className={clsx('rounded-lg bg-white/5 border p-3 sm:p-4 text-left transition-colors min-w-0', STATE_BORDER[state ?? 'neutral'])}>
 			<p className="text-xs text-text-primary/30 mb-2 uppercase tracking-wider">Google preview</p>
-			<div className="flex items-center gap-1.5 mb-0.5">
-				<div className="size-4 rounded-full bg-text-primary/20" />
-				<span className="text-xs text-text-primary/50 truncate">{url || 'https://yoursite.com'}</span>
+			<div className="flex items-center gap-1.5 mb-0.5 min-w-0">
+				<div className="size-4 rounded-full bg-text-primary/20 flex-shrink-0" />
+				<span className="text-xs text-text-primary/50 truncate min-w-0 flex-1">{url || 'https://yoursite.com'}</span>
 			</div>
 			<p className="text-[15px] text-blue-400 font-medium leading-snug truncate">
 				{title || 'Page title will appear here'}
 			</p>
-			<p className="text-xs text-text-primary/60 mt-0.5 leading-relaxed line-clamp-2">
+			<p className="text-xs text-text-primary/60 mt-0.5 leading-relaxed line-clamp-2 break-words">
 				{description || 'Meta description will appear here. Make it compelling, 140–160 characters (max 160).'}
 			</p>
 		</div>
@@ -255,16 +255,16 @@ function KeywordCoverage({ keyword, page }: { keyword: string; page: SeoPage }) 
 		{ label: 'Image alts', hit: page.imageAlts.some(a => kwInText(keyword, a)) },
 	];
 	return (
-		<div className="mt-2 px-3 py-2.5 rounded-md bg-bg-3/60 border border-text-primary/8">
-			<p className="text-xs text-text-primary/40 mb-2">
+		<div className="mt-2 px-3 py-2.5 rounded-md bg-bg-3/60 border border-text-primary/8 min-w-0">
+			<p className="text-xs text-text-primary/40 mb-2 break-words">
 				Coverage for <span className="text-text-primary/70 font-medium">"{keyword}"</span>
 			</p>
 			<div className="flex flex-wrap gap-x-4 gap-y-1">
 				{spots.map(s => (
 					<div key={s.label} className="flex items-center gap-1.5">
 						{s.hit
-							? <CheckCircle2 className="size-3 text-emerald-400" />
-							: <XCircle className="size-3 text-red-400/60" />}
+							? <CheckCircle2 className="size-3 text-emerald-400 flex-shrink-0" />
+							: <XCircle className="size-3 text-red-400/60 flex-shrink-0" />}
 						<span className={clsx('text-xs', s.hit ? 'text-text-primary/60' : 'text-text-primary/35')}>{s.label}</span>
 					</div>
 				))}
@@ -441,11 +441,11 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 	};
 
 	return (
-		<div className="flex flex-col gap-5">
+		<div className="flex flex-col gap-5 min-w-0">
 			{/* Score row */}
-			<div className="flex items-center justify-between">
+			<div className="flex items-center justify-between flex-wrap gap-2 min-w-0">
 				<h3 className="text-sm font-medium text-text-primary/70">Page score</h3>
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 flex-wrap">
 					{failingChecks.length > 0 && (
 						<button
 							onClick={handleFixAll}
@@ -525,12 +525,12 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 									: 'bg-text-primary/10 text-text-primary/50';
 							const typeLabel = item.type === 'primary' ? 'Primary' : item.type === 'longTail' ? 'Long-tail' : 'Secondary';
 							return (
-								<div key={`${item.type}-${i}`} className="flex items-center gap-2">
+								<div key={`${item.type}-${i}`} className="flex items-center gap-2 min-w-0">
 									<span className="text-xs text-text-primary/30 w-16 flex-shrink-0">{typeLabel}</span>
 									<button
 										onClick={() => !isEditingKeywords && setSelectedKw(item.kw)}
 										className={clsx(
-											'px-2.5 py-0.5 rounded-full text-xs font-medium transition-all',
+											'px-2.5 py-0.5 rounded-full text-xs font-medium transition-all min-w-0 max-w-full truncate',
 											pillColor,
 											!isEditingKeywords && 'hover:opacity-80 cursor-pointer',
 											isSelected && 'ring-1 ring-offset-1 ring-offset-bg-1 ring-current',
@@ -588,14 +588,14 @@ function PageSeoView({ page, htmlSignals, onSendMessage }: PageSeoViewProps) {
 			</div>
 
 			{/* H1 / H2s */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-				<div>
+			<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+				<div className="min-w-0">
 					<label className="text-xs font-medium text-text-primary/50 uppercase tracking-wider block mb-1">H1</label>
-					<div className="rounded-md bg-bg-3 border border-text-primary/10 px-3 py-2 text-sm text-text-primary">
+					<div className="rounded-md bg-bg-3 border border-text-primary/10 px-3 py-2 text-sm text-text-primary break-words">
 						{page.h1 || <span className="text-text-primary/30">Not set</span>}
 					</div>
 				</div>
-				<div>
+				<div className="min-w-0">
 					<label className="text-xs font-medium text-text-primary/50 uppercase tracking-wider block mb-1">H2s ({page.h2s.length})</label>
 					<div className="rounded-md bg-bg-3 border border-text-primary/10 px-3 py-2 text-sm text-text-primary/70 space-y-0.5 max-h-[80px] overflow-y-auto">
 						{page.h2s.length > 0
@@ -718,16 +718,16 @@ Also update index.html head with: correct <title>, <meta name="description">, Op
 	const multiPage = pages.length > 1;
 
 	return (
-		<div className="flex-1 overflow-y-auto">
-			<div className="px-3 sm:px-5 py-4 max-w-2xl mx-auto w-full">
+		<div className="flex-1 overflow-y-auto min-w-0">
+			<div className="px-3 sm:px-5 py-4 max-w-2xl mx-auto w-full min-w-0">
 				{multiPage && (
-					<div className="relative mb-5">
+					<div className="relative mb-5 min-w-0">
 						<button
 							onClick={() => setPageDropdownOpen(o => !o)}
-							className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-bg-3 border border-text-primary/10 text-sm text-text-primary hover:border-accent/40 transition-colors"
+							className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-bg-3 border border-text-primary/10 text-sm text-text-primary hover:border-accent/40 transition-colors min-w-0"
 						>
-							<span>{currentPage.label} <span className="text-text-primary/40 text-xs ml-1">{currentPage.path}</span></span>
-							<ChevronDown className={clsx('size-4 text-text-primary/40 transition-transform', pageDropdownOpen && 'rotate-180')} />
+							<span className="truncate min-w-0">{currentPage.label} <span className="text-text-primary/40 text-xs ml-1">{currentPage.path}</span></span>
+							<ChevronDown className={clsx('size-4 text-text-primary/40 transition-transform flex-shrink-0', pageDropdownOpen && 'rotate-180')} />
 						</button>
 						{pageDropdownOpen && (
 							<div className="absolute top-full left-0 right-0 mt-1 rounded-md bg-bg-2 border border-text-primary/10 shadow-lg z-20 overflow-hidden">
@@ -735,10 +735,10 @@ Also update index.html head with: correct <title>, <meta name="description">, Op
 									<button
 										key={p.path}
 										onClick={() => { setSelectedPageIndex(i); setPageDropdownOpen(false); }}
-										className={clsx('w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-bg-3 transition-colors', i === selectedPageIndex ? 'text-accent' : 'text-text-primary')}
+										className={clsx('w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left hover:bg-bg-3 transition-colors min-w-0', i === selectedPageIndex ? 'text-accent' : 'text-text-primary')}
 									>
-										<span>{p.label}</span>
-										<span className="text-text-primary/30 text-xs">{p.path}</span>
+										<span className="truncate min-w-0">{p.label}</span>
+										<span className="text-text-primary/30 text-xs flex-shrink-0">{p.path}</span>
 									</button>
 								))}
 							</div>

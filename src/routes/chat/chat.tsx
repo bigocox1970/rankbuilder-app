@@ -962,7 +962,7 @@ export default function Chat() {
 							initial={{ opacity: 0 }}
 							animate={{ opacity: 1 }}
 							exit={{ opacity: 0 }}
-							className={clsx("flex-1 flex shrink-0 basis-0 z-30 min-h-0", isMobile ? "p-0" : "p-4 pl-0 ml-2")}
+							className={clsx("flex-1 flex shrink-0 basis-0 z-30 min-h-0 min-w-0", isMobile ? "p-0" : "p-4 pl-0 ml-2")}
 						>
 							<MainContentPanel
 								view={view}
