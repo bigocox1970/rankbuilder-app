@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Search, RotateCcw, Play, Settings } from 'lucide-react';
+import { Search, RotateCcw, Play, Settings, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -77,6 +77,47 @@ export function ModelConfigTabs({
     setIsModalOpen(false);
   };
 
+  // One-click preset that points every text-based agent at MiniMax's M2 models.
+  // M2.5 for code-heavy ops, M2.7 for chat/planning/reasoning. Skips vision/disabled agents.
+  const MINIMAX_PRESET: Record<string, string> = {
+    projectSetup: 'minimax/MiniMax-M2.5',
+    phaseGeneration: 'minimax/MiniMax-M2.5',
+    firstPhaseImplementation: 'minimax/MiniMax-M2.5',
+    phaseImplementation: 'minimax/MiniMax-M2.5',
+    agenticProjectBuilder: 'minimax/MiniMax-M2.5',
+    fileRegeneration: 'minimax/MiniMax-M2.5',
+    realtimeCodeFixer: 'minimax/MiniMax-M2.5',
+    fastCodeFixer: 'minimax/MiniMax-M2.5',
+    templateSelection: 'minimax/MiniMax-M2.5',
+    conversationalResponse: 'minimax/MiniMax-M2.7',
+    blueprint: 'minimax/MiniMax-M2.7',
+    deepDebugger: 'minimax/MiniMax-M2.7',
+  };
+
+  const handleApplyMiniMaxPreset = async () => {
+    const targets = agentConfigs.filter(c => MINIMAX_PRESET[c.key]);
+    if (targets.length === 0) {
+      toast.info('No applicable agents found');
+      return;
+    }
+    let ok = 0;
+    let fail = 0;
+    for (const config of targets) {
+      try {
+        await onSaveConfig(config.key, {
+          modelName: MINIMAX_PRESET[config.key],
+          fallbackModel: 'google-ai-studio/gemini-2.5-flash',
+          isUserOverride: true,
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    if (fail === 0) toast.success(`Applied MiniMax preset to ${ok} agents`);
+    else toast.error(`Applied to ${ok}, failed on ${fail}`);
+  };
+
   // Handle bulk test all configured agents
   const handleTestAllConfigured = async () => {
     const customizedConfigs = agentConfigs.filter(config => 
@@ -136,7 +177,19 @@ export function ModelConfigTabs({
           </div>
           
           {/* Action buttons */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleApplyMiniMaxPreset}
+              disabled={savingConfigs}
+              className="gap-2 border-accent/40 text-accent hover:bg-accent/10"
+              title="Switch all text-based agents to MiniMax M2.5 / M2.7 (cheaper, code-optimised)"
+            >
+              <Zap className="h-4 w-4" />
+              Use MiniMax
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -146,7 +199,7 @@ export function ModelConfigTabs({
               <Play className="h-4 w-4" />
               Test All
             </Button>
-            
+
             <Button
               variant="outline"
               size="sm"

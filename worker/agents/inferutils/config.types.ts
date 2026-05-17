@@ -361,6 +361,28 @@ const MODELS_MASTER = {
             directOverride: true,
         }
     },
+    MINIMAX_M2_5: {
+        id: 'minimax/MiniMax-M2.5',
+        config: {
+            name: 'MiniMax M2.5',
+            size: ModelSize.REGULAR,
+            provider: 'minimax',
+            creditCost: 1.2, // $0.30/1M input
+            contextSize: 1_000_000,
+            directOverride: true,
+        }
+    },
+    MINIMAX_M2_7: {
+        id: 'minimax/MiniMax-M2.7',
+        config: {
+            name: 'MiniMax M2.7',
+            size: ModelSize.REGULAR,
+            provider: 'minimax',
+            creditCost: 1.2, // $0.30/1M input
+            contextSize: 1_000_000,
+            directOverride: true,
+        }
+    },
 } as const;
 
 /**

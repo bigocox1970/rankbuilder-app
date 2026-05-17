@@ -29,10 +29,12 @@ import { createLogger } from '../../logger';
 
 const logger = createLogger('Inference');
 
-// MiniMax direct API pricing (USD per 1M tokens)
+// MiniMax direct API pricing (USD per 1M tokens) — from minimaxi.chat pricing page
 const MINIMAX_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
-    'minimax/MiniMax-Text-01': { inputPer1M: 0.20, outputPer1M: 1.10 },
+    'minimax/MiniMax-Text-01': { inputPer1M: 0.20, outputPer1M: 1.10 }, // deprecated, kept for back-compat
     'minimax/MiniMax-M1': { inputPer1M: 0.30, outputPer1M: 1.10 },
+    'minimax/MiniMax-M2.5': { inputPer1M: 0.30, outputPer1M: 1.20 },
+    'minimax/MiniMax-M2.7': { inputPer1M: 0.30, outputPer1M: 1.20 },
 };
 
 async function trackMiniMaxUsage(modelName: string, tokensIn: number, tokensOut: number, env: Env): Promise<void> {
