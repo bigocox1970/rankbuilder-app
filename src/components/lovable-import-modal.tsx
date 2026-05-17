@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { Zap, Github, ArrowRight, ExternalLink } from 'lucide-react';
+import { Github, ArrowRight, ExternalLink, GitBranch, Loader2 } from 'lucide-react';
 import {
 	Dialog,
 	DialogContent,
@@ -10,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { apiClient } from '@/lib/api-client';
 
 interface LovableImportModalProps {
 	open: boolean;
@@ -17,16 +17,35 @@ interface LovableImportModalProps {
 }
 
 export function LovableImportModal({ open, onOpenChange }: LovableImportModalProps) {
-	const navigate = useNavigate();
 	const [githubUrl, setGithubUrl] = useState('');
+	const [branch, setBranch] = useState('main');
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
-	const isValidUrl = githubUrl.trim().startsWith('https://github.com/') && githubUrl.trim().length > 25;
+	const trimmedUrl = githubUrl.trim();
+	const isValidUrl =
+		/^https?:\/\/(?:www\.)?github\.com\/[^/\s]+\/[^/\s]+/i.test(trimmedUrl) ||
+		/^[^/\s]+\/[^/\s]+$/.test(trimmedUrl);
 
-	const handleImport = () => {
-		if (!isValidUrl) return;
-		const url = githubUrl.trim().replace(/\/$/, '');
-		onOpenChange(false);
-		navigate(`/?import=${encodeURIComponent(url)}`);
+	const handleImport = async () => {
+		if (!isValidUrl || submitting) return;
+		setSubmitting(true);
+		setError(null);
+		try {
+			const response = await apiClient.initiateGitHubImport({
+				repoUrl: trimmedUrl,
+				branch: branch.trim() || 'main',
+			});
+			if (!response.success || !response.data?.authUrl) {
+				setError(response.error?.message || 'Could not start the GitHub import.');
+				setSubmitting(false);
+				return;
+			}
+			window.location.href = response.data.authUrl;
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Unexpected error starting import.');
+			setSubmitting(false);
+		}
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -38,81 +57,102 @@ export function LovableImportModal({ open, onOpenChange }: LovableImportModalPro
 			<DialogContent className="sm:max-w-[520px] max-w-[calc(100%-2rem)]">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
-						<Zap className="h-5 w-5 text-accent" />
-						Import from Lovable
+						<Github className="h-5 w-5 text-accent" />
+						Import from GitHub
 					</DialogTitle>
 					<DialogDescription>
-						Bring your Lovable project to RankBuilder — we'll make it SEO-friendly and deploy it to Cloudflare.
+						Bring an existing React + Vite project into RankBuilder. Works with public and private repos —
+						we authenticate via GitHub OAuth so you keep full control.
 					</DialogDescription>
 				</DialogHeader>
 
 				<div className="space-y-5 mt-1">
-					{/* Step 1 */}
 					<div className="space-y-3">
-						<div className="flex items-center gap-2">
-							<span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white text-xs font-bold flex-shrink-0">1</span>
-							<span className="text-sm font-medium text-text-primary">Push your Lovable project to GitHub</span>
-						</div>
-						<ol className="ml-7 space-y-1.5 text-sm text-text-primary/70 list-none">
-							<li className="flex items-start gap-2">
-								<span className="text-accent mt-0.5">→</span>
-								<span>In Lovable, click the <strong className="text-text-primary">GitHub</strong> icon in the top toolbar</span>
-							</li>
-							<li className="flex items-start gap-2">
-								<span className="text-accent mt-0.5">→</span>
-								<span>Select <strong className="text-text-primary">Connect to GitHub</strong> and authorise if prompted</span>
-							</li>
-							<li className="flex items-start gap-2">
-								<span className="text-accent mt-0.5">→</span>
-								<span>Click <strong className="text-text-primary">Push to GitHub</strong> — Lovable will create or update your repository</span>
-							</li>
-							<li className="flex items-start gap-2">
-								<span className="text-accent mt-0.5">→</span>
-								<span>Copy the repository URL from GitHub (e.g. <code className="text-xs bg-bg-4 px-1 py-0.5 rounded">github.com/you/your-project</code>)</span>
-							</li>
-						</ol>
-						<a
-							href="https://docs.lovable.dev/tips-tricks/github-integration"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="ml-7 inline-flex items-center gap-1 text-xs text-accent hover:underline"
-						>
-							Lovable GitHub guide <ExternalLink className="h-3 w-3" />
-						</a>
-					</div>
-
-					<div className="border-t border-border-primary" />
-
-					{/* Step 2 */}
-					<div className="space-y-3">
-						<div className="flex items-center gap-2">
-							<span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white text-xs font-bold flex-shrink-0">2</span>
-							<span className="text-sm font-medium text-text-primary">Paste your GitHub URL and import</span>
-						</div>
-						<div className="ml-7 space-y-3">
-							<div className="flex gap-2">
-								<div className="relative flex-1">
-									<Github className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-primary/40" />
-									<Input
-										value={githubUrl}
-										onChange={e => setGithubUrl(e.target.value)}
-										onKeyDown={handleKeyDown}
-										placeholder="https://github.com/your-username/your-project"
-										className="pl-9 font-mono text-sm"
-									/>
-								</div>
-								<Button
-									onClick={handleImport}
-									disabled={!isValidUrl}
-									className="bg-accent hover:bg-accent/90 text-white gap-1.5 flex-shrink-0"
-								>
-									Import <ArrowRight className="h-3.5 w-3.5" />
-								</Button>
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium text-text-primary">Repository URL</label>
+							<div className="relative">
+								<Github className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-primary/40" />
+								<Input
+									value={githubUrl}
+									onChange={e => setGithubUrl(e.target.value)}
+									onKeyDown={handleKeyDown}
+									placeholder="https://github.com/your-username/your-project"
+									className="pl-9 font-mono text-sm"
+									autoFocus
+								/>
 							</div>
 							<p className="text-xs text-text-primary/50">
-								We'll clone your project, add SEO optimisation, structured data, and deploy it to Cloudflare — making it Google-friendly out of the box.
+								Paste the full URL or <code className="text-xs bg-bg-4 px-1 py-0.5 rounded">owner/repo</code> shorthand.
 							</p>
 						</div>
+
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium text-text-primary">Branch</label>
+							<div className="relative">
+								<GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-primary/40" />
+								<Input
+									value={branch}
+									onChange={e => setBranch(e.target.value)}
+									onKeyDown={handleKeyDown}
+									placeholder="main"
+									className="pl-9 font-mono text-sm"
+								/>
+							</div>
+							<p className="text-xs text-text-primary/50">
+								We'll fall back to the repo's default branch if this one doesn't exist.
+							</p>
+						</div>
+					</div>
+
+					{error && (
+						<div className="rounded-md bg-red-500/10 border border-red-500/30 px-3 py-2 text-sm text-red-300">
+							{error}
+						</div>
+					)}
+
+					<div className="flex flex-col gap-3 pt-1">
+						<Button
+							onClick={handleImport}
+							disabled={!isValidUrl || submitting}
+							className="bg-accent hover:bg-accent/90 text-white gap-1.5 w-full"
+						>
+							{submitting ? (
+								<>
+									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+									Redirecting to GitHub…
+								</>
+							) : (
+								<>
+									Authorise with GitHub and import <ArrowRight className="h-3.5 w-3.5" />
+								</>
+							)}
+						</Button>
+						<p className="text-xs text-text-primary/50 text-center">
+							We currently support Vite + React projects only. Other frameworks coming soon.
+						</p>
+					</div>
+
+					<div className="border-t border-border-primary pt-4">
+						<details className="group">
+							<summary className="text-sm font-medium text-text-primary cursor-pointer hover:text-accent transition-colors flex items-center gap-1.5">
+								Importing from Lovable?
+								<span className="text-xs text-text-primary/50 group-open:hidden">Show steps</span>
+							</summary>
+							<div className="mt-3 ml-1 space-y-1.5 text-sm text-text-primary/70">
+								<p>1. In Lovable, click the <strong className="text-text-primary">GitHub</strong> icon in the top toolbar.</p>
+								<p>2. Select <strong className="text-text-primary">Connect to GitHub</strong> and authorise.</p>
+								<p>3. Click <strong className="text-text-primary">Push to GitHub</strong> — Lovable creates the repo.</p>
+								<p>4. Copy the repo URL from GitHub and paste it above.</p>
+								<a
+									href="https://docs.lovable.dev/tips-tricks/github-integration"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-2"
+								>
+									Lovable's GitHub guide <ExternalLink className="h-3 w-3" />
+								</a>
+							</div>
+						</details>
 					</div>
 				</div>
 			</DialogContent>

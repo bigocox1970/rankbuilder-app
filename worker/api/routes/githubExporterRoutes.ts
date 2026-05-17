@@ -14,10 +14,13 @@ import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';
  */
 export function setupGitHubExporterRoutes(app: Hono<AppEnv>): void {
     app.get('/api/github-exporter/callback', setAuthLevel(AuthConfig.authenticated), adaptController(GitHubExporterController, GitHubExporterController.handleOAuthCallback));
-    
+
     // Repository export routes with OAuth flow
     app.post('/api/github-app/export', setAuthLevel(AuthConfig.authenticated), adaptController(GitHubExporterController, GitHubExporterController.initiateGitHubExport));
-    
+
     // Check remote repository status
     app.post('/api/github-app/check-remote', setAuthLevel(AuthConfig.authenticated), adaptController(GitHubExporterController, GitHubExporterController.checkRemoteStatus));
+
+    // GitHub repository import (clone an existing repo as a new RankBuilder project)
+    app.post('/api/github/import/initiate', setAuthLevel(AuthConfig.authenticated), adaptController(GitHubExporterController, GitHubExporterController.initiateGitHubImport));
 }

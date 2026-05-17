@@ -1,5 +1,5 @@
 import { Agent, AgentContext, ConnectionContext } from "agents";
-import { AgentInitArgs, AgentSummary, DeployOptions, DeployResult, ExportOptions, ExportResult, DeploymentTarget, BehaviorType } from "./types";
+import { AgentInitArgs, AgentImportInitArgs, AgentSummary, DeployOptions, DeployResult, ExportOptions, ExportResult, DeploymentTarget, BehaviorType } from "./types";
 import { AgenticState, AgentState, BaseProjectState, CurrentDevState, MAX_PHASES, PhasicState } from "./state";
 import { Blueprint } from "../schemas";
 import { BaseCodingBehavior } from "./behaviors/base";
@@ -149,6 +149,36 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     
     async isInitialized() {
         return this.getAgentId() ? true : false
+    }
+
+    /**
+     * Initialize the agent from a GitHub repository import.
+     * Skips blueprint and phase generation: imported files are committed as-is
+     * and the agent transitions straight to a ready-for-chat state.
+     */
+    async initializeFromImport(args: AgentImportInitArgs): Promise<AgentState> {
+        const { inferenceContext } = args;
+        const sandboxSessionId = DeploymentManager.generateNewSessionId();
+        this.initLogger(inferenceContext.metadata.agentId, inferenceContext.metadata.userId, sandboxSessionId);
+
+        await this.gitInit();
+
+        await this.behavior.initializeFromImport({
+            ...args,
+            sandboxSessionId,
+            importedBinaryPaths: args.importedBinaryPaths ?? [],
+            inferenceContext: {
+                ...inferenceContext,
+                metadata: {
+                    ...inferenceContext.metadata,
+                    agentId: inferenceContext.metadata.agentId,
+                },
+            },
+        });
+
+        await this.saveToDatabase();
+
+        return this.state;
     }
 
     /**

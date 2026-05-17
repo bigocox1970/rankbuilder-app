@@ -1027,6 +1027,20 @@ class ApiClient {
 		});
 	}
 
+	/**
+	 * Initiate a GitHub repository import.
+	 * Returns the GitHub OAuth URL — the caller redirects the browser there.
+	 */
+	async initiateGitHubImport(data: {
+		repoUrl: string;
+		branch?: string;
+	}): Promise<ApiResponse<{ authUrl: string; agentId: string }>> {
+		return this.request('/api/github/import/initiate', {
+			method: 'POST',
+			body: data,
+		});
+	}
+
 	// ===============================
 	// Agent/CodeGen API Methods
 	// ===============================

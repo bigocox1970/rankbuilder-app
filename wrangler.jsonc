@@ -68,7 +68,7 @@
 			"image": "./SandboxDockerfile",
             // "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:cfe197fc",
             // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
-			"max_instances": 10,
+			"max_instances": 25,
             // ATTENTION: Altering instance_type value will have no effect. Please use the SANDBOX_INSTANCE_TYPE var instead.
             "instance_type": "standard-3",
             "rollout_step_percentage": 100,
@@ -177,7 +177,7 @@
             "version": "1.0.0"
         },
         "CUSTOM_PREVIEW_DOMAIN": "rankbuilder.app",
-        "MAX_SANDBOX_INSTANCES": "10",
+        "MAX_SANDBOX_INSTANCES": "25",
         "SANDBOX_INSTANCE_TYPE": "standard-3"
     },
 	"workers_dev": false,

@@ -51,10 +51,37 @@ interface AgenticAgentInitArgs extends BaseAgentInitArgs {
 }
 
 /** Generic initialization arguments based on state type */
-export type AgentInitArgs<TState extends PhasicState | AgenticState = PhasicState | AgenticState> = 
-    TState extends PhasicState ? PhasicAgentInitArgs : 
-    TState extends AgenticState ? AgenticAgentInitArgs : 
+export type AgentInitArgs<TState extends PhasicState | AgenticState = PhasicState | AgenticState> =
+    TState extends PhasicState ? PhasicAgentInitArgs :
+    TState extends AgenticState ? AgenticAgentInitArgs :
     PhasicAgentInitArgs | AgenticAgentInitArgs;
+
+/** Initialization arguments for the GitHub-import flow.
+ * Bypasses blueprint + phase generation: imported files are saved as-is and
+ * the agent is set straight to a ready-for-chat state.
+ */
+export interface AgentImportInitArgs {
+    files: FileOutputType[];
+    hostname: string;
+    inferenceContext: InferenceContext;
+    projectName: string;
+    repoFullName: string;
+    repoUrl: string;
+    branch: string;
+    branchFallback: boolean;
+    description: string | null;
+    isPrivate: boolean;
+    frameworks: string[];
+    extraDontTouch: string[];
+    /** Sandbox session ID. Optional from the caller — the agent always
+     * generates one before invoking the behavior so the resulting sandbox
+     * preview hostname stays under the 63-char DNS label limit. */
+    sandboxSessionId?: string;
+    /** Paths of binary assets (images, fonts) that the controller uploaded
+     * to R2. The agent fetches them from R2 at deploy time and injects them
+     * into the sandbox alongside text files — they never enter DO state. */
+    importedBinaryPaths?: string[];
+}
 
 export type Plan = string;
 

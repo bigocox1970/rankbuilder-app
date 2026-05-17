@@ -8,7 +8,8 @@ import {
 } from '../../schemas';
 import { ExecuteCommandsResponse, PreviewType, RuntimeError, StaticAnalysisResponse, TemplateDetails, TemplateFile } from '../../../services/sandbox/sandboxTypes';
 import { BaseProjectState, AgenticState, FileState } from '../state';
-import { AllIssues, AgentSummary, AgentInitArgs, BehaviorType, DeploymentTarget, ProjectType } from '../types';
+import { AllIssues, AgentSummary, AgentInitArgs, AgentImportInitArgs, BehaviorType, DeploymentTarget, ProjectType } from '../types';
+import { fetchImportedBinaries } from '../../../services/github/importedBinaries';
 import { WebSocketMessageResponses } from '../../constants';
 import { ProjectSetupAssistant } from '../../assistants/projectsetup';
 import { UserConversationProcessor, RenderToolCall } from '../../operations/UserConversationProcessor';
@@ -140,11 +141,218 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const { templateInfo } = initArgs;
         if (templateInfo) {
             this.templateDetailsCache = templateInfo.templateDetails;
-            
+
             await this.ensureTemplateDetails();
         }
 
         // Reset the logg
+        return this.state;
+    }
+
+    /**
+     * Initialize the agent from a GitHub-imported project.
+     *
+     * Skips blueprint + phase generation: the imported files are saved as-is
+     * and the agent transitions straight to a ready-for-chat state so the user
+     * can iterate via Orange. A synthetic TemplateDetails is constructed so
+     * downstream behaviour (dontTouch enforcement, file regeneration, deploy)
+     * has the same shape as a normal generated project.
+     */
+    public async initializeFromImport(args: AgentImportInitArgs): Promise<TState> {
+        const { files, projectName, repoFullName, repoUrl, branch, description, isPrivate, frameworks, extraDontTouch, inferenceContext, hostname } = args;
+        if (!args.sandboxSessionId) {
+            throw new Error('initializeFromImport requires sandboxSessionId from the agent layer');
+        }
+        const sandboxSessionId = args.sandboxSessionId;
+        const importedBinaryPaths = args.importedBinaryPaths ?? [];
+
+        const filesMap: Record<string, string> = {};
+        for (const file of files) {
+            filesMap[file.filePath] = file.fileContents;
+        }
+
+        // Fetch binary assets (images, fonts) back from R2 and merge them
+        // into the template's allFiles map. They live alongside text files
+        // in the sandbox at deploy time but stay out of DO state.
+        if (importedBinaryPaths.length > 0) {
+            try {
+                const binaries = await fetchImportedBinaries({
+                    env: this.env,
+                    agentId: inferenceContext.metadata.agentId,
+                    paths: importedBinaryPaths,
+                });
+                for (const b of binaries) {
+                    filesMap[b.filePath] = b.fileContents;
+                }
+                this.logger.info('Merged R2-hosted binaries into template allFiles', { count: binaries.length });
+            } catch (err) {
+                this.logger.warn('Failed to fetch imported binaries from R2', { err });
+            }
+        }
+
+        const dontTouchSet = new Set<string>([
+            'index.html',
+            'src/main.tsx',
+            'src/main.jsx',
+            'vite.config.ts',
+            'vite.config.js',
+            'package.json',
+            'package-lock.json',
+            'bun.lockb',
+            'yarn.lock',
+            'pnpm-lock.yaml',
+            'tsconfig.json',
+            'tsconfig.app.json',
+            'tsconfig.node.json',
+            '.gitignore',
+            ...extraDontTouch,
+        ]);
+
+        const dontTouchFiles = Array.from(dontTouchSet).filter(path => files.some(f => f.filePath === path) || ['index.html', 'src/main.tsx', 'src/main.jsx', 'vite.config.ts', 'vite.config.js', 'package.json'].includes(path));
+
+        const syntheticTemplate: TemplateDetails = {
+            name: `imported-${repoFullName.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}`,
+            language: 'typescript',
+            frameworks,
+            projectType: 'app',
+            description: {
+                selection: `GitHub import: ${repoFullName}`,
+                usage: `Imported from ${repoUrl}. Edit components in src/ to iterate; build configs are protected.`,
+            },
+            renderMode: 'sandbox',
+            disabled: false,
+            fileTree: { path: '/', type: 'directory', children: [] },
+            allFiles: filesMap,
+            deps: {},
+            importantFiles: ['src/App.tsx', 'src/App.jsx', 'package.json'].filter(p => p in filesMap),
+            dontTouchFiles,
+            redactedFiles: [],
+        };
+
+        this.templateDetailsCache = syntheticTemplate;
+
+        const fileSummary = summariseImportedFiles(files);
+        const detailedDescription = [
+            `This is an EXISTING React + Vite project the user has imported from GitHub (${repoUrl}, branch: ${branch}).`,
+            `It is NOT a project you should rebuild from scratch — the user wants to iterate on what they already have.`,
+            ``,
+            `Detected frameworks: ${frameworks.join(', ') || 'react, vite'}.`,
+            `Total files: ${files.length}.`,
+            ``,
+            `Key files visible to you:`,
+            fileSummary,
+            ``,
+            `Cloudflare deploy scaffolding was added automatically on import (wrangler.jsonc, worker/index.ts, vite.config.cloudflare.ts, plus dev/deploy scripts). Do NOT remove these — they are required for the live preview.`,
+            ``,
+            `When the user sends their first message, briefly acknowledge what you can see (1-2 sentences) and ask what they would like to change. Do not propose redesigns unprompted.`,
+        ].join('\n');
+
+        const blueprint = {
+            title: repoFullName,
+            projectName,
+            description: description || `Imported React + Vite project from ${repoFullName}`,
+            colorPalette: [],
+            frameworks,
+            detailedDescription,
+            views: [],
+            userFlow: {
+                uiLayout: 'Existing user-provided React + Vite UI — preserve current layout.',
+                uiDesign: 'Existing user-provided design — preserve current styling unless the user asks otherwise.',
+                userJourney: 'The user has imported their project to iterate on it. Wait for their instructions.',
+            },
+            dataFlow: 'Inherited from the imported project — inspect files before assuming any data flow.',
+            architecture: { dataFlow: 'Inherited from the imported project.' },
+            pitfalls: [
+                'Do NOT regenerate or rewrite files the user did not explicitly ask you to change.',
+                'Do NOT touch wrangler.jsonc, worker/index.ts, vite.config.cloudflare.ts, package.json, or vite.config.* — they are protected.',
+                'Read existing files with read_files before editing them.',
+            ],
+            implementationRoadmap: [],
+            initialPhase: { name: 'Imported', description: 'Files imported from GitHub', files: [] },
+        } as unknown as PhasicBlueprint;
+
+        const nextState = {
+            ...this.state,
+            projectName,
+            query: `Imported from GitHub: ${repoFullName}@${branch}. The user wants to iterate on this existing React + Vite project — do not rebuild it.`,
+            blueprint,
+            templateName: syntheticTemplate.name,
+            sandboxInstanceId: undefined,
+            commandsHistory: [],
+            lastPackageJson: filesMap['package.json'] || '',
+            sessionId: sandboxSessionId,
+            hostname,
+            metadata: inferenceContext.metadata,
+            projectType: 'app' as ProjectType,
+            // Force 'phasic' — onStart may have left behaviorType as 'unknown'
+            // when the agent was instantiated before any state existed.
+            // GenerationContext discriminates on this exact value.
+            behaviorType: 'phasic' as BehaviorType,
+            mvpGenerated: true,
+            reviewingInitiated: false,
+            shouldBeGenerating: false,
+            importSource: `github:${repoFullName}@${branch}`,
+            importedDontTouch: Array.from(dontTouchSet),
+            importedBinaryPaths,
+            generatedPhases: [],
+            phasesCounter: (this.state as { phasesCounter?: number }).phasesCounter ?? 100,
+            currentDevState: (this.state as { currentDevState?: unknown }).currentDevState,
+        } as TState;
+
+        this.setState(nextState);
+
+        const filesToSave: FileOutputType[] = files.map(f => ({
+            filePath: f.filePath,
+            fileContents: f.fileContents,
+            filePurpose: 'Imported from GitHub',
+        }));
+
+        await this.fileManager.saveGeneratedFiles(
+            filesToSave,
+            `Initial import from GitHub: ${repoFullName}@${branch}${isPrivate ? ' (private)' : ''}`,
+            true,
+        );
+
+        this.logger.info('Imported repository committed', {
+            files: filesToSave.length,
+            repoFullName,
+            branch,
+            isPrivate,
+        });
+
+        // Fire-and-forget deploy. Frontend tracks via DEPLOYMENT_* WS events.
+        this.deployToSandbox([], false, `Boot imported project: ${repoFullName}`)
+            .then(async (result) => {
+                this.logger.info('[IMPORT-DIAG] Initial deploy promise resolved', {
+                    previewURL: result?.previewURL,
+                    sandboxInstanceId: this.state.sandboxInstanceId,
+                });
+                // Wait a beat for the dev server to either come up or crash,
+                // then dump whatever it printed to the worker log so we can
+                // diagnose import-specific issues without sandbox shell access.
+                await new Promise(resolve => setTimeout(resolve, 25_000));
+                try {
+                    const instanceId = this.state.sandboxInstanceId;
+                    if (!instanceId) {
+                        this.logger.warn('[IMPORT-DIAG] No sandboxInstanceId — skipping log dump');
+                        return;
+                    }
+                    const logs = await this.getSandboxServiceClient().getLogs(instanceId, true);
+                    this.logger.info('[IMPORT-DIAG] Sandbox dev-server logs after ~25s', {
+                        instanceId,
+                        success: logs?.success,
+                        stdoutTail: logs?.logs?.stdout?.slice(-4000),
+                        stderrTail: logs?.logs?.stderr?.slice(-4000),
+                    });
+                } catch (err) {
+                    this.logger.warn('[IMPORT-DIAG] Could not fetch sandbox logs', { err });
+                }
+            })
+            .catch((error: unknown) => {
+                this.logger.error('[IMPORT-DIAG] Initial deploy promise rejected', { error });
+                this.broadcastError('Imported preview deploy failed', error);
+            });
+
         return this.state;
     }
 
@@ -174,6 +382,52 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         if (!this.templateDetailsCache) {
             if (this.state.templateName === 'scratch') {
                 this.logger.info('Skipping template details fetch for scratch baseline');
+                return;
+            }
+            // GitHub-imported projects have no R2 template — reconstruct a
+            // synthetic TemplateDetails from state so downstream logic (deploy,
+            // dontTouch enforcement, file regeneration) keeps working after
+            // DO cold-start.
+            if (this.state.importSource) {
+                this.logger.info('Reconstructing template details for imported project', { importSource: this.state.importSource });
+                const allFiles: Record<string, string> = {};
+                for (const file of this.fileManager.getGeneratedFiles()) {
+                    allFiles[file.filePath] = file.fileContents;
+                }
+                const binaryPaths = this.state.importedBinaryPaths ?? [];
+                if (binaryPaths.length > 0) {
+                    try {
+                        const binaries = await fetchImportedBinaries({
+                            env: this.env,
+                            agentId: this.state.metadata.agentId,
+                            paths: binaryPaths,
+                        });
+                        for (const b of binaries) {
+                            allFiles[b.filePath] = b.fileContents;
+                        }
+                        this.logger.info('Cold-start: refilled imported binaries from R2', { count: binaries.length });
+                    } catch (err) {
+                        this.logger.warn('Cold-start: failed to fetch imported binaries', { err });
+                    }
+                }
+                this.templateDetailsCache = {
+                    name: this.state.templateName,
+                    language: 'typescript',
+                    frameworks: this.state.blueprint?.frameworks ?? [],
+                    projectType: 'app',
+                    description: {
+                        selection: `GitHub import: ${this.state.importSource}`,
+                        usage: 'Imported project. Edit components in src/; build configs are protected.',
+                    },
+                    renderMode: 'sandbox',
+                    disabled: false,
+                    fileTree: { path: '/', type: 'directory', children: [] },
+                    allFiles,
+                    deps: {},
+                    importantFiles: [],
+                    dontTouchFiles: this.state.importedDontTouch ?? [],
+                    redactedFiles: [],
+                };
                 return;
             }
             this.logger.info(`Loading template details for: ${this.state.templateName}`);
@@ -250,6 +504,16 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             // SEO meta must use react-helmet-async or prerender.mjs instead.
             result.add('index.html');
             result.add('src/main.tsx');
+        }
+
+        // GitHub-imported projects: protect build configs by default so the
+        // LLM can iterate on app code without breaking the build. Customers
+        // importing a Lovable/v0/Bolt repo do not think to mark these files.
+        const importedDontTouch = (this.state as { importedDontTouch?: string[] }).importedDontTouch;
+        if (importedDontTouch?.length) {
+            for (const path of importedDontTouch) {
+                result.add(path);
+            }
         }
         return result;
     }
@@ -2081,4 +2345,41 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         return signedUrl;
     }
+}
+
+/**
+ * Summarise the most LLM-useful files from a GitHub import so the agent has
+ * concrete project context without dumping every path into the blueprint.
+ * Prioritises React entry points, route files, and small config files.
+ */
+function summariseImportedFiles(files: FileOutputType[]): string {
+    const priority = [
+        'src/App.tsx', 'src/App.jsx',
+        'src/main.tsx', 'src/main.jsx',
+        'package.json',
+        'README.md', 'readme.md',
+        'tailwind.config.js', 'tailwind.config.ts',
+    ];
+    const picked: string[] = [];
+    for (const path of priority) {
+        if (files.some(f => f.filePath === path)) picked.push(path);
+    }
+
+    const routeOrPageFiles = files
+        .filter(f => /(^|\/)(pages|routes|views)\/.+\.(tsx|jsx|ts|js)$/.test(f.filePath))
+        .map(f => f.filePath)
+        .slice(0, 8);
+    picked.push(...routeOrPageFiles);
+
+    const componentFiles = files
+        .filter(f => /^src\/components\/.+\.(tsx|jsx)$/.test(f.filePath))
+        .map(f => f.filePath)
+        .slice(0, 6);
+    picked.push(...componentFiles);
+
+    const unique = Array.from(new Set(picked));
+    if (unique.length === 0) {
+        return `- ${files.slice(0, 12).map(f => f.filePath).join('\n- ')}`;
+    }
+    return `- ${unique.join('\n- ')}`;
 }

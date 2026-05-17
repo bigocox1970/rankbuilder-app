@@ -38,13 +38,27 @@ export default function Home() {
 	const [keywords, setKeywords] = useState<string[]>([]);
 	const [plannerQuery, setPlannerQuery] = useState<string | null>(null);
 
-	// Pre-fill prompt when arriving from Lovable import modal
+	// Surface a friendly error when the GitHub import OAuth flow fails before
+	// reaching the chat page (e.g. user denied, repo not found, not Vite/React).
 	useEffect(() => {
-		const importUrl = searchParams.get('import');
-		if (importUrl) {
-			setQuery(`Import my Lovable project from GitHub: ${importUrl} — make it SEO-friendly, add structured data, and deploy to Cloudflare`);
-			setStack('website');
-		}
+		const importStatus = searchParams.get('github_import');
+		if (importStatus !== 'error') return;
+		const reason = searchParams.get('reason') || 'github_error';
+		const message = searchParams.get('message');
+		const friendly = (() => {
+			switch (reason) {
+				case 'repo_not_found': return 'GitHub repository not found.';
+				case 'access_denied': return 'You do not have access to that repository.';
+				case 'branch_not_found_no_default': return 'That branch does not exist.';
+				case 'too_large': return 'Repository is too large to import.';
+				case 'too_many_files': return 'Repository has too many files to import.';
+				case 'file_too_large': return 'A file in the repository is too large.';
+				case 'unsupported_project_type': return 'Only Vite + React projects can be imported right now.';
+				case 'extract_failed': return 'Could not extract the repository archive.';
+				default: return message || 'GitHub import failed.';
+			}
+		})();
+		toast.error(friendly);
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 	const { user } = useAuth();

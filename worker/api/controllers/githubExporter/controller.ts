@@ -8,6 +8,10 @@ import { AppService } from '../../../database/services/AppService';
 import { ExportResult } from 'worker/agents/core/types';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { validateRedirectUrl } from '../../../utils/authUtils';
+import { generateId } from '../../../utils/idGenerator';
+import { importRepository, parseGitHubRepoUrl } from '../../../services/github/GitHubImporter';
+import { scaffoldCloudflareImport } from '../../../services/github/CloudflareScaffold';
+import { uploadImportedBinaries } from '../../../services/github/importedBinaries';
 
 export interface GitHubExportData {
     success: boolean;
@@ -18,6 +22,7 @@ export interface GitHubExportData {
 interface GitHubExportStatePayload extends JWTPayload {
     userId: string;
     purpose: 'repository_export';
+    mode?: 'export';
     agentId: string;
     returnUrl: string;
     exportData: {
@@ -27,25 +32,44 @@ interface GitHubExportStatePayload extends JWTPayload {
     };
 }
 
+interface GitHubImportStatePayload extends JWTPayload {
+    userId: string;
+    purpose: 'repository_import';
+    mode: 'import';
+    returnUrl: string;
+    importData: {
+        owner: string;
+        repo: string;
+        branch: string;
+        agentId: string;
+    };
+}
+
+type GitHubOAuthStatePayload = GitHubExportStatePayload | GitHubImportStatePayload;
+
+function isImportState(payload: GitHubOAuthStatePayload): payload is GitHubImportStatePayload {
+    return payload.purpose === 'repository_import';
+}
+
 export class GitHubExporterController extends BaseController {
     static readonly logger = createLogger('GitHubExporterController');
     private static readonly STATE_EXPIRY = '10m';
 
-    private static async signState(payload: Omit<GitHubExportStatePayload, 'iat' | 'exp'>, secret: string): Promise<string> {
-        return new SignJWT(payload)
+    private static async signState(payload: Omit<GitHubOAuthStatePayload, 'iat' | 'exp'>, secret: string): Promise<string> {
+        return new SignJWT(payload as unknown as JWTPayload)
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
             .setExpirationTime(this.STATE_EXPIRY)
             .sign(new TextEncoder().encode(secret));
     }
 
-    private static async verifyState(token: string, secret: string): Promise<GitHubExportStatePayload | null> {
+    private static async verifyState(token: string, secret: string): Promise<GitHubOAuthStatePayload | null> {
         try {
             const { payload } = await jwtVerify(
                 token,
                 new TextEncoder().encode(secret)
             );
-            return payload as GitHubExportStatePayload;
+            return payload as unknown as GitHubOAuthStatePayload;
         } catch (error) {
             this.logger.warn('State verification failed', { error });
             return null;
@@ -260,7 +284,7 @@ export class GitHubExporterController extends BaseController {
                 );
             }
 
-            const { userId, purpose, agentId, exportData, returnUrl } = parsedState;
+            const { userId, returnUrl } = parsedState;
 
             if (!context.user || context.user.id !== userId) {
                 this.logger.warn('Session user mismatch in OAuth callback', {
@@ -283,7 +307,7 @@ export class GitHubExporterController extends BaseController {
 
             if (!tokenResult || !tokenResult.accessToken) {
                 this.logger.error('Failed to exchange OAuth code', { userId });
-                
+
                 return Response.redirect(
                     `${validatedReturnUrl}?github_export=error&reason=token_exchange_failed`,
                     302,
@@ -292,47 +316,47 @@ export class GitHubExporterController extends BaseController {
 
             this.logger.info('OAuth authorization successful', {
                 userId,
-                purpose
+                purpose: parsedState.purpose,
             });
 
-            if (purpose === 'repository_export') {
-                const appService = new AppService(env);
-                const ownershipResult = await appService.checkAppOwnership(agentId, userId);
-                if (!ownershipResult.isOwner) {
-                    this.logger.warn('OAuth callback ownership check failed', { userId, agentId });
-                    return Response.redirect(
-                        `${validatedReturnUrl}?github_export=error&reason=${encodeURIComponent('You do not have permission to export this app')}`,
-                        302,
-                    );
-                }
+            if (isImportState(parsedState)) {
+                return this.handleImportCallback(parsedState, tokenResult.accessToken, baseUrl, env);
+            }
 
-                const result = await this.createRepositoryAndPush({
-                    env,
-                    agentId,
-                    repositoryName: exportData.repositoryName,
-                    description: exportData.description,
-                    isPrivate: exportData.isPrivate || false,
-                    token: tokenResult.accessToken,
-                    username: 'vibesdk-bot'
-                });
+            const exportState = parsedState as GitHubExportStatePayload;
+            const { agentId, exportData } = exportState;
 
-                if (!result.success) {
-                    return Response.redirect(
-                        `${validatedReturnUrl}?github_export=error&reason=${encodeURIComponent(result.error)}`,
-                        302,
-                    );
-                }
-
-                this.logger.info('OAuth export completed', { userId, agentId, repositoryUrl: result.repositoryUrl });
-
+            const appService = new AppService(env);
+            const ownershipResult = await appService.checkAppOwnership(agentId, userId);
+            if (!ownershipResult.isOwner) {
+                this.logger.warn('OAuth callback ownership check failed', { userId, agentId });
                 return Response.redirect(
-                    `${validatedReturnUrl}?github_export=success&repository_url=${encodeURIComponent(result.repositoryUrl)}`,
+                    `${validatedReturnUrl}?github_export=error&reason=${encodeURIComponent('You do not have permission to export this app')}`,
                     302,
                 );
             }
 
+            const result = await this.createRepositoryAndPush({
+                env,
+                agentId,
+                repositoryName: exportData.repositoryName,
+                description: exportData.description,
+                isPrivate: exportData.isPrivate || false,
+                token: tokenResult.accessToken,
+                username: 'vibesdk-bot'
+            });
+
+            if (!result.success) {
+                return Response.redirect(
+                    `${validatedReturnUrl}?github_export=error&reason=${encodeURIComponent(result.error)}`,
+                    302,
+                );
+            }
+
+            this.logger.info('OAuth export completed', { userId, agentId, repositoryUrl: result.repositoryUrl });
+
             return Response.redirect(
-                `${validatedReturnUrl}?integration=github&status=oauth_success`,
+                `${validatedReturnUrl}?github_export=success&repository_url=${encodeURIComponent(result.repositoryUrl)}`,
                 302,
             );
         } catch (error) {
@@ -340,6 +364,201 @@ export class GitHubExporterController extends BaseController {
             return Response.redirect(
                 `${new URL(request.url).origin}/settings?integration=github&status=error`,
                 302,
+            );
+        }
+    }
+
+    /**
+     * Handle the OAuth callback for the import flow: fetch the requested
+     * repository, ingest it into a new agent, and redirect to the chat page.
+     */
+    private static async handleImportCallback(
+        state: GitHubImportStatePayload,
+        token: string,
+        baseUrl: string,
+        env: Env,
+    ): Promise<Response> {
+        const { userId, importData } = state;
+        const { owner, repo, branch, agentId } = importData;
+
+        const importResult = await importRepository({ owner, repo, requestedBranch: branch, token });
+        if (!importResult.success) {
+            this.logger.warn('GitHub import failed', { userId, owner, repo, branch, reason: importResult.reason });
+            return Response.redirect(
+                `${baseUrl}/?github_import=error&reason=${encodeURIComponent(importResult.reason)}&message=${encodeURIComponent(importResult.message)}`,
+                302,
+            );
+        }
+
+        try {
+            const appService = new AppService(env);
+            await appService.createApp({
+                id: agentId,
+                userId,
+                title: importResult.repoInfo.fullName.substring(0, 100),
+                originalPrompt: `Imported from GitHub: ${importResult.repoInfo.fullName}@${importResult.effectiveBranch}`,
+                visibility: 'private',
+                status: 'generating',
+                sessionToken: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+
+            const agentStub = await getAgentStub(env, agentId, { behaviorType: 'phasic', projectType: 'app' });
+
+            const projectName = importResult.packageJson.name
+                || importResult.repoInfo.fullName.split('/').pop()!.replace(/[^a-z0-9-_]/gi, '-').toLowerCase();
+
+            const frameworksList = Object.keys({
+                ...importResult.packageJson.dependencies,
+                ...importResult.packageJson.devDependencies,
+            }).filter(name => ['react', 'vite', 'react-dom', 'react-router', 'react-router-dom', 'tailwindcss'].includes(name));
+
+            const scaffolded = scaffoldCloudflareImport(importResult.files, {
+                projectName,
+                repoFullName: importResult.repoInfo.fullName,
+            });
+
+            this.logger.info('Cloudflare scaffold applied to imported project', {
+                added: scaffolded.addedPaths,
+                totalFiles: scaffolded.files.length,
+                binaries: importResult.binaries.length,
+            });
+
+            // Upload binary assets (images, fonts) to R2 in parallel so they
+            // can be re-injected into the sandbox at deploy time without
+            // bloating DO state past its 2MB row limit.
+            const importedBinaryPaths = await uploadImportedBinaries({
+                env,
+                agentId,
+                binaries: importResult.binaries,
+            });
+
+            await agentStub.initializeFromImport({
+                files: scaffolded.files.map(f => ({
+                    filePath: f.filePath,
+                    fileContents: f.fileContents,
+                    filePurpose: scaffolded.addedPaths.includes(f.filePath)
+                        ? 'RankBuilder-added Cloudflare scaffold'
+                        : 'Imported from GitHub',
+                })),
+                hostname: new URL(baseUrl).host,
+                inferenceContext: {
+                    metadata: {
+                        agentId,
+                        userId,
+                    },
+                    enableRealtimeCodeFix: false,
+                    enableFastSmartCodeFix: false,
+                    shouldUseUserKey: false,
+                },
+                projectName,
+                repoFullName: importResult.repoInfo.fullName,
+                repoUrl: importResult.repoInfo.htmlUrl,
+                branch: importResult.effectiveBranch,
+                branchFallback: importResult.branchFallback,
+                description: importResult.repoInfo.description ?? importResult.packageJson.description ?? null,
+                isPrivate: importResult.repoInfo.isPrivate,
+                frameworks: frameworksList.length > 0 ? frameworksList : ['react', 'vite'],
+                extraDontTouch: [
+                    ...scaffolded.addedPaths.filter(p => p !== 'package.json'),
+                    ...importedBinaryPaths,
+                ],
+                importedBinaryPaths,
+            });
+
+            this.logger.info('GitHub import completed', { userId, agentId, repo: importResult.repoInfo.fullName });
+
+            const params = new URLSearchParams({
+                github_import: 'success',
+                repo: importResult.repoInfo.fullName,
+                branch: importResult.effectiveBranch,
+            });
+            if (importResult.branchFallback) {
+                params.set('branch_fallback', '1');
+            }
+            return Response.redirect(`${baseUrl}/chat/${agentId}?${params.toString()}`, 302);
+        } catch (error) {
+            this.logger.error('Import ingestion failed', { error, userId, owner, repo });
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            return Response.redirect(
+                `${baseUrl}/?github_import=error&reason=github_error&message=${encodeURIComponent(message)}`,
+                302,
+            );
+        }
+    }
+
+    /**
+     * Initiate the GitHub import OAuth flow.
+     * Body: { repoUrl: string, branch?: string }
+     * Returns: { authUrl } — frontend redirects user to GitHub.
+     */
+    static async initiateGitHubImport(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        try {
+            if (!context.user) {
+                return GitHubExporterController.createErrorResponse<never>(
+                    'Authentication required',
+                    401,
+                );
+            }
+
+            const body = await request.json() as {
+                repoUrl: string;
+                branch?: string;
+            };
+
+            const parsed = parseGitHubRepoUrl(body.repoUrl);
+            if (!parsed) {
+                return GitHubExporterController.createErrorResponse<never>(
+                    'Invalid GitHub repository URL',
+                    400,
+                );
+            }
+
+            const branch = (body.branch || 'main').trim() || 'main';
+            const newAgentId = generateId();
+
+            const baseUrl = new URL(request.url).origin;
+
+            const statePayload: Omit<GitHubImportStatePayload, 'iat' | 'exp'> = {
+                userId: context.user.id,
+                purpose: 'repository_import',
+                mode: 'import',
+                returnUrl: `${baseUrl}/chat/${newAgentId}`,
+                importData: {
+                    owner: parsed.owner,
+                    repo: parsed.repo,
+                    branch,
+                    agentId: newAgentId,
+                },
+            };
+
+            const signedState = await this.signState(statePayload, env.JWT_SECRET);
+            const oauthProvider = GitHubExporterOAuthProvider.create(env, baseUrl);
+            const authUrl = await oauthProvider.getAuthorizationUrl(signedState);
+
+            this.logger.info('Initiating GitHub import OAuth flow', {
+                userId: context.user.id,
+                owner: parsed.owner,
+                repo: parsed.repo,
+                branch,
+                agentId: newAgentId,
+            });
+
+            return GitHubExporterController.createSuccessResponse<{ authUrl: string; agentId: string }>({
+                authUrl,
+                agentId: newAgentId,
+            });
+        } catch (error) {
+            this.logger.error('Failed to initiate GitHub import', error);
+            return GitHubExporterController.createErrorResponse<never>(
+                'Failed to initiate GitHub import',
+                500,
             );
         }
     }

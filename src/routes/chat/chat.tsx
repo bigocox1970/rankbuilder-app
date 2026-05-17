@@ -40,6 +40,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { VaultUnlockModal } from '@/components/vault';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { checkCanSendPrompt, getBackendLimitDialog } from '@/utils/usage-limit-checker';
+import { toast } from 'sonner';
 
 const isPhasicBlueprint = (blueprint?: BlueprintType | null): blueprint is PhasicBlueprint =>
 	!!blueprint && 'implementationRoadmap' in blueprint;
@@ -84,6 +85,26 @@ export default function Chat() {
 		}
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []); // read once on mount
+
+	// Surface a confirmation toast when the user lands here from a successful
+	// GitHub import. The import already ran server-side; the chat will show
+	// "deployment starting" via the existing WS DEPLOYMENT_* events.
+	useEffect(() => {
+		if (searchParams.get('github_import') !== 'success') return;
+		const repo = searchParams.get('repo');
+		const branch = searchParams.get('branch');
+		const fallback = searchParams.get('branch_fallback') === '1';
+		if (repo && branch) {
+			if (fallback) {
+				toast.success(`Imported ${repo}`, {
+					description: `Branch '${branch}' was used (your requested branch did not exist).`,
+				});
+			} else {
+				toast.success(`Imported ${repo}`, { description: `Branch: ${branch}. Booting preview…` });
+			}
+		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// Extract images from URL params if present
 	const userImages = useMemo(() => {

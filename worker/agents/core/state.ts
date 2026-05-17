@@ -70,6 +70,15 @@ export interface BaseProjectState {
     reviewingInitiated: boolean;
     cloudflareToken?: string; // Encrypted Cloudflare OAuth token blob (backend decrypts when needed)
     wsOrigin?: string; // Origin captured at WS upgrade time for token refresh
+
+    // GitHub import metadata. Set on agents created via the import flow so
+    // downstream behaviour (dontTouch, phase skipping, UI labels) can branch.
+    importSource?: string;
+    importedDontTouch?: string[];
+    /** Paths of binary assets stored in R2 (`imports/{agentId}/{path}`).
+     * Re-fetched and injected into the sandbox on every deploy so the
+     * preview can resolve `import x from '@/assets/...'` references. */
+    importedBinaryPaths?: string[];
 }
 
 /** Phasic agent state */
