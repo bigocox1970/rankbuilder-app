@@ -11,6 +11,7 @@ import type { AgentInfrastructure } from '../AgentCore';
 import { WebSocketMessageResponses } from '../../constants';
 import { AppService } from '../../../database/services/AppService';
 import { GitHubService } from '../../../services/github';
+import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import {
 	getAdditionalExportStrategy,
 	type AdditionalExportStrategy,
@@ -57,7 +58,18 @@ export class ProjectObjective<
 				projectType: this.projectType,
 			});
 
-			if (!this.state.sandboxInstanceId) {
+			// Look up renderMode from the template catalog. Browser-mode (static
+			// HTML — tradesperson-sp, minimal-js, reveal-presentation-*) ships
+			// `public/` directly through a passthrough worker and does NOT need
+			// a sandbox build. Without this branch, the WS 'deploy' message ran
+			// the sandbox/Vite build path and failed at "Worker script not found
+			// after build" because static templates have no worker bundle to
+			// produce (regression of the session-5 fix that previously lived
+			// only on BaseCodingBehavior.deployToCloudflare).
+			const renderMode = await this.resolveRenderMode();
+			const isBrowserMode = renderMode === 'browser';
+
+			if (!isBrowserMode && !this.state.sandboxInstanceId) {
 				this.logger.info('No sandbox instance, deploying to sandbox first');
 				await this.deploymentManager.deployToSandbox();
 
@@ -76,6 +88,7 @@ export class ProjectObjective<
 
 			const result = await this.deploymentManager.deployToCloudflare({
 				target,
+				renderMode: isBrowserMode ? 'browser' : 'sandbox',
 				callbacks: {
 					onStarted: (data) =>
 						this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_STARTED, data),
@@ -111,6 +124,33 @@ export class ProjectObjective<
 				error: message,
 			});
 			return { success: false, target, error: message };
+		}
+	}
+
+	/**
+	 * Resolve the template's renderMode from the catalog. Falls back to
+	 * `undefined` (treated as sandbox-mode by deployToCloudflare) if the
+	 * template can't be found — same default as before this dispatch existed.
+	 *
+	 * Uses the catalog rather than the behavior's templateDetailsCache because
+	 * ProjectObjective doesn't have direct access to the behavior, and the
+	 * catalog is the authoritative source for renderMode anyway.
+	 */
+	private async resolveRenderMode(): Promise<'browser' | 'sandbox' | undefined> {
+		const templateName = this.state.templateName;
+		if (!templateName || templateName === 'scratch' || this.state.importSource) {
+			// Imports are always sandbox-mode. Scratch templates have no catalog
+			// entry and default to sandbox.
+			return this.state.importSource ? 'sandbox' : undefined;
+		}
+		try {
+			const resp = await BaseSandboxService.listTemplates();
+			if (!resp.success) return undefined;
+			const entry = resp.templates.find(t => t.name === templateName);
+			return (entry?.renderMode as 'browser' | 'sandbox' | undefined) ?? undefined;
+		} catch (err) {
+			this.logger.warn('Failed to resolve template renderMode, defaulting to sandbox-mode deploy path', { err });
+			return undefined;
 		}
 	}
 

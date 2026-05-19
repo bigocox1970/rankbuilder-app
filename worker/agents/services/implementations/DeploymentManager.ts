@@ -16,8 +16,11 @@ import { getSandboxService } from '../../../services/sandbox/factory';
 import { validateAndCleanBootstrapCommands } from 'worker/agents/utils/common';
 import { DeploymentTarget } from '../../core/types';
 import { BaseProjectState } from '../../core/state';
-import { resolvePreviewUrl } from '../../../utils/urls';
+import { resolvePreviewUrl, getPreviewDomain, getProtocolForHost } from '../../../utils/urls';
 import { fetchImportedBinaries } from '../../../services/github/importedBinaries';
+import { buildDeploymentConfig, deployToDispatch, deployWorker, parseWranglerConfig } from '../../../services/deployer/deploy';
+import { createAssetManifest } from '../../../services/deployer/utils/index';
+import { AppService } from '../../../database';
 
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
@@ -670,24 +673,40 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
     /**
      * Deploy to Cloudflare Workers
      * Returns deployment URL and deployment ID for database updates
+     *
+     * Pass `renderMode: 'browser'` (or set the matching field on the loaded
+     * TemplateDetails) for static-only templates like tradesperson-sp — that
+     * path bypasses the sandbox entirely and ships `public/` straight to a
+     * passthrough worker on Workers for Platforms.
      */
     async deployToCloudflare(request?: {
         target?: DeploymentTarget;
         callbacks?: CloudflareDeploymentCallbacks;
+        renderMode?: 'browser' | 'sandbox';
     }): Promise<{ deploymentUrl: string | null; deploymentId?: string }> {
         const state = this.getState();
         const logger = this.getLog();
         const client = this.getClient();
         const target = request?.target ?? 'platform';
         const callbacks = request?.callbacks;
-        
+
+        // Browser-mode static sites have no Worker bundle to build. Short-circuit
+        // to a direct upload of the `public/` directory + passthrough worker.
+        // Previously this branch only lived on BaseCodingBehavior, so callers
+        // that came in via ProjectObjective.deploy (the WS 'deploy' message)
+        // bypassed it and tried to read a non-existent Vite worker bundle,
+        // failing with "Worker script not found after build".
+        if (request?.renderMode === 'browser') {
+            return this.deployBrowserTemplate(target, callbacks);
+        }
+
         await this.waitForPreview();
-        
+
         callbacks?.onStarted?.({
             message: 'Starting deployment to Cloudflare Workers...',
             instanceId: state.sandboxInstanceId ?? ''
         });
-        
+
         logger.info('Starting Cloudflare deployment', { target });
 
         // Check if we have generated files
@@ -757,10 +776,123 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             deploymentUrl: deploymentUrl || ''
         });
 
-        return { 
+        return {
             deploymentUrl: deploymentUrl || null,
             deploymentId: deploymentId
         };
+    }
+
+    /**
+     * Deploy a browser-mode (static-only) template directly to Workers for
+     * Platforms — no sandbox involved. Reads `public/` files straight out of
+     * the file manager, assembles an asset manifest, and uploads alongside a
+     * minimal passthrough worker (`env.ASSETS.fetch(request)`).
+     *
+     * Mirrors the implementation that previously lived on BaseCodingBehavior,
+     * relocated here so both `behavior.deployToCloudflare` and
+     * `objective.deploy` use a single source of truth.
+     */
+    private async deployBrowserTemplate(
+        target: DeploymentTarget,
+        callbacks?: CloudflareDeploymentCallbacks,
+    ): Promise<{ deploymentUrl: string | null; deploymentId?: string }> {
+        const state = this.getState();
+        const logger = this.getLog();
+        const accountId = this.env.CLOUDFLARE_ACCOUNT_ID;
+        const apiToken = this.env.CLOUDFLARE_API_TOKEN;
+
+        if (!accountId || !apiToken) {
+            const error = 'CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set in environment';
+            callbacks?.onError?.({ message: 'Deployment failed', instanceId: '', error });
+            throw new Error(error);
+        }
+
+        callbacks?.onStarted?.({
+            message: 'Deploying static site to Cloudflare...',
+            instanceId: '',
+        });
+
+        const allFiles = this.fileManager.getAllFiles();
+
+        // Build assets map from public/ directory (strip prefix for CF asset paths)
+        const filesAsArrayBuffer = new Map<string, ArrayBuffer>();
+        const filesAsBuffer = new Map<string, Buffer>();
+        for (const file of allFiles) {
+            if (!file.filePath.startsWith('public/')) continue;
+            const assetPath = '/' + file.filePath.slice('public/'.length);
+            const bytes = new TextEncoder().encode(file.fileContents);
+            const buffer = Buffer.from(bytes);
+            filesAsArrayBuffer.set(assetPath, bytes.buffer as ArrayBuffer);
+            filesAsBuffer.set(assetPath, buffer);
+        }
+
+        if (filesAsArrayBuffer.size === 0) {
+            const error = 'No public/ files found to deploy';
+            callbacks?.onError?.({ message: 'Deployment failed', instanceId: '', error });
+            throw new Error(error);
+        }
+
+        const assetsManifest = await createAssetManifest(filesAsArrayBuffer);
+
+        const wranglerFile = allFiles.find(f => f.filePath === 'wrangler.jsonc' || f.filePath === 'wrangler.toml');
+        if (!wranglerFile) {
+            const error = 'No wrangler config found';
+            callbacks?.onError?.({ message: 'Deployment failed', instanceId: '', error });
+            throw new Error(error);
+        }
+        const config = parseWranglerConfig(wranglerFile.fileContents);
+
+        // Derive a CF-safe script name (max 63 chars, lowercase alphanum + dash)
+        const rawName = (state.projectName || this.getAgentId())
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '')
+            .slice(0, 63);
+        const scriptName = rawName || this.getAgentId().slice(0, 63);
+
+        const workerContent = `export default { async fetch(request, env) { return env.ASSETS.fetch(request); } };`;
+
+        const deployConfig = buildDeploymentConfig(
+            { ...config, name: scriptName },
+            workerContent,
+            accountId,
+            apiToken,
+            assetsManifest,
+        );
+
+        if (target === 'platform') {
+            if (!('DISPATCH_NAMESPACE' in this.env)) {
+                const error = 'DISPATCH_NAMESPACE not found in environment';
+                callbacks?.onError?.({ message: 'Deployment failed', instanceId: '', error });
+                throw new Error(error);
+            }
+            const dispatchNamespace = (this.env as unknown as Record<string, string>).DISPATCH_NAMESPACE;
+            await deployToDispatch(
+                { ...deployConfig, dispatchNamespace },
+                filesAsBuffer,
+                undefined,
+                undefined,
+                config.assets,
+            );
+        } else {
+            await deployWorker(deployConfig, filesAsBuffer, undefined, undefined, config.assets);
+        }
+
+        const previewDomain = getPreviewDomain(this.env);
+        const deploymentUrl = `${getProtocolForHost(previewDomain)}://${scriptName}.${previewDomain}`;
+
+        callbacks?.onCompleted?.({
+            message: 'Static site deployed successfully!',
+            instanceId: '',
+            deploymentUrl,
+        });
+
+        const appService = new AppService(this.env);
+        await appService.updateDeploymentId(this.getAgentId(), scriptName);
+
+        logger.info('Browser template deployed to Cloudflare', { scriptName, deploymentUrl });
+        return { deploymentUrl, deploymentId: scriptName };
     }
 
 }
