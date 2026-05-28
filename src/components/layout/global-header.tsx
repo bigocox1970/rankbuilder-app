@@ -59,7 +59,7 @@ export function GlobalHeader() {
 	const [isLovableOpen, setIsLovableOpen] = useState(false);
 	const [isSupabaseOpen, setIsSupabaseOpen] = useState(false);
 
-	// Global handler for Supabase OAuth callback — fires regardless of which page the user lands on
+	// Global handler for Supabase OAuth callback — must watch searchParams so it fires after redirect
 	useEffect(() => {
 		const param = searchParams.get('supabase');
 		if (!param) return;
@@ -73,7 +73,7 @@ export function GlobalHeader() {
 			const reason = searchParams.get('reason') ?? 'unknown';
 			toast.error(`Supabase: ${reason.replace(/_/g, ' ')}`);
 		}
-	}, []);
+	}, [searchParams]);
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
 	const hasChangeLogs = Boolean(status.changeLogs && status.changeLogs.trim().length > 0);
 	useEffect(() => {
