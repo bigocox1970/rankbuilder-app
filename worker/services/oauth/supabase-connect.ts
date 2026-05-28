@@ -1,4 +1,5 @@
 import { BaseOAuthProvider } from './base';
+import type { OAuthUserInfo } from '../../types/auth-types';
 
 export class SupabaseConnectOAuthProvider extends BaseOAuthProvider {
     protected readonly provider = 'supabase';
@@ -8,8 +9,20 @@ export class SupabaseConnectOAuthProvider extends BaseOAuthProvider {
     protected readonly scopes = ['projects', 'secrets'];
     protected readonly clientAuthMethod = 'basic' as const;
 
-    // Supabase OAuth does not have a userInfo endpoint — we only need tokens
-    async getUserInfo(_accessToken: string): Promise<never> {
+    // Override to use a clean minimal OAuth URL — no Google-specific params, no PKCE
+    // (this is a confidential server-side client; PKCE is for public clients)
+    async getAuthorizationUrl(state: string): Promise<string> {
+        const params = new URLSearchParams({
+            client_id: this.clientId,
+            redirect_uri: this.redirectUri,
+            response_type: 'code',
+            scope: this.scopes.join(' '),
+            state,
+        });
+        return `${this.authorizationUrl}?${params.toString()}`;
+    }
+
+    async getUserInfo(_accessToken: string): Promise<OAuthUserInfo> {
         throw new Error('getUserInfo not applicable for Supabase connect flow');
     }
 

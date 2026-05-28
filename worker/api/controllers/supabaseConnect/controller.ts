@@ -1,11 +1,9 @@
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { SupabaseConnectOAuthProvider } from '../../../services/oauth/supabase-connect';
-import { BaseOAuthProvider } from '../../../services/oauth/base';
 import { SupabaseConnectionService } from '../../../services/supabase/SupabaseConnectionService';
 import { createLogger } from '../../../logger';
 import { signState, verifyState } from '../../../utils/stateSigning';
-import { buildVerifierCookie, buildClearVerifierCookie, readVerifierCookie } from '../../../utils/oauthCookie';
 
 interface SupabaseConnectState {
     userId: string;
@@ -53,18 +51,14 @@ export class SupabaseConnectController extends BaseController {
                 return Response.redirect(`${returnUrl}?supabase=error&reason=not_configured`, 302);
             }
 
-            const codeVerifier = BaseOAuthProvider.generateCodeVerifier();
             const state: SupabaseConnectState = { userId: user.id, timestamp: Date.now(), returnUrl };
             const signedState = await signState(state, env);
             const provider = SupabaseConnectOAuthProvider.create(env, baseUrl);
-            const authUrl = await provider.getAuthorizationUrl(signedState, codeVerifier);
+            const authUrl = await provider.getAuthorizationUrl(signedState);
 
             return new Response(null, {
                 status: 302,
-                headers: {
-                    Location: authUrl,
-                    'Set-Cookie': buildVerifierCookie(env, codeVerifier),
-                },
+                headers: { Location: authUrl },
             });
         } catch (error) {
             SupabaseConnectController.logger.error('Failed to initiate Supabase connect', error);
@@ -80,49 +74,29 @@ export class SupabaseConnectController extends BaseController {
     ): Promise<Response> {
         const url = new URL(request.url);
         const baseUrl = url.origin;
-        const clearVerifierCookie = buildClearVerifierCookie(env);
         const code = url.searchParams.get('code');
         const stateParam = url.searchParams.get('state');
         const error = url.searchParams.get('error');
 
         if (error) {
-            return new Response(null, {
-                status: 302,
-                headers: { Location: `${baseUrl}/settings?supabase=error&reason=${encodeURIComponent(error)}`, 'Set-Cookie': clearVerifierCookie },
-            });
+            return Response.redirect(`${baseUrl}/settings?supabase=error&reason=${encodeURIComponent(error)}`, 302);
         }
         if (!code || !stateParam) {
-            return new Response(null, {
-                status: 302,
-                headers: { Location: `${baseUrl}/settings?supabase=error&reason=missing_params`, 'Set-Cookie': clearVerifierCookie },
-            });
+            return Response.redirect(`${baseUrl}/settings?supabase=error&reason=missing_params`, 302);
         }
 
         const parsedState = await verifyState<SupabaseConnectState>(stateParam, env);
         if (!parsedState?.userId) {
-            return new Response(null, {
-                status: 302,
-                headers: { Location: `${baseUrl}/settings?supabase=error&reason=invalid_state`, 'Set-Cookie': clearVerifierCookie },
-            });
+            return Response.redirect(`${baseUrl}/settings?supabase=error&reason=invalid_state`, 302);
         }
 
         const absoluteReturnUrl = safeSameOriginUrl(parsedState.returnUrl, baseUrl);
-        const codeVerifier = readVerifierCookie(request);
-        if (!codeVerifier) {
-            return new Response(null, {
-                status: 302,
-                headers: { Location: `${absoluteReturnUrl}?supabase=error&reason=missing_verifier`, 'Set-Cookie': clearVerifierCookie },
-            });
-        }
 
         try {
             const provider = SupabaseConnectOAuthProvider.create(env, baseUrl);
-            const tokens = await provider.exchangeCodeForTokens(code, codeVerifier);
+            const tokens = await provider.exchangeCodeForTokens(code);
             if (!tokens.accessToken) {
-                return new Response(null, {
-                    status: 302,
-                    headers: { Location: `${absoluteReturnUrl}?supabase=error&reason=token_exchange_failed`, 'Set-Cookie': clearVerifierCookie },
-                });
+                return Response.redirect(`${absoluteReturnUrl}?supabase=error&reason=token_exchange_failed`, 302);
             }
 
             const svc = new SupabaseConnectionService(env);
@@ -130,18 +104,13 @@ export class SupabaseConnectController extends BaseController {
 
             const successUrl = new URL(absoluteReturnUrl);
             successUrl.searchParams.set('supabase', 'connected');
-
-            const headers = new Headers();
-            headers.set('Location', successUrl.toString());
-            headers.append('Set-Cookie', clearVerifierCookie);
-            headers.set('Referrer-Policy', 'no-referrer');
-            return new Response(null, { status: 302, headers });
-        } catch (err) {
-            SupabaseConnectController.logger.error('Supabase OAuth callback failed', err);
             return new Response(null, {
                 status: 302,
-                headers: { Location: `${absoluteReturnUrl}?supabase=error&reason=callback_failed`, 'Set-Cookie': clearVerifierCookie },
+                headers: { Location: successUrl.toString(), 'Referrer-Policy': 'no-referrer' },
             });
+        } catch (err) {
+            SupabaseConnectController.logger.error('Supabase OAuth callback failed', err);
+            return Response.redirect(`${absoluteReturnUrl}?supabase=error&reason=callback_failed`, 302);
         }
     }
 
