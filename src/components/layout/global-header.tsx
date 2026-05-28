@@ -10,8 +10,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UsageLimitsBadge } from '../usage-limits-badge';
 import { LovableImportModal } from '../lovable-import-modal';
+import { SupabaseConnectModal } from '../supabase/SupabaseConnectModal';
 import { apiClient } from '@/lib/api-client';
-import { useNavigate, useLocation } from 'react-router';
+import { useNavigate, useLocation, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 
 function CreditBalanceBadge() {
 	const navigate = useNavigate();
@@ -52,8 +54,26 @@ function CreditBalanceBadge() {
 export function GlobalHeader() {
 	const { user } = useAuth();
 	const { status } = usePlatformStatus();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 	const [isLovableOpen, setIsLovableOpen] = useState(false);
+	const [isSupabaseOpen, setIsSupabaseOpen] = useState(false);
+
+	// Global handler for Supabase OAuth callback — fires regardless of which page the user lands on
+	useEffect(() => {
+		const param = searchParams.get('supabase');
+		if (!param) return;
+		const next = new URLSearchParams(searchParams);
+		next.delete('supabase');
+		next.delete('reason');
+		setSearchParams(next, { replace: true });
+		if (param === 'connected') {
+			setIsSupabaseOpen(true);
+		} else if (param === 'error') {
+			const reason = searchParams.get('reason') ?? 'unknown';
+			toast.error(`Supabase: ${reason.replace(/_/g, ' ')}`);
+		}
+	}, []);
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
 	const hasChangeLogs = Boolean(status.changeLogs && status.changeLogs.trim().length > 0);
 	useEffect(() => {
@@ -65,6 +85,7 @@ export function GlobalHeader() {
 	return (
 		<>
 		<LovableImportModal open={isLovableOpen} onOpenChange={setIsLovableOpen} />
+		<SupabaseConnectModal open={isSupabaseOpen} onOpenChange={setIsSupabaseOpen} />
 		<Dialog open={isChangelogOpen} onOpenChange={setIsChangelogOpen}>
 			<motion.header
 				initial={{ y: -10, opacity: 0 }}

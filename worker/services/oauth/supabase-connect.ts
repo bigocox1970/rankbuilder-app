@@ -5,7 +5,7 @@ export class SupabaseConnectOAuthProvider extends BaseOAuthProvider {
     protected readonly authorizationUrl = 'https://api.supabase.com/v1/oauth/authorize';
     protected readonly tokenUrl = 'https://api.supabase.com/v1/oauth/token';
     protected readonly userInfoUrl = '';
-    protected readonly scopes = ['all'];
+    protected readonly scopes = ['projects', 'secrets'];
     protected readonly clientAuthMethod = 'basic' as const;
 
     // Supabase OAuth does not have a userInfo endpoint — we only need tokens
