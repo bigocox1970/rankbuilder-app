@@ -10,7 +10,7 @@ interface ConfigCardProps {
   agent: AgentDisplayConfig;
   userConfig?: UserModelConfigWithMetadata;
   defaultConfig?: ModelConfig;
-  recommendations?: { gemini?: string; minimax?: string };
+  recommendations?: { gemini?: string; lite?: string };
   onConfigure: () => void;
   onTest: () => void;
   onReset: () => void;
@@ -157,8 +157,8 @@ export function ConfigCard({
               ) : null}
             </div>
 
-            {/* Quick-pick recommendation chips — one-click swap between recommended Gemini and MiniMax */}
-            {recommendations && onQuickSelect && (recommendations.gemini || recommendations.minimax) && (
+            {/* Quick-pick recommendation chips — one-click swap between standard and lite tiers */}
+            {recommendations && onQuickSelect && (recommendations.gemini || recommendations.lite) && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {recommendations.gemini && (
                   <button
@@ -175,19 +175,19 @@ export function ConfigCard({
                     {currentModel === recommendations.gemini && '✓ '}Gemini
                   </button>
                 )}
-                {recommendations.minimax && (
+                {recommendations.lite && (
                   <button
                     type="button"
-                    onClick={() => onQuickSelect(recommendations.minimax!)}
-                    disabled={currentModel === recommendations.minimax}
+                    onClick={() => onQuickSelect(recommendations.lite!)}
+                    disabled={currentModel === recommendations.lite}
                     className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
-                      currentModel === recommendations.minimax
+                      currentModel === recommendations.lite
                         ? 'bg-accent/20 border-accent/40 text-accent cursor-default'
                         : 'border-text-tertiary/30 text-text-tertiary hover:border-accent/60 hover:bg-accent/10 hover:text-accent'
                     }`}
-                    title={`Switch to ${recommendations.minimax}`}
+                    title={`Switch to ${recommendations.lite}`}
                   >
-                    {currentModel === recommendations.minimax && '✓ '}MiniMax
+                    {currentModel === recommendations.lite && '✓ '}Lite
                   </button>
                 )}
               </div>

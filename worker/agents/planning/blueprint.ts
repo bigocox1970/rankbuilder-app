@@ -334,6 +334,12 @@ const PROJECT_TYPE_BLUEPRINT_GUIDANCE: Record<ProjectType, string> = {
 const getProjectTypeGuidance = (projectType: ProjectType): string =>
     PROJECT_TYPE_BLUEPRINT_GUIDANCE[projectType] || '';
 
+interface SupabaseBlueprintContext {
+    projectUrl: string;
+    anonKey: string;
+    tables: Array<{ name: string; schema: string; columns: Array<{ name: string; type: string; nullable: boolean; isPrimaryKey: boolean; isForeignKey: boolean; foreignKeyRef?: string }> }>;
+}
+
 interface BaseBlueprintGenerationArgs {
     env: Env;
     inferenceContext: InferenceContext;
@@ -341,6 +347,7 @@ interface BaseBlueprintGenerationArgs {
     language: string;
     frameworks: string[];
     projectType: ProjectType;
+    supabaseContext?: SupabaseBlueprintContext;
     images?: ProcessedImageAttachment[];
     stream?: {
         chunk_size: number;
@@ -366,7 +373,7 @@ export async function generateBlueprint(args: AgenticBlueprintGenerationArgs): P
 export async function generateBlueprint(
     args: PhasicBlueprintGenerationArgs | AgenticBlueprintGenerationArgs
 ): Promise<Blueprint> {
-    const { env, inferenceContext, query, language, frameworks, templateDetails, templateMetaInfo, images, stream, projectType } = args;
+    const { env, inferenceContext, query, language, frameworks, templateDetails, templateMetaInfo, images, stream, projectType, supabaseContext } = args;
     const isAgentic = !templateDetails || !templateMetaInfo;
     
     try {
@@ -395,6 +402,28 @@ export async function generateBlueprint(
         const projectGuidance = getProjectTypeGuidance(projectType);
         if (projectGuidance) {
             systemPrompt = `${systemPrompt}\n\n${projectGuidance}`;
+        }
+        if (supabaseContext) {
+            const schemaText = supabaseContext.tables.length > 0
+                ? supabaseContext.tables.map(t => {
+                    const cols = t.columns.map(c =>
+                        `  - ${c.name} (${c.type}${c.nullable ? '' : ', required'}${c.isPrimaryKey ? ', PK' : ''}${c.isForeignKey ? `, FK→${c.foreignKeyRef}` : ''})`
+                    ).join('\n');
+                    return `**${t.name}**\n${cols}`;
+                }).join('\n\n')
+                : 'Schema not yet available — generate code with placeholders.';
+            systemPrompt = `${systemPrompt}\n\n## Supabase Project
+The user has connected a Supabase project. Use it for database, auth, and storage.
+
+- Project URL: \`${supabaseContext.projectUrl}\`
+- Anon Key: \`${supabaseContext.anonKey}\`
+- Client: \`import { createClient } from '@supabase/supabase-js'\`
+- Always reference credentials via \`import.meta.env.VITE_SUPABASE_URL\` and \`import.meta.env.VITE_SUPABASE_ANON_KEY\` in generated code. Note in the plan that the user must add these env vars.
+
+### Database Schema
+${schemaText}
+
+Include \`@supabase/supabase-js\` in the frameworks list. Generate real queries against the schema above.`;
         }
         
         const systemPromptMessage = createSystemMessage(generalSystemPromptBuilder(systemPrompt, {

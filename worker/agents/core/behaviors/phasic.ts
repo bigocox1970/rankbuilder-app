@@ -19,6 +19,8 @@ import { PhaseGenerationOperation } from '../../operations/PhaseGeneration';
 import { FastCodeFixerOperation } from '../../operations/PostPhaseCodeFixer';
 import { customizePackageJson, customizeTemplateFiles, generateProjectName } from '../../utils/templateCustomizer';
 import { generateBlueprint } from '../../planning/blueprint';
+import { SupabaseConnectionService } from '../../../services/supabase/SupabaseConnectionService';
+import { SupabaseSchemaService } from '../../../services/supabase/SupabaseSchemaService';
 import { RateLimitExceededError } from 'shared/types/errors';
 import {  ImageAttachment, type ProcessedImageAttachment } from '../../../types/image-attachment';
 import { OperationOptions } from '../../operations/common';
@@ -102,6 +104,23 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         this.logger.info('Generating blueprint', { query, queryLength: query.length, imagesCount: initArgs.images?.length || 0 });
         this.logger.info(`Using language: ${language}, frameworks: ${frameworks ? frameworks.join(", ") : "none"}`);
 
+        // Fetch Supabase context if the user has a linked project
+        const supabaseCtx = await (async () => {
+            try {
+                const userId = inferenceContext.metadata.userId;
+                const connSvc = new SupabaseConnectionService(this.env);
+                const linked = await connSvc.getLinkedProject(userId);
+                if (!linked) return undefined;
+                const serviceRoleKey = await connSvc.getServiceRoleKey(userId);
+                if (!serviceRoleKey) return { projectUrl: linked.projectUrl, anonKey: linked.anonKey, tables: [] };
+                const schemaSvc = new SupabaseSchemaService();
+                const tables = await schemaSvc.fetchSchema(linked.projectUrl, serviceRoleKey);
+                return { projectUrl: linked.projectUrl, anonKey: linked.anonKey, tables };
+            } catch {
+                return undefined;
+            }
+        })();
+
         const blueprint = await generateBlueprint({
             env: this.env,
             inferenceContext,
@@ -112,6 +131,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             templateMetaInfo: templateInfo?.selection,
             images: initArgs.images,
             projectType: this.projectType,
+            supabaseContext: supabaseCtx,
             stream: {
                 chunk_size: 256,
                 onChunk: (chunk) => {

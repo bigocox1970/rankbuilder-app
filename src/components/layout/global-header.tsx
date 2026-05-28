@@ -4,14 +4,17 @@ import { AuthButton } from '../auth/auth-button';
 import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
-import { ChevronRight, AlertCircle, Zap, Coins } from 'lucide-react';
+import { ChevronRight, AlertCircle, Zap, Coins, Database } from 'lucide-react';
 import { usePlatformStatus } from '@/hooks/use-platform-status';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UsageLimitsBadge } from '../usage-limits-badge';
 import { LovableImportModal } from '../lovable-import-modal';
+import { SupabaseConnectModal } from '../supabase/SupabaseConnectModal';
 import { apiClient } from '@/lib/api-client';
-import { useNavigate, useLocation } from 'react-router';
+import { useNavigate, useLocation, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
+import type { SupabaseStatusData } from '@/api-types';
 
 function CreditBalanceBadge() {
 	const navigate = useNavigate();
@@ -52,8 +55,35 @@ function CreditBalanceBadge() {
 export function GlobalHeader() {
 	const { user } = useAuth();
 	const { status } = usePlatformStatus();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 	const [isLovableOpen, setIsLovableOpen] = useState(false);
+	const [isSupabaseOpen, setIsSupabaseOpen] = useState(false);
+	const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatusData | null>(null);
+
+	useEffect(() => {
+		if (!user) return;
+		apiClient.getSupabaseStatus().then(r => {
+			if (r.success && r.data) setSupabaseStatus(r.data);
+		});
+	}, [user]);
+
+	// Handle Supabase OAuth callback result in URL params
+	useEffect(() => {
+		const supabaseParam = searchParams.get('supabase');
+		if (!supabaseParam) return;
+		if (supabaseParam === 'connected') {
+			toast.success('Supabase connected. Select a project to link.');
+			setIsSupabaseOpen(true);
+		} else if (supabaseParam === 'error') {
+			const reason = searchParams.get('reason') ?? 'unknown';
+			toast.error(`Supabase connection failed: ${reason.replace(/_/g, ' ')}`);
+		}
+		const next = new URLSearchParams(searchParams);
+		next.delete('supabase');
+		next.delete('reason');
+		setSearchParams(next, { replace: true });
+	}, []);
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
 	const hasChangeLogs = Boolean(status.changeLogs && status.changeLogs.trim().length > 0);
 	useEffect(() => {
@@ -65,6 +95,7 @@ export function GlobalHeader() {
 	return (
 		<>
 		<LovableImportModal open={isLovableOpen} onOpenChange={setIsLovableOpen} />
+		<SupabaseConnectModal open={isSupabaseOpen} onOpenChange={setIsSupabaseOpen} onStatusChange={setSupabaseStatus} />
 		<Dialog open={isChangelogOpen} onOpenChange={setIsChangelogOpen}>
 			<motion.header
 				initial={{ y: -10, opacity: 0 }}
@@ -143,6 +174,16 @@ export function GlobalHeader() {
 										window.location.href = url.toString();
 									}}
 								/>
+							)}
+							{user && (
+								<button
+									onClick={() => setIsSupabaseOpen(true)}
+									className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors border ${supabaseStatus?.linkedProject ? 'text-[#3ECF8E] border-[#3ECF8E]/40 bg-[#3ECF8E]/5 hover:bg-[#3ECF8E]/10' : 'text-text-primary/70 hover:text-[#3ECF8E] hover:bg-[#3ECF8E]/10 border-border-primary/50 hover:border-[#3ECF8E]/40'}`}
+									title={supabaseStatus?.linkedProject ? `Supabase: ${supabaseStatus.linkedProject.projectName}` : 'Connect Supabase'}
+								>
+									<Database className="h-3.5 w-3.5" />
+									<span className="hidden sm:inline">Supabase</span>
+								</button>
 							)}
 							{user && (
 								<button

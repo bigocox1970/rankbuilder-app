@@ -658,3 +658,28 @@ export type NewStar = typeof stars.$inferInsert;
 
 export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLogs.$inferInsert;
+
+// ========================================
+// SUPABASE INTEGRATION
+// ========================================
+
+export const supabaseConnections = sqliteTable('supabase_connections', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // OAuth tokens — encrypted via AES-GCM using CF_OAUTH_ENCRYPTION_KEY
+    encryptedAccessToken: text('encrypted_access_token').notNull(),
+    encryptedRefreshToken: text('encrypted_refresh_token'),
+    tokenExpiresAt: integer('token_expires_at', { mode: 'timestamp' }),
+    // Linked project (null until user picks one post-OAuth)
+    projectRef: text('project_ref'),
+    projectName: text('project_name'),
+    projectUrl: text('project_url'),
+    anonKey: text('anon_key'),
+    encryptedServiceRoleKey: text('encrypted_service_role_key'),
+    // Timestamps
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+});
+
+export type SupabaseConnection = typeof supabaseConnections.$inferSelect;
+export type NewSupabaseConnection = typeof supabaseConnections.$inferInsert;

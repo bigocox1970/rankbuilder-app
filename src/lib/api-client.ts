@@ -14,6 +14,9 @@ import type{
 	UserPlanData,
 	StripeCheckoutData,
 	StripePortalData,
+	SupabaseStatusData,
+	SupabaseProjectsData,
+	SupabaseLinkedProject,
 	AppsListData,
 	PublicAppsData,
 	FavoriteToggleData,
@@ -1412,6 +1415,29 @@ class ApiClient {
 	async downgradeUser(userId: string): Promise<ApiResponse<AdminUserActionData>> {
 		return this.request<AdminUserActionData>(`/api/admin/users/${encodeURIComponent(userId)}/downgrade`, {
 			method: 'POST',
+		});
+	}
+
+	// --- Supabase integration ---
+
+	async getSupabaseStatus(): Promise<ApiResponse<SupabaseStatusData>> {
+		return this.request<SupabaseStatusData>('/api/integrations/supabase/status');
+	}
+
+	async listSupabaseProjects(): Promise<ApiResponse<SupabaseProjectsData>> {
+		return this.request<SupabaseProjectsData>('/api/integrations/supabase/projects');
+	}
+
+	async linkSupabaseProject(projectRef: string): Promise<ApiResponse<SupabaseLinkedProject>> {
+		return this.request<SupabaseLinkedProject>('/api/integrations/supabase/link-project', {
+			method: 'POST',
+			body: JSON.stringify({ projectRef }),
+		});
+	}
+
+	async disconnectSupabase(): Promise<ApiResponse<{ disconnected: boolean }>> {
+		return this.request<{ disconnected: boolean }>('/api/integrations/supabase/disconnect', {
+			method: 'DELETE',
 		});
 	}
 }

@@ -318,13 +318,38 @@ export type {
     AdminUserActionData,
     AdminKvStatusData,
     AdminGatewayCostData,
-    MiniMaxCostData,
 } from 'worker/api/controllers/admin/types';
 
 // User plan/billing types
 export type {
     UserPlanData,
 } from 'worker/api/controllers/user/types';
+
+// Supabase integration types
+export interface SupabaseLinkedProject {
+    projectRef: string;
+    projectName: string | null;
+    projectUrl: string | null;
+    anonKey: string | null;
+}
+
+export interface SupabaseStatusData {
+    connected: boolean;
+    linkedProject: SupabaseLinkedProject | null;
+}
+
+export interface SupabaseProject {
+    ref: string;
+    name: string;
+    region: string;
+    status: string;
+    organizationId: string;
+    createdAt: string;
+}
+
+export interface SupabaseProjectsData {
+    projects: SupabaseProject[];
+}
 
 // Stripe billing types
 export interface StripeCheckoutData {

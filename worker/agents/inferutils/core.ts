@@ -29,33 +29,6 @@ import { createLogger } from '../../logger';
 
 const logger = createLogger('Inference');
 
-// MiniMax direct API pricing (USD per 1M tokens) — from minimaxi.chat pricing page
-const MINIMAX_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
-    'minimax/MiniMax-Text-01': { inputPer1M: 0.20, outputPer1M: 1.10 }, // deprecated, kept for back-compat
-    'minimax/MiniMax-M1': { inputPer1M: 0.30, outputPer1M: 1.10 },
-    'minimax/MiniMax-M2.5': { inputPer1M: 0.30, outputPer1M: 1.20 },
-    'minimax/MiniMax-M2.7': { inputPer1M: 0.30, outputPer1M: 1.20 },
-};
-
-async function trackMiniMaxUsage(modelName: string, tokensIn: number, tokensOut: number, env: Env): Promise<void> {
-    const pricing = MINIMAX_PRICING[modelName];
-    if (!pricing) return;
-    const costUsd = (tokensIn / 1_000_000) * pricing.inputPer1M + (tokensOut / 1_000_000) * pricing.outputPer1M;
-    const today = new Date().toISOString().split('T')[0];
-    const key = `minimax_costs:${today}`;
-    try {
-        type DailyData = { requests: number; tokensIn: number; tokensOut: number; costUsd: number };
-        const existing = await env.VibecoderStore.get(key, 'json') as DailyData | null;
-        await env.VibecoderStore.put(key, JSON.stringify({
-            requests: (existing?.requests ?? 0) + 1,
-            tokensIn: (existing?.tokensIn ?? 0) + tokensIn,
-            tokensOut: (existing?.tokensOut ?? 0) + tokensOut,
-            costUsd: (existing?.costUsd ?? 0) + costUsd,
-        }), { expirationTtl: 60 * 60 * 24 * 35 });
-    } catch (err) {
-        console.warn('Failed to track MiniMax usage:', err);
-    }
-}
 
 function optimizeInputs(messages: Message[]): Message[] {
     return messages.map((message) => ({
@@ -374,11 +347,6 @@ export async function getConfigurationForModel(
                     baseURL: 'https://api.anthropic.com/v1/',
                     apiKey: env.ANTHROPIC_API_KEY,
                 };
-            case 'minimax':
-                return {
-                    baseURL: 'https://api.minimaxi.chat/v1',
-                    apiKey: env.MINIMAX_API_KEY,
-                };
             default:
                 providerForcedOverride = modelConfig.provider as AIGatewayProviders;
                 break;
@@ -674,10 +642,8 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         // Remove [*.] from model name
         modelName = modelName.replace(/\[.*?\]/, '');
 
-        // For direct-provider calls (not AI Gateway), the API expects the bare
-        // model id (e.g. "MiniMax-Text-01"), not the gateway-style
-        // "minimax/MiniMax-Text-01". Use a separate var so the prefixed name is
-        // still available for provider detection and cost-tracking lookup below.
+        // For direct-provider calls (not AI Gateway), the API expects the bare model id
+        // without the provider prefix (e.g. "openrouter/..." → just the model name).
         const apiModelName = modelConfig.directOverride && modelName.includes('/')
             ? modelName.slice(modelName.indexOf('/') + 1)
             : modelName;
@@ -793,7 +759,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             tool_choice: 'auto' as const
         } : {};
         // Request usage in final streaming chunk for ALL streaming calls — needed for per-call
-        // credit deduction. OpenAI-compatible (Gemini, MiniMax, etc.) all honour stream_options.
+        // credit deduction. All OpenAI-compatible providers honour stream_options.
         const streamOpts = stream
             ? { stream_options: { include_usage: true } }
             : {};
@@ -889,9 +855,6 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     }
                 }
                 
-                if (streamUsage && modelConfig.directOverride) {
-                    await trackMiniMaxUsage(modelName, streamUsage.prompt_tokens, streamUsage.completion_tokens, env);
-                }
                 if (streamUsage) {
                     await RateLimitService.recordActualUsage(env, metadata.userId, modelName, streamUsage.prompt_tokens, streamUsage.completion_tokens);
                 }
@@ -948,9 +911,6 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             // Also print the total number of tokens used in the prompt
             const completionUsage = (response as OpenAI.ChatCompletion).usage;
             console.log(`Total tokens used in prompt: ${completionUsage?.total_tokens}`);
-            if (completionUsage && modelConfig.directOverride) {
-                await trackMiniMaxUsage(modelName, completionUsage.prompt_tokens, completionUsage.completion_tokens, env);
-            }
             if (completionUsage) {
                 await RateLimitService.recordActualUsage(env, metadata.userId, modelName, completionUsage.prompt_tokens, completionUsage.completion_tokens);
             }

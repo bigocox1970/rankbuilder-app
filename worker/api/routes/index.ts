@@ -18,6 +18,7 @@ import { setupLimitsRoutes } from './limitsRoutes';
 import { setupAdminRoutes } from './adminRoutes';
 import { setupPlanRoutes } from './planRoutes';
 import { setupStripeRoutes } from './stripeRoutes';
+import { setupSupabaseConnectRoutes } from './supabaseConnectRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -91,4 +92,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Stripe billing routes
     setupStripeRoutes(app);
+
+    // Supabase integration routes
+    setupSupabaseConnectRoutes(app);
 }

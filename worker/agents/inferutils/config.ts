@@ -136,14 +136,14 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         temperature: 1,
     },
     projectSetup: {
-        name: AIModels.MINIMAX_M2_7,
+        name: AIModels.GEMINI_2_5_FLASH_LITE,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,
         fallbackModel: AIModels.GEMINI_2_5_FLASH,
     },
     phaseGeneration: {
-        name: AIModels.MINIMAX_M2_7,
+        name: AIModels.GEMINI_2_5_FLASH_LITE,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,
@@ -158,7 +158,7 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         ...SHARED_IMPLEMENTATION_CONFIG,
     },
     conversationalResponse: {
-        name: AIModels.MINIMAX_M2_7,
+        name: AIModels.GEMINI_2_5_FLASH_LITE,
         reasoning_effort: 'low',
         max_tokens: 4000,
         temperature: 1,
@@ -172,14 +172,14 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         fallbackModel: AIModels.GEMINI_2_5_FLASH,
     },
     fileRegeneration: {
-        name: AIModels.GEMINI_2_5_FLASH,
+        name: AIModels.GEMINI_2_5_FLASH_LITE,
         reasoning_effort: 'low',
         max_tokens: 32000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH_LITE,
+        fallbackModel: AIModels.GEMINI_2_5_FLASH,
     },
     agenticProjectBuilder: {
-        name: AIModels.MINIMAX_M2_7,
+        name: AIModels.GEMINI_2_5_FLASH_LITE,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,

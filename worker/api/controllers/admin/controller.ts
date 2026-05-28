@@ -16,7 +16,6 @@ import type {
     AdminUserActionData,
     AdminKvStatusData,
     AdminGatewayCostData,
-    MiniMaxCostData,
 } from './types';
 
 // Credit cost baseline: 1 credit = $0.25
@@ -384,10 +383,7 @@ export class AdminController extends BaseController {
             const days = period === '24h' ? 1 : period === '7d' ? 7 : 30;
 
             const analytics = new AiGatewayAnalyticsService(env);
-            const [result, minimax] = await Promise.all([
-                analytics.getTotalAnalytics(days),
-                AdminController.readMiniMaxCosts(env, days),
-            ]);
+            const result = await analytics.getTotalAnalytics(days);
 
             const data: AdminGatewayCostData = {
                 period,
@@ -398,7 +394,6 @@ export class AdminController extends BaseController {
                 cacheHitRate: result.cacheHitRate,
                 errorRate: result.errorRate,
                 lastRequestAt: result.lastRequestAt,
-                minimax,
             };
 
             return AdminController.createSuccessResponse(data);
@@ -439,29 +434,6 @@ export class AdminController extends BaseController {
                 500,
             );
         }
-    }
-
-    private static async readMiniMaxCosts(env: Env, days: number): Promise<MiniMaxCostData | null> {
-        const now = new Date();
-        const keys = Array.from({ length: days }, (_, i) => {
-            const d = new Date(now);
-            d.setUTCDate(d.getUTCDate() - i);
-            return `minimax_costs:${d.toISOString().split('T')[0]}`;
-        });
-
-        const results = await Promise.all(
-            keys.map(k => env.VibecoderStore.get(k, 'json') as Promise<MiniMaxCostData | null>)
-        );
-
-        const valid = results.filter(Boolean) as MiniMaxCostData[];
-        if (valid.length === 0) return null;
-
-        return valid.reduce((acc, cur) => ({
-            requests: acc.requests + cur.requests,
-            tokensIn: acc.tokensIn + cur.tokensIn,
-            tokensOut: acc.tokensOut + cur.tokensOut,
-            costUsd: acc.costUsd + cur.costUsd,
-        }), { requests: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 });
     }
 
     /**

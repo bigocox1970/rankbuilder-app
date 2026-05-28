@@ -461,36 +461,6 @@ export default function AdminPage() {
 								)}
 							</div>
 
-							{/* MiniMax direct costs */}
-							<div className="rounded-lg border border-bg-4 bg-bg-2/30 p-4 space-y-3">
-								<p className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">MiniMax — direct subscription spend (estimated)</p>
-								{gatewayLoading ? (
-									<div className="flex items-center gap-2">
-										<Settings className="h-4 w-4 animate-spin text-text-tertiary" />
-										<span className="text-sm text-text-tertiary">Loading...</span>
-									</div>
-								) : gatewayData?.minimax ? (
-									<div className="flex flex-wrap gap-6">
-										<div>
-											<p className="text-2xl font-bold text-accent">${gatewayData.minimax.costUsd.toFixed(4)}</p>
-											<p className="text-xs text-text-tertiary mt-0.5">estimated cost (USD)</p>
-										</div>
-										<div>
-											<p className="text-2xl font-bold text-text-primary">{gatewayData.minimax.requests.toLocaleString()}</p>
-											<p className="text-xs text-text-tertiary mt-0.5">API calls</p>
-										</div>
-										<div>
-											<p className="text-lg font-semibold text-text-primary">
-												{((gatewayData.minimax.tokensIn + gatewayData.minimax.tokensOut) / 1000).toFixed(1)}k
-											</p>
-											<p className="text-xs text-text-tertiary mt-0.5">tokens ({(gatewayData.minimax.tokensIn / 1000).toFixed(1)}k in / {(gatewayData.minimax.tokensOut / 1000).toFixed(1)}k out)</p>
-										</div>
-									</div>
-								) : (
-									<p className="text-sm text-text-tertiary">No MiniMax usage recorded yet in this period</p>
-								)}
-							</div>
-
 							{/* External service links */}
 							<div className="rounded-lg border border-bg-4 bg-bg-2/30 p-4 space-y-2">
 								<p className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">External billing dashboards</p>
@@ -521,15 +491,6 @@ export default function AdminPage() {
 									>
 										<ExternalLink className="h-3 w-3" />
 										SendGrid Billing
-									</a>
-									<a
-										href="https://www.minimax.io/"
-										target="_blank"
-										rel="noopener noreferrer"
-										className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-bg-4 bg-bg-3 text-text-secondary hover:text-text-primary hover:border-accent/50 transition-colors"
-									>
-										<ExternalLink className="h-3 w-3" />
-										MiniMax Billing
 									</a>
 								</div>
 							</div>

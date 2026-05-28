@@ -77,21 +77,20 @@ export function ModelConfigTabs({
     setIsModalOpen(false);
   };
 
-  // Per-agent recommendations — one Gemini, one MiniMax. Each card shows both
-  // as one-click chips, and the "Use MiniMax" bulk button uses the minimax slot.
-  const RECOMMENDATIONS: Record<string, { gemini: string; minimax: string }> = {
-    projectSetup:             { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    phaseGeneration:          { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    firstPhaseImplementation: { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    phaseImplementation:      { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    agenticProjectBuilder:    { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    fileRegeneration:         { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    realtimeCodeFixer:        { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    fastCodeFixer:            { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    templateSelection:        { gemini: 'google-ai-studio/gemini-2.5-flash-lite', minimax: 'minimax/MiniMax-M2.7' },
-    conversationalResponse:   { gemini: 'google-ai-studio/gemini-2.5-flash',      minimax: 'minimax/MiniMax-M2.7' },
-    blueprint:                { gemini: 'google-ai-studio/gemini-2.5-pro',        minimax: 'minimax/MiniMax-M2.7' },
-    deepDebugger:             { gemini: 'google-ai-studio/gemini-2.5-pro',        minimax: 'minimax/MiniMax-M2.7' },
+  // Per-agent recommendations — standard and lite tiers. Cards show both as one-click chips.
+  const RECOMMENDATIONS: Record<string, { gemini: string; lite: string }> = {
+    projectSetup:             { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    phaseGeneration:          { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    firstPhaseImplementation: { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    phaseImplementation:      { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    agenticProjectBuilder:    { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    fileRegeneration:         { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    realtimeCodeFixer:        { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    fastCodeFixer:            { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    templateSelection:        { gemini: 'google-ai-studio/gemini-2.5-flash-lite', lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    conversationalResponse:   { gemini: 'google-ai-studio/gemini-2.5-flash',      lite: 'google-ai-studio/gemini-2.5-flash-lite' },
+    blueprint:                { gemini: 'google-ai-studio/gemini-2.5-pro',        lite: 'google-ai-studio/gemini-2.5-flash' },
+    deepDebugger:             { gemini: 'google-ai-studio/gemini-2.5-pro',        lite: 'google-ai-studio/gemini-2.5-flash' },
   };
 
   const handleQuickSelect = async (agentKey: string, modelName: string) => {
@@ -107,8 +106,8 @@ export function ModelConfigTabs({
     }
   };
 
-  const handleApplyMiniMaxPreset = async () => {
-    const targets = agentConfigs.filter(c => RECOMMENDATIONS[c.key]?.minimax);
+  const handleApplyLitePreset = async () => {
+    const targets = agentConfigs.filter(c => RECOMMENDATIONS[c.key]?.lite);
     if (targets.length === 0) {
       toast.info('No applicable agents found');
       return;
@@ -118,7 +117,7 @@ export function ModelConfigTabs({
     for (const config of targets) {
       try {
         await onSaveConfig(config.key, {
-          modelName: RECOMMENDATIONS[config.key].minimax,
+          modelName: RECOMMENDATIONS[config.key].lite,
           fallbackModel: 'google-ai-studio/gemini-2.5-flash',
           isUserOverride: true,
         });
@@ -127,7 +126,7 @@ export function ModelConfigTabs({
         fail++;
       }
     }
-    if (fail === 0) toast.success(`Applied MiniMax preset to ${ok} agents`);
+    if (fail === 0) toast.success(`Applied Lite preset to ${ok} agents`);
     else toast.error(`Applied to ${ok}, failed on ${fail}`);
   };
 
@@ -194,13 +193,13 @@ export function ModelConfigTabs({
             <Button
               variant="outline"
               size="sm"
-              onClick={handleApplyMiniMaxPreset}
+              onClick={handleApplyLitePreset}
               disabled={savingConfigs}
               className="gap-2 border-accent/40 text-accent hover:bg-accent/10"
-              title="Switch all text-based agents to MiniMax M2.5 / M2.7 (cheaper, code-optimised)"
+              title="Switch all light tasks to Gemini Flash Lite (cheapest, gateway-native)"
             >
               <Zap className="h-4 w-4" />
-              Use MiniMax
+              Use Lite Models
             </Button>
 
             <Button
