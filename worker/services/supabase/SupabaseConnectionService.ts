@@ -177,6 +177,38 @@ export class SupabaseConnectionService {
 
     // --- Supabase Management API calls ---
 
+    async createProject(accessToken: string, name: string, region: string, organizationId: string): Promise<{ ref: string; name: string }> {
+        const resp = await fetch('https://api.supabase.com/v1/projects', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name,
+                region,
+                organization_id: organizationId,
+                plan: 'free',
+                db_pass: Array.from(crypto.getRandomValues(new Uint8Array(16)))
+                    .map(b => b.toString(16).padStart(2, '0')).join(''),
+            }),
+        });
+        if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(`Failed to create project: ${resp.status} ${text}`);
+        }
+        const data = await resp.json() as { ref: string; name: string };
+        return data;
+    }
+
+    async listOrganizations(accessToken: string): Promise<Array<{ id: string; name: string }>> {
+        const resp = await fetch('https://api.supabase.com/v1/organizations', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!resp.ok) throw new Error(`Failed to list organizations: ${resp.status}`);
+        return resp.json() as Promise<Array<{ id: string; name: string }>>;
+    }
+
     async listProjects(accessToken: string): Promise<SupabaseProject[]> {
         const resp = await fetch('https://api.supabase.com/v1/projects', {
             headers: { Authorization: `Bearer ${accessToken}` },

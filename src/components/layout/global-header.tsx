@@ -11,8 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { UsageLimitsBadge } from '../usage-limits-badge';
 import { LovableImportModal } from '../lovable-import-modal';
 import { apiClient } from '@/lib/api-client';
-import { useNavigate, useLocation, useSearchParams } from 'react-router';
-import { toast } from 'sonner';
+import { useNavigate, useLocation } from 'react-router';
 
 function CreditBalanceBadge() {
 	const navigate = useNavigate();
@@ -53,25 +52,8 @@ function CreditBalanceBadge() {
 export function GlobalHeader() {
 	const { user } = useAuth();
 	const { status } = usePlatformStatus();
-	const [searchParams, setSearchParams] = useSearchParams();
 	const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 	const [isLovableOpen, setIsLovableOpen] = useState(false);
-
-	// Handle Supabase OAuth callback result in URL params
-	useEffect(() => {
-		const supabaseParam = searchParams.get('supabase');
-		if (!supabaseParam) return;
-		if (supabaseParam === 'connected') {
-			toast.success('Supabase connected. Open any project to select a database.');
-		} else if (supabaseParam === 'error') {
-			const reason = searchParams.get('reason') ?? 'unknown';
-			toast.error(`Supabase connection failed: ${reason.replace(/_/g, ' ')}`);
-		}
-		const next = new URLSearchParams(searchParams);
-		next.delete('supabase');
-		next.delete('reason');
-		setSearchParams(next, { replace: true });
-	}, []);
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
 	const hasChangeLogs = Boolean(status.changeLogs && status.changeLogs.trim().length > 0);
 	useEffect(() => {

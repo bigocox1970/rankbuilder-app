@@ -1440,6 +1440,13 @@ class ApiClient {
 			method: 'DELETE',
 		});
 	}
+
+	async createSupabaseProject(name: string, region: string): Promise<ApiResponse<{ ref: string; name: string }>> {
+		return this.request<{ ref: string; name: string }>('/api/integrations/supabase/create-project', {
+			method: 'POST',
+			body: JSON.stringify({ name, region }),
+		});
+	}
 }
 
 // Export singleton instance

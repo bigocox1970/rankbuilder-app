@@ -2,16 +2,35 @@ import { useState, useEffect } from 'react';
 import { Database } from 'lucide-react';
 import { SupabaseConnectModal } from './SupabaseConnectModal';
 import { apiClient } from '@/lib/api-client';
+import { useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 import type { SupabaseStatusData } from '@/api-types';
 
 export function SupabaseHeaderButton() {
     const [isOpen, setIsOpen] = useState(false);
     const [status, setStatus] = useState<SupabaseStatusData | null>(null);
+    const [searchParams, setSearchParams] = useSearchParams();
 
     useEffect(() => {
         apiClient.getSupabaseStatus().then(r => {
             if (r.success && r.data) setStatus(r.data);
         });
+    }, []);
+
+    // Auto-open after OAuth callback
+    useEffect(() => {
+        const param = searchParams.get('supabase');
+        if (!param) return;
+        const next = new URLSearchParams(searchParams);
+        next.delete('supabase');
+        next.delete('reason');
+        setSearchParams(next, { replace: true });
+        if (param === 'connected') {
+            setIsOpen(true);
+        } else if (param === 'error') {
+            const reason = searchParams.get('reason') ?? 'unknown';
+            toast.error(`Supabase connection failed: ${reason.replace(/_/g, ' ')}`);
+        }
     }, []);
 
     const isLinked = Boolean(status?.linkedProject);

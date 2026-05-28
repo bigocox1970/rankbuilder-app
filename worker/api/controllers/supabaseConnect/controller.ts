@@ -229,6 +229,35 @@ export class SupabaseConnectController extends BaseController {
         }
     }
 
+    static async createProject(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        const user = context.user;
+        if (!user) return SupabaseConnectController.createErrorResponse('Authentication required', 401);
+        try {
+            const body = await request.json() as { name: string; region: string };
+            if (!body.name?.trim()) return SupabaseConnectController.createErrorResponse('name required', 400);
+
+            const svc = new SupabaseConnectionService(env);
+            const accessToken = await svc.getAccessToken(user.id);
+            if (!accessToken) return SupabaseConnectController.createErrorResponse('Not connected to Supabase', 401);
+
+            // Get first org to create project in
+            const orgs = await svc.listOrganizations(accessToken);
+            if (!orgs.length) return SupabaseConnectController.createErrorResponse('No Supabase organization found', 400);
+
+            const project = await svc.createProject(accessToken, body.name.trim(), body.region ?? 'us-east-1', orgs[0].id);
+            return SupabaseConnectController.createSuccessResponse({ ref: project.ref, name: project.name });
+        } catch (err) {
+            SupabaseConnectController.logger.error('Error creating Supabase project', err);
+            const msg = err instanceof Error ? err.message : 'Failed to create project';
+            return SupabaseConnectController.createErrorResponse(msg, 500);
+        }
+    }
+
     static async disconnect(
         _request: Request,
         env: Env,

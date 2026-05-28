@@ -40,6 +40,13 @@ export function setupSupabaseConnectRoutes(app: Hono<AppEnv>): void {
         adaptController(SupabaseConnectController, SupabaseConnectController.linkProject),
     );
 
+    // Create new project
+    app.post(
+        '/api/integrations/supabase/create-project',
+        setAuthLevel(AuthConfig.authenticated),
+        adaptController(SupabaseConnectController, SupabaseConnectController.createProject),
+    );
+
     // Disconnect
     app.delete(
         '/api/integrations/supabase/disconnect',
