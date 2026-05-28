@@ -1,6 +1,7 @@
 import type { RefObject } from 'react';
 import { GitBranch, Github, Expand, RefreshCw, Monitor, Tablet, Smartphone } from 'lucide-react';
 import { HeaderButton } from '@/components/shared/header-actions';
+import { SupabaseHeaderButton } from '@/components/supabase/SupabaseHeaderButton';
 import type { ViewportMode } from '@/features/core/types';
 
 export interface BaseHeaderActionsProps {
@@ -65,6 +66,7 @@ export function BaseHeaderActions({
 					/>
 				);
 			})()}
+			<SupabaseHeaderButton />
 			<HeaderButton
 				icon={GitBranch}
 				label="Clone"
