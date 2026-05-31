@@ -6,7 +6,9 @@ export class SupabaseConnectOAuthProvider extends BaseOAuthProvider {
     protected readonly authorizationUrl = 'https://api.supabase.com/v1/oauth/authorize';
     protected readonly tokenUrl = 'https://api.supabase.com/v1/oauth/token';
     protected readonly userInfoUrl = '';
-    protected readonly scopes = ['projects', 'secrets'];
+    // `organizations` is needed to list orgs when CREATING a project (projects write +
+    // organizations read must also be granted on the Supabase OAuth app itself).
+    protected readonly scopes = ['projects', 'secrets', 'organizations'];
     protected readonly clientAuthMethod = 'basic' as const;
 
     // Override to use a clean minimal OAuth URL — no Google-specific params, no PKCE

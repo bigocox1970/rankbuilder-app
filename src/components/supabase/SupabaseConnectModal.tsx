@@ -250,11 +250,17 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
                                 <RefreshCw className="h-3.5 w-3.5" />
                                 Refresh
                             </Button>
+                            <Button variant="ghost" size="sm" onClick={handleConnect} className="gap-1.5 text-text-tertiary hover:text-[#3ECF8E]">
+                                Reconnect
+                            </Button>
                             <Button variant="ghost" size="sm" onClick={handleDisconnect} disabled={disconnecting} className="gap-1.5 text-text-tertiary hover:text-red-400 ml-auto">
                                 <Unlink className="h-3.5 w-3.5" />
                                 Disconnect
                             </Button>
                         </div>
+                        <p className="text-[11px] text-text-tertiary">
+                            Can't see "Create project" working, or just changed permissions? Hit <span className="text-text-secondary">Reconnect</span> to refresh your Supabase access.
+                        </p>
                     </div>
                 )}
 
