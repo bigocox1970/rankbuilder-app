@@ -691,15 +691,18 @@ export class SandboxSdkClient extends BaseSandboxService {
         return false;
     }
 
-    private async startDevServer(instanceId: string, initCommand: string, port: number): Promise<string> {
+    private async startDevServer(instanceId: string, initCommand: string, port: number, proxyUrl?: string): Promise<string> {
         try {
             // Use session-based process management
             // Note: Environment variables should already be set via setLocalEnvVars
             const session = await this.getOrCreateSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
-            
+
+            // Native Expo Go: point Metro at the public tunnel host so the manifest it serves
+            // advertises bundle URLs on that host (not 127.0.0.1, which the phone can't reach).
+            const proxyEnv = proxyUrl ? `EXPO_PACKAGER_PROXY_URL=${proxyUrl} ` : '';
             // Start process with env vars inline for those not in .dev.vars
             const process = await session.startProcess(
-                `VITE_LOGGER_TYPE=json PORT=${port} monitor-cli process start --instance-id ${instanceId} --port ${port} -- ${initCommand}`
+                `${proxyEnv}VITE_LOGGER_TYPE=json PORT=${port} monitor-cli process start --instance-id ${instanceId} --port ${port} -- ${initCommand}`
             );
             this.logger.info('Development server started', { instanceId, processId: process.id });
             
@@ -885,11 +888,27 @@ export class SandboxSdkClient extends BaseSandboxService {
             const logStream = await this.getSandbox().streamProcessLogs(process.id);
             
             return new Promise<string>((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    // reject(new Error('Timeout waiting for cloudflared tunnel URL'));
-                    this.logger.warn('Timeout waiting for cloudflared tunnel URL');
+                const timeout = setTimeout(async () => {
+                    // streamProcessLogs is a live subscription and can miss the URL if
+                    // cloudflared printed it before we attached. Before giving up, scan the
+                    // full captured process logs once — and dump the tail so a real
+                    // connectivity failure (edge unreachable from the container) is visible
+                    // rather than looking like a silent timeout.
+                    try {
+                        const full = await this.getSandbox().getProcessLogs(process.id);
+                        const combined = `${full.stdout || ''}\n${full.stderr || ''}`;
+                        const m = combined.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+                        if (m) {
+                            this.logger.info(`Found cloudflared tunnel URL (full-log fallback): ${m[0]}`);
+                            resolve(m[0]);
+                            return;
+                        }
+                        this.logger.warn('Timeout waiting for cloudflared tunnel URL', { logTail: combined.slice(-800) });
+                    } catch (e) {
+                        this.logger.warn('Timeout waiting for cloudflared tunnel URL (fallback log read failed)', { err: e instanceof Error ? e.message : String(e) });
+                    }
                     resolve('');
-                }, 20000); // 20 second timeout
+                }, 25000); // 25 second timeout
 
                 const processLogs = async () => {
                     try {
@@ -925,48 +944,6 @@ export class SandboxSdkClient extends BaseSandboxService {
         }
     }
 
-    /**
-     * Extracts the Expo Go `exp://…exp.direct` URL from a running `expo start --tunnel`
-     * dev-server process. Expo prints it once the ngrok tunnel is established (can take
-     * 15-40s). Non-fatal: resolves '' on timeout/error so a failed tunnel never blocks
-     * the (already-working) web preview — the QR just falls back to the web URL.
-     */
-    private async extractExpoTunnelUrl(instanceId: string): Promise<string> {
-        // Read the actual dev-server output via getLogs(instanceId) — the same source
-        // waitForServerReady uses. (getProcessLogs returns the process-monitor WRAPPER's
-        // output, not Expo/Metro's, so the exp:// line never appears there.) Poll the
-        // full logs so an early-printed exp:// line is still caught.
-        const urlRe = /exp:\/\/[a-z0-9._-]+\.exp\.direct(?::\d+)?/i;
-        const intervalMs = 3000;
-        const maxPolls = 15; // ~45s — ngrok tunnel setup is slow
-        let lastCombined = '';
-        for (let i = 0; i < maxPolls; i++) {
-            try {
-                const logsResult = await this.getLogs(instanceId, false);
-                if (logsResult.success) {
-                    lastCombined = `${logsResult.logs.stdout || ''}\n${logsResult.logs.stderr || ''}`;
-                    const match = lastCombined.match(urlRe);
-                    if (match) {
-                        this.logger.info(`Found Expo tunnel URL: ${match[0]}`);
-                        return match[0];
-                    }
-                }
-            } catch (error) {
-                this.logger.warn('getLogs failed during Expo tunnel extraction', error);
-            }
-            await new Promise((r) => setTimeout(r, intervalMs));
-        }
-        // No exp:// found — dump a diagnostic tail so we can see WHY (ngrok error vs
-        // never attempted). Non-fatal: '' means the QR falls back to the web URL.
-        const ngrokLine = lastCombined.split('\n').reverse().find(
-            (l) => /ngrok|tunnel|exp\.direct/i.test(l)
-        );
-        this.logger.warn('Expo tunnel: no exp:// URL found', {
-            ngrokLine: ngrokLine?.trim().slice(0, 300) || '(no ngrok/tunnel lines in output)',
-            stderrTail: lastCombined.slice(-600),
-        });
-        return '';
-    }
 
     /**
      * Updates project configuration files with the specified project name
@@ -1056,6 +1033,15 @@ export class SandboxSdkClient extends BaseSandboxService {
             if (isDev(env) || env.USE_TUNNEL_FOR_PREVIEW) {
                 this.logger.info('Starting cloudflared tunnel for local development', { instanceId });
                 tunnelUrlPromise = this.startCloudflaredTunnel(instanceId, allocatedPort);
+            } else if (isExpo) {
+                // Native Expo Go: open a cloudflared quick tunnel to Metro's port (proven to
+                // establish from inside the prod sandbox in ~5s). Runs in parallel with
+                // `bun install` so it adds no wall-clock. The resulting https URL is fed to
+                // Metro via EXPO_PACKAGER_PROXY_URL (so the native manifest advertises the
+                // public host) and converted to an `exp://host:443` QR target below.
+                // Non-fatal: resolves '' on failure, leaving the web preview untouched.
+                this.logger.info('Starting cloudflared tunnel for native Expo Go', { instanceId });
+                tunnelUrlPromise = this.startCloudflaredTunnel(instanceId, allocatedPort);
             }
 
             // Patch known-bad template values before bun install / dev start.
@@ -1069,8 +1055,14 @@ export class SandboxSdkClient extends BaseSandboxService {
             //   Non-interactivity comes for free from the container's no-TTY launch — verified that
             //   `bun run dev` without CI stays non-interactive AND live-reloads edits + new routes.
             //   The trailing rule strips any pre-baked `CI=1 ` from template dev/start scripts.
+            // - native Expo Go: drop `--web` from the `dev` script. Plain `expo start` serves
+            //   BOTH the native manifest (to Expo Go, via the cloudflared tunnel) AND the web
+            //   build (to a browser request — the in-builder phone-frame preview), from one
+            //   server, so the on-screen preview is unaffected while native becomes possible.
+            //   (Verified locally: one `expo start` answers text/html with web HTML and
+            //   expo-platform requests with the native manifest.)
             // Single-quoted sed keeps ${PORT:-8081} literal so bun run dev expands it at start time.
-            await this.executeCommand(instanceId, `sed -i -E 's/("react(-dom)?"[[:space:]]*:[[:space:]]*")[~^]?18\\.3\\.2"/\\118.3.1"/g; s|"dev": "expo start --web --non-interactive"|"dev": "expo start --web --port \${PORT:-8081} --host lan"|g; s|"start": "expo start --non-interactive"|"start": "expo start --port \${PORT:-8081} --host lan"|g; s|: "CI=1 expo start|: "expo start|g' package.json 2>/dev/null || true`, { timeout: 5000 });
+            await this.executeCommand(instanceId, `sed -i -E 's/("react(-dom)?"[[:space:]]*:[[:space:]]*")[~^]?18\\.3\\.2"/\\118.3.1"/g; s|"dev": "expo start --web --non-interactive"|"dev": "expo start --web --port \${PORT:-8081} --host lan"|g; s|"start": "expo start --non-interactive"|"start": "expo start --port \${PORT:-8081} --host lan"|g; s|"dev": "expo start --web |"dev": "expo start |g; s|: "CI=1 expo start|: "expo start|g' package.json 2>/dev/null || true`, { timeout: 5000 });
 
             this.logger.info('Installing dependencies', { instanceId });
             let [installResult, tunnelURL] = await Promise.all([
@@ -1085,18 +1077,41 @@ export class SandboxSdkClient extends BaseSandboxService {
                     if (localEnvVars) {
                         await this.setLocalEnvVars(instanceId, localEnvVars);
                     }
-                    // Start dev server on allocated port
-                    const processId = await this.startDevServer(instanceId, initCommand, allocatedPort);
+                    // Start dev server on allocated port. For Expo, hand Metro the cloudflared
+                    // https URL so it serves a phone-reachable native manifest.
+                    const processId = await this.startDevServer(instanceId, initCommand, allocatedPort, (isExpo && tunnelURL) ? tunnelURL : undefined);
                     this.logger.info('Instance created successfully', { instanceId, processId, port: allocatedPort });
 
-                    // For Expo, the native Expo Go URL comes from `expo start --tunnel`'s
-                    // own output (ngrok). Extract it from the dev-server logs; '' on failure
-                    // so the web preview is never blocked.
-                    if (isExpo && !tunnelURL) {
-                        tunnelURL = await this.extractExpoTunnelUrl(instanceId);
-                        this.logger.info('Expo tunnel URL resolved', { instanceId, tunnelURL: tunnelURL || '(none)' });
+                    // Native Expo Go QR target = `exp://host` (NO port). Expo Go speaks plain
+                    // HTTP to an exp:// host, and cloudflared quick tunnels serve BOTH http (:80)
+                    // and https (:443) to Metro. So Expo Go fetches the manifest over http://host
+                    // (works), then loads the bundle from the manifest's https://host URL (set by
+                    // EXPO_PACKAGER_PROXY_URL — works too). Adding `:443` breaks it: Expo Go sends
+                    // plain HTTP to the TLS-only 443 port → "400 plain HTTP sent to HTTPS port".
+                    // cloudflared gives `https://host`; take just the hostname. Empty when no
+                    // tunnel → QR falls back to the web preview URL, panel stays honest.
+                    let expoGoUrl = '';
+                    if (isExpo && tunnelURL) {
+                        try {
+                            expoGoUrl = `exp://${new URL(tunnelURL).hostname}`;
+                        } catch {
+                            this.logger.warn('Could not parse cloudflared tunnel URL for exp:// QR', { instanceId, tunnelURL });
+                        }
+
+                        // Pre-warm the native (iOS) Hermes bundle from INSIDE the sandbox over
+                        // localhost, before the user scans. The first compile of a full RN app to
+                        // Hermes bytecode takes 60-90s on the constrained sandbox; over the tunnel
+                        // that exceeds Cloudflare's ~100s edge timeout, so Expo Go's first bundle
+                        // request 502s / "could not connect to development server". Compiling on
+                        // localhost (no edge timeout) populates Metro's transform cache, so the
+                        // real over-tunnel request then serves the cached bundle fast. Fire-and-
+                        // forget: must not block setup; '|| true' so a slow/failed warm is harmless.
+                        const warmUrl = `http://localhost:${allocatedPort}/node_modules/expo-router/entry.bundle?platform=ios&dev=true&hot=false&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable`;
+                        this.executeCommand(instanceId, `curl -s -o /dev/null --max-time 240 "${warmUrl}" || true`, { timeout: 250000 })
+                            .then(() => this.logger.info('Expo native bundle pre-warm finished', { instanceId }))
+                            .catch((e) => this.logger.warn('Expo native bundle pre-warm failed', { instanceId, err: e instanceof Error ? e.message : String(e) }));
                     }
-                        
+
                     // Expose the same port for preview URL
                     const previewResult = await sandbox.exposePort(allocatedPort, { hostname: getPreviewDomain(env) });
                     let previewURL = previewResult.url;
@@ -1108,9 +1123,9 @@ export class SandboxSdkClient extends BaseSandboxService {
                         }
                     }
 
-                    this.logger.info('Preview URL exposed', { instanceId, previewURL, tunnelURL });
-                        
-                    return { previewURL, tunnelURL, processId, allocatedPort };
+                    this.logger.info('Preview URL exposed', { instanceId, previewURL, tunnelURL, expoGoUrl });
+
+                    return { previewURL, tunnelURL: expoGoUrl, processId, allocatedPort };
                 } catch (error) {
                     this.logger.warn('Failed to start dev server', error);
                     return undefined;
@@ -1189,12 +1204,11 @@ export class SandboxSdkClient extends BaseSandboxService {
                 };
             }
             
-            // Only attempt native exp:// tunnel extraction when the dev script actually
-            // runs a tunnel (`expo start --tunnel`). Plain `--web` Expo builds skip it so
-            // they aren't delayed polling for a URL that will never appear. (ngrok/--tunnel
-            // is currently disabled: it hangs in the sandbox — see tunnel notes.)
+            // Detect Expo apps (any `expo start` dev/start script, --web or otherwise).
+            // ngrok (`--tunnel`) is dead in the sandbox; native Expo Go is now pursued via
+            // cloudflared. This flag drives the cloudflared connectivity probe in setupInstance.
             const pkgJsonFile = files.find(f => f.filePath === 'package.json');
-            const isExpo = pkgJsonFile ? /expo start[^"]*--tunnel/.test(pkgJsonFile.fileContents) : false;
+            const isExpo = pkgJsonFile ? /expo start/.test(pkgJsonFile.fileContents) : false;
 
             const results = await this.setupInstance(instanceId, projectName, initCommand, isExpo, envVars);
             if (!results) {
