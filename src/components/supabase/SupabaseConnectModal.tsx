@@ -101,30 +101,35 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
         setLinkingRef(null);
     }
 
+    const CREATE_LIMIT_MSG = "Creating a new Supabase project isn't available here — Supabase needs extra permissions for that. Create the project in your Supabase dashboard, then come back and link it (the picker on the previous screen).";
+
     async function handleCreateProject() {
         if (!newProjectName.trim()) return;
         setCreating(true);
         setError(null);
-        const resp = await apiClient.createSupabaseProject(newProjectName.trim(), newProjectRegion);
-        if (!resp.success) {
-            if (resp.error?.message?.includes('403') || resp.error?.message?.includes('write')) {
-                setError('Creating projects requires write access. Go back to your Supabase OAuth app settings and change "Projects" from read to write, then reconnect.');
-            } else {
-                setError(resp.error?.message ?? 'Failed to create project.');
+        try {
+            const resp = await apiClient.createSupabaseProject(newProjectName.trim(), newProjectRegion);
+            if (!resp.success) {
+                const m = resp.error?.message ?? '';
+                setError(/403|forbidden|organization|permission|write/i.test(m) ? CREATE_LIMIT_MSG : (m || 'Could not create the project.'));
+                return;
             }
+            // Project created — link it (or fall back to the picker to select the new one).
+            if (resp.data?.ref) {
+                await handleLinkProject(resp.data.ref);
+            } else {
+                setView('picking');
+                await loadProjects();
+            }
+            setNewProjectName('');
+        } catch (e) {
+            // api-client throws on non-2xx — the create endpoint 403s when the connection
+            // lacks org/write scope. Show the friendly limit message instead of crashing.
+            const m = e instanceof Error ? e.message : '';
+            setError(/403|forbidden|organization|permission|write/i.test(m) ? CREATE_LIMIT_MSG : 'Could not create the project. Create it in your Supabase dashboard, then link it here.');
+        } finally {
             setCreating(false);
-            return;
         }
-        // Project created — link it
-        if (resp.data?.ref) {
-            await handleLinkProject(resp.data.ref);
-        } else {
-            // Fall back to project picker so they can select the new one
-            setView('picking');
-            await loadProjects();
-        }
-        setCreating(false);
-        setNewProjectName('');
     }
 
     async function handleDisconnect() {

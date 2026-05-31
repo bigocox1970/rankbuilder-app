@@ -229,8 +229,22 @@ export class SupabaseConnectController extends BaseController {
             return SupabaseConnectController.createSuccessResponse({ ref: project.ref, name: project.name });
         } catch (err) {
             SupabaseConnectController.logger.error('Error creating Supabase project', err);
-            const msg = err instanceof Error ? err.message : 'Failed to create project';
-            return SupabaseConnectController.createErrorResponse(msg, 500);
+            const raw = err instanceof Error ? err.message : '';
+            // The OAuth connection only has read scope for projects/secrets (no
+            // organizations / projects-write), so listing orgs and creating projects is
+            // rejected by Supabase (403). Surface a clear, user-actionable message rather
+            // than a raw 500 — they can create the project in the Supabase dashboard and
+            // link it here, which works with read scope.
+            if (raw.includes('403') || /forbidden|organization/i.test(raw)) {
+                return SupabaseConnectController.createErrorResponse(
+                    "Creating a new Supabase project isn't available with the current connection — Supabase requires extra permissions for that. Create the project in your Supabase dashboard, then come back and link it here.",
+                    403,
+                );
+            }
+            return SupabaseConnectController.createErrorResponse(
+                'Could not create the project. Try creating it in your Supabase dashboard and linking it here.',
+                500,
+            );
         }
     }
 
