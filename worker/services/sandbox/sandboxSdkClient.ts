@@ -932,43 +932,37 @@ export class SandboxSdkClient extends BaseSandboxService {
      * the (already-working) web preview — the QR just falls back to the web URL.
      */
     private async extractExpoTunnelUrl(processId: string): Promise<string> {
-        try {
-            const logStream = await this.getSandbox().streamProcessLogs(processId);
-            return new Promise<string>((resolve) => {
-                const timeout = setTimeout(() => {
-                    this.logger.warn('Timeout waiting for Expo exp:// tunnel URL');
-                    resolve('');
-                }, 45000); // ngrok tunnel setup is slow
-
-                const processLogs = async () => {
-                    try {
-                        for await (const event of parseSSEStream<LogEvent>(logStream)) {
-                            if (!event.data) continue;
-                            // e.g. "exp://abc-xyz.anonymous.app.exp.direct" (with optional :port)
-                            const match = event.data.match(/exp:\/\/[a-z0-9._-]+\.exp\.direct(?::\d+)?/i);
-                            if (match) {
-                                clearTimeout(timeout);
-                                this.logger.info(`Found Expo tunnel URL: ${match[0]}`);
-                                resolve(match[0]);
-                                return;
-                            }
-                            // Surface ngrok failures so we can see them in the worker tail
-                            if (/ngrok|tunnel/i.test(event.data) && /error|failed|denied/i.test(event.data)) {
-                                this.logger.warn(`Expo tunnel log: ${event.data}`);
-                            }
-                        }
-                    } catch (error) {
-                        this.logger.error('Expo tunnel log stream failed', error);
-                        clearTimeout(timeout);
-                        resolve('');
-                    }
-                };
-                processLogs();
-            });
-        } catch (error) {
-            this.logger.warn('Failed to extract Expo tunnel URL', error);
-            return '';
+        // Poll the FULL buffered process output (not a live stream): the dev server has
+        // usually been up for a while by the time we get here, so the exp:// line that
+        // Expo prints at startup is already in the buffer. A live stream would miss it.
+        const urlRe = /exp:\/\/[a-z0-9._-]+\.exp\.direct(?::\d+)?/i;
+        const intervalMs = 3000;
+        const maxPolls = 15; // ~45s — ngrok tunnel setup is slow
+        let lastCombined = '';
+        for (let i = 0; i < maxPolls; i++) {
+            try {
+                const logs = await this.getSandbox().getProcessLogs(processId);
+                lastCombined = `${logs.stdout || ''}\n${logs.stderr || ''}`;
+                const match = lastCombined.match(urlRe);
+                if (match) {
+                    this.logger.info(`Found Expo tunnel URL: ${match[0]}`);
+                    return match[0];
+                }
+            } catch (error) {
+                this.logger.warn('getProcessLogs failed during Expo tunnel extraction', error);
+            }
+            await new Promise((r) => setTimeout(r, intervalMs));
         }
+        // No exp:// found — dump a diagnostic tail so we can see WHY (ngrok error vs
+        // never attempted). Non-fatal: '' means the QR falls back to the web URL.
+        const ngrokLine = lastCombined.split('\n').reverse().find(
+            (l) => /ngrok|tunnel|exp\.direct/i.test(l)
+        );
+        this.logger.warn('Expo tunnel: no exp:// URL found', {
+            ngrokLine: ngrokLine?.trim().slice(0, 300) || '(no ngrok/tunnel lines in output)',
+            stderrTail: lastCombined.slice(-600),
+        });
+        return '';
     }
 
     /**
