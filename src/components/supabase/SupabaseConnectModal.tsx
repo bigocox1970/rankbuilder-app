@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { apiClient } from '@/lib/api-client';
-import type { SupabaseStatusData, SupabaseProject } from '@/api-types';
+import type { SupabaseStatusData, SupabaseProject, SupabaseProjectLinkInfo } from '@/api-types';
 
 interface SupabaseConnectModalProps {
     open: boolean;
@@ -36,6 +36,7 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
     const [view, setView] = useState<ModalView>('loading');
     const [status, setStatus] = useState<SupabaseStatusData | null>(null);
     const [projects, setProjects] = useState<SupabaseProject[]>([]);
+    const [links, setLinks] = useState<SupabaseProjectLinkInfo[]>([]);
     const [loadingProjects, setLoadingProjects] = useState(false);
     const [linkingRef, setLinkingRef] = useState<string | null>(null);
     const [disconnecting, setDisconnecting] = useState(false);
@@ -77,6 +78,7 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
         const resp = await apiClient.listSupabaseProjects();
         if (resp.success && resp.data) {
             setProjects(resp.data.projects);
+            setLinks(resp.data.links ?? []);
         } else {
             setError('Could not load your Supabase projects. Try disconnecting and reconnecting.');
         }
@@ -200,16 +202,23 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
                             <>
                                 {projects.length > 0 && (
                                     <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                                        {projects.map(p => (
+                                        {projects.map(p => {
+                                            const linkedApps = links.filter(l => l.projectRef === p.ref);
+                                            return (
                                             <button
                                                 key={p.ref}
                                                 onClick={() => handleLinkProject(p.ref)}
                                                 disabled={linkingRef !== null}
                                                 className="w-full flex items-center justify-between p-3 rounded-lg border border-bg-4 bg-bg-2/50 hover:bg-bg-3/50 hover:border-[#3ECF8E]/40 transition-colors text-left disabled:opacity-50"
                                             >
-                                                <div>
-                                                    <p className="text-sm font-medium text-text-primary">{p.name}</p>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-text-primary truncate">{p.name}</p>
                                                     <p className="text-xs text-text-tertiary">{p.region}</p>
+                                                    {linkedApps.length > 0 && (
+                                                        <p className="text-[11px] text-[#3ECF8E] mt-0.5 truncate">
+                                                            Linked to {linkedApps.map(l => l.appTitle?.trim() || 'an app').join(', ')}
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 {linkingRef === p.ref ? (
                                                     <Loader2 className="h-4 w-4 animate-spin text-text-tertiary shrink-0" />
@@ -219,7 +228,8 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
                                                     </span>
                                                 )}
                                             </button>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
 

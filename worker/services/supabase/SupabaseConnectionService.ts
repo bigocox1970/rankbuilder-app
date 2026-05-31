@@ -243,6 +243,22 @@ export class SupabaseConnectionService {
             .where(eq(schema.supabaseProjectLinks.agentId, agentId));
     }
 
+    /** All of a user's per-app project links, with the RankBuilder app title, so the
+     *  picker can show which app a given Supabase DB is already linked to. */
+    async getUserProjectLinks(userId: string): Promise<Array<{ projectRef: string; agentId: string; appTitle: string | null }>> {
+        const rows = await this.db
+            .select({
+                projectRef: schema.supabaseProjectLinks.projectRef,
+                agentId: schema.supabaseProjectLinks.agentId,
+                appTitle: schema.apps.title,
+            })
+            .from(schema.supabaseProjectLinks)
+            .leftJoin(schema.apps, eq(schema.apps.id, schema.supabaseProjectLinks.agentId))
+            .where(eq(schema.supabaseProjectLinks.userId, userId))
+            .all();
+        return rows.map(r => ({ projectRef: r.projectRef, agentId: r.agentId, appTitle: r.appTitle ?? null }));
+    }
+
     // --- Supabase Management API calls ---
 
     async createProject(accessToken: string, name: string, region: string, organizationId: string): Promise<{ ref: string; name: string }> {

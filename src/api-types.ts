@@ -357,8 +357,16 @@ export interface SupabaseProject {
     createdAt: string;
 }
 
+export interface SupabaseProjectLinkInfo {
+    projectRef: string;
+    agentId: string;
+    appTitle: string | null;
+}
+
 export interface SupabaseProjectsData {
     projects: SupabaseProject[];
+    // Which RankBuilder app(s) each Supabase project is already linked to.
+    links?: SupabaseProjectLinkInfo[];
 }
 
 // Stripe billing types

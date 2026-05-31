@@ -160,8 +160,12 @@ export class SupabaseConnectController extends BaseController {
             const svc = new SupabaseConnectionService(env);
             const accessToken = await svc.getAccessToken(user.id);
             if (!accessToken) return SupabaseConnectController.createErrorResponse('Not connected to Supabase', 401);
-            const projects = await svc.listProjects(accessToken);
-            return SupabaseConnectController.createSuccessResponse({ projects });
+            const [projects, links] = await Promise.all([
+                svc.listProjects(accessToken),
+                svc.getUserProjectLinks(user.id),
+            ]);
+            // `links` lets the UI show which RankBuilder app each DB is already linked to.
+            return SupabaseConnectController.createSuccessResponse({ projects, links });
         } catch (err) {
             SupabaseConnectController.logger.error('Error listing Supabase projects', err);
             return SupabaseConnectController.createErrorResponse('Failed to list projects', 500);
