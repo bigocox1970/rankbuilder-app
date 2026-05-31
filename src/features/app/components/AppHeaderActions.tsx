@@ -7,6 +7,8 @@ export function AppHeaderActions({
 	onGitHubExportClick,
 	previewRef,
 	previewUrl,
+	expoTunnelUrl,
+	templateDetails,
 	onManualRefresh,
 	viewportMode,
 	onViewportChange,
@@ -21,6 +23,11 @@ export function AppHeaderActions({
 			onManualRefresh={onManualRefresh}
 			viewportMode={viewportMode}
 			onViewportChange={onViewportChange}
+			// Thread Expo data through so the header can hide the no-op viewport toggle
+			// and show the QR / "Open in Expo Go" button for Expo builds.
+			templateName={templateDetails?.name}
+			previewUrl={previewUrl}
+			expoTunnelUrl={expoTunnelUrl}
 		/>
 	);
 }

@@ -26,6 +26,8 @@ export interface FeatureContext {
 
 	// Preview
 	previewUrl?: string;
+	// Native Expo Go deep-link (exp://host) when this is an Expo build behind a tunnel.
+	expoTunnelUrl?: string;
 	websocket?: WebSocket;
 
 	// File state

@@ -272,6 +272,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					projectType={projectType}
 					behaviorType={behaviorType ?? 'phasic'}
 					previewUrl={previewUrl}
+					expoTunnelUrl={expoTunnelUrl}
 					websocket={websocket}
 					files={allFiles}
 					activeFile={activeFile}
@@ -331,6 +332,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					projectType={projectType}
 					behaviorType={behaviorType ?? 'phasic'}
 					previewUrl={previewUrl}
+					expoTunnelUrl={expoTunnelUrl}
 					websocket={websocket}
 					files={allFiles}
 					activeFile={activeFile}
