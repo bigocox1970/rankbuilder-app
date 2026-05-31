@@ -30,6 +30,19 @@ export enum CurrentDevState {
 export const MAX_PHASES = 10;
 
 /** Common state fields for all agent behaviors */
+/**
+ * A restore point captured at a user-prompt boundary. The UI lets the user roll the
+ * project back to any of these (git reset to commitSha + redeploy).
+ */
+export interface ProjectCheckpoint {
+    id: string;
+    /** First line of the user prompt that this checkpoint precedes (for the UI label). */
+    label: string;
+    /** Git commit the project is reset to when this checkpoint is restored. */
+    commitSha: string;
+    createdAt: number;
+}
+
 export interface BaseProjectState {
     behaviorType: BehaviorType;
     projectType: ProjectType;
@@ -60,6 +73,9 @@ export interface BaseProjectState {
     lastPackageJson?: string;
     pendingUserInputs: string[];
     projectUpdatesAccumulator: string[];
+
+    // Restore points (one per user prompt) the UI can roll the project back to
+    checkpoints?: ProjectCheckpoint[];
     
     // Deep debug
     lastDeepDebugTranscript: string | null;

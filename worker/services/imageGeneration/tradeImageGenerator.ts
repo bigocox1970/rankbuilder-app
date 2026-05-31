@@ -294,7 +294,10 @@ export async function generateTradeImagesFromPlan(
         ...plan.services.slice(0, 6).map((svc, i) => ({
             key: `project${i + 1}` as keyof GeneratedTradeImages,
             label: svc.title,
-            prompt: svc.imagePrompt,
+            // Anchor each card image to its actual subject (the card title) so a
+            // "Bench Press" / "French Pastries" card gets THAT specific image, not a
+            // generic gym/shop shot. The title leads the prompt so Flux focuses on it.
+            prompt: `${PHOTO_PREFIX} ${svc.title}. ${svc.imagePrompt}`,
             width: 768,
             height: 512,
         })),

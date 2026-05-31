@@ -14,7 +14,15 @@ import type {
 	AdminGatewayCostData,
 	AdminUsersData,
 	AdminUserEntry,
+	AdminUserDetailData,
 } from '@/api-types';
+import {
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+	SheetDescription,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -236,6 +244,11 @@ export default function AdminPage() {
 	// Track per-user KV override state in component (userId -> hasOverride)
 	const [kvOverrides, setKvOverrides] = useState<Record<string, boolean>>({});
 	const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+	const [grantAmounts, setGrantAmounts] = useState<Record<string, string>>({});
+	const [detailOpen, setDetailOpen] = useState(false);
+	const [detailLoading, setDetailLoading] = useState(false);
+	const [detailUser, setDetailUser] = useState<AdminUserDetailData | null>(null);
+	const [magicLoading, setMagicLoading] = useState(false);
 	const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const loadUsers = React.useCallback(async (
@@ -315,6 +328,83 @@ export default function AdminPage() {
 			toast.error(`Failed to ${action} user`);
 		} finally {
 			setActionLoading((prev) => ({ ...prev, [`${userId}:${action}`]: false }));
+		}
+	};
+
+	const handleGrantCredits = async (userId: string) => {
+		const amount = parseInt(grantAmounts[userId] ?? '', 10);
+		if (!Number.isInteger(amount) || amount <= 0) {
+			toast.error('Enter a positive whole number of credits');
+			return;
+		}
+		setActionLoading((prev) => ({ ...prev, [`${userId}:grant`]: true }));
+		try {
+			const response = await apiClient.grantCreditsToUser(userId, amount);
+			if (response?.success) {
+				const newBalance = response.data?.newBalance;
+				toast.success(response.data?.message ?? `Granted ${amount} credits`);
+				setGrantAmounts((prev) => ({ ...prev, [userId]: '' }));
+				// Reflect the new balance in the table without a full reload
+				if (typeof newBalance === 'number') {
+					setUsersData((prev) =>
+						prev
+							? { ...prev, users: prev.users.map((u) => (u.id === userId ? { ...u, creditBalance: newBalance } : u)) }
+							: prev,
+					);
+				}
+			} else {
+				toast.error(response?.error?.message ?? 'Failed to grant credits');
+			}
+		} catch (error) {
+			console.error('Error granting credits', error);
+			toast.error('Failed to grant credits');
+		} finally {
+			setActionLoading((prev) => ({ ...prev, [`${userId}:grant`]: false }));
+		}
+	};
+
+	const openUserDetail = async (userId: string) => {
+		setDetailOpen(true);
+		setDetailUser(null);
+		setDetailLoading(true);
+		try {
+			const response = await apiClient.getUserDetail(userId);
+			if (response.success && response.data) {
+				setDetailUser(response.data);
+			} else {
+				toast.error('Failed to load user details');
+				setDetailOpen(false);
+			}
+		} catch (error) {
+			console.error('Error loading user detail', error);
+			toast.error('Failed to load user details');
+			setDetailOpen(false);
+		} finally {
+			setDetailLoading(false);
+		}
+	};
+
+	const handleLoginAsUser = async (userId: string) => {
+		setMagicLoading(true);
+		try {
+			const response = await apiClient.createUserMagicLink(userId);
+			if (response.success && response.data?.link) {
+				const { link } = response.data;
+				try {
+					await navigator.clipboard.writeText(link);
+					toast.success('Magic link copied — open it in an incognito window (expires in 10 min)');
+				} catch {
+					// Clipboard can fail (permissions); fall back to showing the link.
+					window.prompt('Copy this one-time login link (expires in 10 min):', link);
+				}
+			} else {
+				toast.error('Failed to generate login link');
+			}
+		} catch (error) {
+			console.error('Error generating magic link', error);
+			toast.error('Failed to generate login link');
+		} finally {
+			setMagicLoading(false);
 		}
 	};
 
@@ -547,7 +637,8 @@ export default function AdminPage() {
 												<TableHead>Signed up</TableHead>
 												<TableHead>Last active</TableHead>
 												<TableHead className="text-right">Apps</TableHead>
-												<TableHead className="text-right">Credits</TableHead>
+												<TableHead className="text-right">Used</TableHead>
+												<TableHead className="text-right">Balance</TableHead>
 												<TableHead>Status</TableHead>
 												<TableHead className="text-right">Actions</TableHead>
 											</TableRow>
@@ -561,7 +652,15 @@ export default function AdminPage() {
 												const hasOverride = kvOverrides[u.id] ?? false;
 												return (
 													<TableRow key={u.id}>
-														<TableCell className="text-xs font-mono">{u.email}</TableCell>
+														<TableCell className="text-xs font-mono">
+															<button
+																onClick={() => openUserDetail(u.id)}
+																className="text-accent hover:underline text-left"
+																title="View user details"
+															>
+																{u.email}
+															</button>
+														</TableCell>
 														<TableCell className="text-sm">{u.displayName}</TableCell>
 														<TableCell className="text-sm capitalize text-text-secondary">{u.provider}</TableCell>
 														<TableCell className="text-sm text-text-secondary">
@@ -571,7 +670,8 @@ export default function AdminPage() {
 															{u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleDateString() : '—'}
 														</TableCell>
 														<TableCell className="text-right text-sm">{u.appCount}</TableCell>
-														<TableCell className="text-right text-sm">{u.totalCredits.toFixed(1)}</TableCell>
+														<TableCell className="text-right text-sm text-text-secondary">{u.totalCredits.toFixed(1)}</TableCell>
+														<TableCell className="text-right text-sm font-medium">{u.creditBalance}</TableCell>
 														<TableCell>
 															<div className="flex items-center gap-1">
 																{u.isSuspended ? (
@@ -585,7 +685,25 @@ export default function AdminPage() {
 															</div>
 														</TableCell>
 														<TableCell className="text-right">
-															<div className="flex gap-1 justify-end">
+															<div className="flex gap-1 justify-end items-center">
+																<Input
+																	type="number"
+																	min={1}
+																	placeholder="Credits"
+																	value={grantAmounts[u.id] ?? ''}
+																	onChange={(e) => setGrantAmounts((prev) => ({ ...prev, [u.id]: e.target.value }))}
+																	onKeyDown={(e) => { if (e.key === 'Enter') handleGrantCredits(u.id); }}
+																	className="h-8 w-20 text-xs"
+																/>
+																<Button
+																	size="sm"
+																	variant="outline"
+																	disabled={(actionLoading[`${u.id}:grant`] ?? false) || !(grantAmounts[u.id] ?? '').trim()}
+																	onClick={() => handleGrantCredits(u.id)}
+																	className="text-xs text-accent hover:text-accent"
+																>
+																	{actionLoading[`${u.id}:grant`] ? 'Working...' : 'Grant'}
+																</Button>
 																{u.isSuspended ? (
 																	<Button
 																		size="sm"
@@ -679,6 +797,137 @@ export default function AdminPage() {
 							)}
 						</CardContent>
 					</Card>
+
+					{/* User Detail Drawer */}
+					<Sheet open={detailOpen} onOpenChange={setDetailOpen}>
+						<SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+							<SheetHeader>
+								<SheetTitle>{detailUser?.email ?? 'User details'}</SheetTitle>
+								<SheetDescription>
+									{detailUser?.displayName || '—'} · {detailUser?.provider || '—'}
+								</SheetDescription>
+							</SheetHeader>
+
+							{detailLoading || !detailUser ? (
+								<div className="flex items-center gap-3 py-8">
+									<Settings className="h-5 w-5 animate-spin text-text-tertiary" />
+									<span className="text-sm text-text-tertiary">Loading…</span>
+								</div>
+							) : (
+								<div className="space-y-6 py-4 text-sm">
+									<Button
+										variant="outline"
+										disabled={magicLoading}
+										onClick={() => handleLoginAsUser(detailUser.id)}
+										className="w-full text-accent hover:text-accent"
+									>
+										{magicLoading ? 'Generating link…' : 'Login as user (copy magic link)'}
+									</Button>
+
+									<div className="grid grid-cols-2 gap-3">
+										<div className="rounded-lg border border-bg-4 p-3">
+											<p className="text-xs text-text-tertiary">Credit balance</p>
+											<p className="text-lg font-semibold">{detailUser.creditBalance}</p>
+										</div>
+										<div className="rounded-lg border border-bg-4 p-3">
+											<p className="text-xs text-text-tertiary">Credits used</p>
+											<p className="text-lg font-semibold">{detailUser.creditsUsed.toFixed(1)}</p>
+											<p className="text-xs text-text-tertiary">{detailUser.usageCallCount} calls</p>
+										</div>
+										<div className="rounded-lg border border-bg-4 p-3">
+											<p className="text-xs text-text-tertiary">Apps built</p>
+											<p className="text-lg font-semibold">{detailUser.appCount}</p>
+										</div>
+										<div className="rounded-lg border border-bg-4 p-3">
+											<p className="text-xs text-text-tertiary">Status</p>
+											<p className="text-lg font-semibold">{detailUser.isSuspended ? 'Suspended' : 'Active'}</p>
+											{detailUser.hasProOverride && <p className="text-xs text-accent">Pro override</p>}
+										</div>
+									</div>
+
+									<div className="text-xs text-text-secondary space-y-1">
+										<div>Signed up: {detailUser.createdAt ? new Date(detailUser.createdAt).toLocaleString() : '—'}</div>
+										<div>Last active: {detailUser.lastActiveAt ? new Date(detailUser.lastActiveAt).toLocaleString() : '—'}</div>
+									</div>
+
+									<div>
+										<h4 className="font-medium mb-2">Subscription</h4>
+										{detailUser.subscription ? (
+											<div className="rounded-lg border border-bg-4 p-3 space-y-1 text-xs">
+												<div>Status: <span className="font-medium">{detailUser.subscription.status}</span></div>
+												{detailUser.subscription.amount != null && (
+													<div>
+														Plan: {(detailUser.subscription.amount / 100).toFixed(2)} {detailUser.subscription.currency?.toUpperCase()}
+														{detailUser.subscription.interval ? ` / ${detailUser.subscription.interval}` : ''}
+													</div>
+												)}
+												{detailUser.subscription.currentPeriodEnd && (
+													<div>Renews: {new Date(detailUser.subscription.currentPeriodEnd * 1000).toLocaleDateString()}</div>
+												)}
+												{detailUser.subscription.cancelAtPeriodEnd && <div className="text-destructive">Cancels at period end</div>}
+											</div>
+										) : (
+											<p className="text-xs text-text-tertiary">
+												{detailUser.stripeSubscriptionStatus ? `Status: ${detailUser.stripeSubscriptionStatus}` : 'No active subscription'}
+											</p>
+										)}
+									</div>
+
+									<div>
+										<h4 className="font-medium mb-2">Credit purchases</h4>
+										{detailUser.billingError ? (
+											<p className="text-xs text-text-tertiary">Could not load Stripe history: {detailUser.billingError}</p>
+										) : detailUser.payments.length > 0 ? (
+											<div className="space-y-1">
+												{detailUser.payments.map((p) => (
+													<div key={p.id} className="flex justify-between text-xs border-b border-bg-4 py-1">
+														<span>{new Date(p.created * 1000).toLocaleDateString()} · {p.description || p.status}</span>
+														<span className="font-medium">{(p.amount / 100).toFixed(2)} {p.currency.toUpperCase()}</span>
+													</div>
+												))}
+											</div>
+										) : (
+											<p className="text-xs text-text-tertiary">No purchases</p>
+										)}
+									</div>
+
+									<div>
+										<h4 className="font-medium mb-2">Apps ({detailUser.appCount})</h4>
+										{detailUser.apps.length > 0 ? (
+											<div className="space-y-1">
+												{detailUser.apps.map((a) => (
+													<div key={a.id} className="flex justify-between text-xs border-b border-bg-4 py-1">
+														<span className="truncate mr-2">{a.title}</span>
+														<span className="text-text-tertiary whitespace-nowrap">
+															{a.framework || '—'} · {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ''}
+														</span>
+													</div>
+												))}
+											</div>
+										) : (
+											<p className="text-xs text-text-tertiary">No apps</p>
+										)}
+									</div>
+
+									<div>
+										<h4 className="font-medium mb-2">Recent AI usage</h4>
+										{detailUser.recentUsage.length > 0 ? (
+											<div className="space-y-1">
+												{detailUser.recentUsage.map((row, i) => (
+													<div key={i} className="flex justify-between text-xs border-b border-bg-4 py-1">
+														<span className="truncate mr-2">{row.model}{row.agentAction ? ` · ${row.agentAction}` : ''}</span>
+														<span className="text-text-tertiary whitespace-nowrap">{row.creditCost.toFixed(2)}</span>
+													</div>
+												))}
+											</div>
+										) : (
+											<p className="text-xs text-text-tertiary">No usage yet</p>
+										)}
+									</div>
+								</div>
+							)}
+						</SheetContent>
+					</Sheet>
 
 					{/* AI Model Configurations */}
 					<Card id="model-configs">

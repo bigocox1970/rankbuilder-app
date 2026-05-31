@@ -1,0 +1,1 @@
+ALTER TABLE `apps` ADD `app_type` text;

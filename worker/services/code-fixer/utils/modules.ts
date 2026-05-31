@@ -35,6 +35,30 @@ export function isExternalModule(moduleSpecifier: string): boolean {
 }
 
 /**
+ * Validate that a string is a real, installable npm package specifier — i.e. a
+ * package name (optionally scoped, optionally with a trailing @version) and
+ * nothing else. Guards `bun add` against placeholder prose that a blueprint may
+ * emit in its `frameworks` array (e.g. "No new major dependencies required"),
+ * which `isExternalModule` waves through and which then fails the install with a
+ * scary red "Failed to execute commands" error.
+ *
+ * npm naming rules: a name segment starts with [a-z0-9-~] and may contain
+ * [a-z0-9-._~]; a scope is "@scope/". Any whitespace, capital-led prose, or
+ * empty token is rejected. A trailing "@version" (e.g. nanoid@3, react@^18) is
+ * stripped before validating the name portion.
+ */
+export function isValidNpmPackageName(specifier: string): boolean {
+    const spec = specifier?.trim();
+    if (!spec || /\s/.test(spec)) {
+        return false;
+    }
+    // Strip an optional trailing @version, preserving a leading scope "@".
+    const versionAt = spec.lastIndexOf('@');
+    const name = versionAt > 0 ? spec.slice(0, versionAt) : spec;
+    return /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i.test(name);
+}
+
+/**
  * Check if a file path is within the project boundaries and can be modified
  */
 export function canModifyFile(filePath: string): boolean {

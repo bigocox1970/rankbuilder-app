@@ -6,7 +6,7 @@ import {
     AgenticBlueprint,
     PhasicBlueprint,
 } from '../../schemas';
-import { ExecuteCommandsResponse, PreviewType, RuntimeError, StaticAnalysisResponse, TemplateDetails, TemplateFile } from '../../../services/sandbox/sandboxTypes';
+import { CodeIssue, ExecuteCommandsResponse, PreviewType, RuntimeError, StaticAnalysisResponse, TemplateDetails, TemplateFile } from '../../../services/sandbox/sandboxTypes';
 import { BaseProjectState, AgenticState, FileState } from '../state';
 import { AllIssues, AgentSummary, AgentInitArgs, AgentImportInitArgs, BehaviorType, DeploymentTarget, ProjectType } from '../types';
 import { fetchImportedBinaries } from '../../../services/github/importedBinaries';
@@ -18,10 +18,12 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
 import { createScratchTemplateDetails } from '../../utils/templates';
+import { isExpoTemplate } from 'shared/constants/templates';
 import { WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
 import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfig } from '../../inferutils/config.types';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
 import { fixProjectIssues } from '../../../services/code-fixer';
+import { isExternalModule, isValidNpmPackageName } from '../../../services/code-fixer/utils/modules';
 import { FastCodeFixerOperation } from '../../operations/PostPhaseCodeFixer';
 import { looksLikeCommand, validateAndCleanBootstrapCommands } from '../../utils/common';
 import { customizeTemplateFiles, generateBootstrapScript } from '../../utils/templateCustomizer';
@@ -83,6 +85,16 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     protected deepDebugConversationId: string | null = null;
 
     protected staticAnalysisCache: StaticAnalysisResponse | null = null;
+
+    // Set when missing external packages are auto-installed during static analysis
+    // (before the LLM is asked to fix them). The running dev server / Metro bundler
+    // must be redeployed once at the end of the turn so the preview picks them up.
+    private pendingMissingModuleRedeploy = false;
+
+    // Local module paths we've already tried to generate for missing imports.
+    // Caps the heal at one attempt per path per DO lifetime so a module the
+    // generator can't satisfy never sends us into a regenerate loop.
+    private attemptedLocalModuleGeneration = new Set<string>();
 
     private sandboxReadyPromise: Promise<void>;
     private resolveSandboxReady!: () => void;
@@ -395,6 +407,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     protected async initializeAsync(): Promise<void> {
         try {
+            // Fill the otherwise-silent setup window (sandbox boot + setup-command
+            // prediction run in parallel before any command_executing fires).
+            this.broadcast(WebSocketMessageResponses.GENERATION_PROGRESS, {
+                message: 'Setting up your project environment…',
+            });
             const [, setupCommands] = await Promise.all([
                 this.deployToSandbox(),
                 this.getProjectSetupAssistant().generateSetupCommands(),
@@ -511,8 +528,10 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     protected isPreviewable(): boolean {
-        // If there are 'package.json', and 'wrangler.jsonc' files, then it is previewable
-        return this.fileManager.fileExists('package.json') && (this.fileManager.fileExists('wrangler.jsonc') || this.fileManager.fileExists('wrangler.toml'));
+        if (!this.fileManager.fileExists('package.json')) return false;
+        // Expo apps use their own dev server — no wrangler config needed
+        if (isExpoTemplate(this.getTemplateDetails()?.name)) return true;
+        return this.fileManager.fileExists('wrangler.jsonc') || this.fileManager.fileExists('wrangler.toml');
     }
 
     /**
@@ -718,6 +737,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             message: 'Blueprint updated',
             updatedKeys: Object.keys(blueprint || {})
         });
+        // Agentic builds (e.g. Expo apps) declare their npm frameworks in the
+        // blueprint but rely on the LLM to `bun add` them later, which it skips —
+        // leaving Metro unable to resolve the module. Install them now, up front.
+        // Phasic (website) flow has its own setup-command dependency handling, so
+        // this is gated to agentic to avoid disturbing it.
+        if (this.state.behaviorType === 'agentic') {
+            try {
+                await this.installBlueprintFrameworks(blueprint?.frameworks);
+            } catch (error) {
+                this.logger.warn('Failed to pre-install blueprint frameworks', { error });
+            }
+        }
     }
 
     getProjectType() {
@@ -960,6 +991,24 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 analysisResponse = await this.runInMemoryAnalysis(files);
             } else {
                 analysisResponse = await this.deploymentManager.runStaticAnalysis(files);
+
+                // Self-heal missing npm packages BEFORE the result reaches the LLM.
+                // A TS2307 "Cannot find module" for an external package can never be
+                // fixed by regenerating the file (re-importing does nothing) — the
+                // agent would otherwise burn repeated regenerate_file attempts and
+                // sometimes give up. Install the package deterministically and strip
+                // the now-resolved issue so the model never sees it as a fix target.
+                const installed = await this.installMissingExternalModules(analysisResponse.typecheck.issues);
+                if (installed.length > 0) {
+                    analysisResponse = {
+                        ...analysisResponse,
+                        typecheck: {
+                            ...analysisResponse.typecheck,
+                            issues: this.stripInstalledModuleIssues(analysisResponse.typecheck.issues, installed),
+                        },
+                    };
+                    this.pendingMissingModuleRedeploy = true;
+                }
             }
 
             // Only cache full (unscoped) analysis results
@@ -1001,13 +1050,383 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     /**
+     * Extract the module specifier from a "Cannot find module" (TS2307) issue.
+     * Returns null for any other issue.
+     */
+    private parseMissingModuleSpecifier(issue: CodeIssue): string | null {
+        const isModuleNotFound = issue.ruleId === 'TS2307' || /Cannot find module/i.test(issue.message);
+        if (!isModuleNotFound) {
+            return null;
+        }
+        const match = issue.message.match(/Cannot find module ['"](.+?)['"]/);
+        return match?.[1]?.trim() || null;
+    }
+
+    /**
+     * Reduce a module specifier to the installable npm package name
+     * (e.g. "date-fns/locale" -> "date-fns", "@scope/pkg/sub" -> "@scope/pkg").
+     */
+    private getInstallablePackageName(specifier: string): string {
+        const segments = specifier.split('/');
+        return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
+    }
+
+    /**
+     * Pinned versions for packages whose latest release breaks the Expo/Metro
+     * web stack. nanoid v5 is ESM/exports-only and ships no `non-secure/package.json`,
+     * so expo-router's static (SSR) render throws `ENOENT … non-secure/package.json`
+     * — v3 is CJS, ships that file, and is the React-Native-standard. Add sparingly.
+     */
+    private static readonly PINNED_PACKAGE_VERSIONS: Record<string, string> = {
+        nanoid: '3',
+    };
+
+    /**
+     * The `bun add` spec for a package, applying any pinned version
+     * (e.g. "nanoid" -> "nanoid@3"). Bare name otherwise.
+     */
+    private getInstallSpec(pkg: string): string {
+        const pinned = BaseCodingBehavior.PINNED_PACKAGE_VERSIONS[pkg];
+        return pinned ? `${pkg}@${pinned}` : pkg;
+    }
+
+    /**
+     * Whether a `bun add` for this package has already been attempted, matching
+     * both bare (`bun add nanoid`) and versioned (`bun add nanoid@3`) history
+     * entries so a pinned install isn't retried every turn.
+     */
+    private installAlreadyAttempted(pkg: string): boolean {
+        const history = this.state.commandsHistory ?? [];
+        return history.some(cmd => cmd === `bun add ${pkg}` || cmd.startsWith(`bun add ${pkg}@`));
+    }
+
+    /**
+     * Collect installable npm package names from TS2307 issues for external
+     * (non-local) modules, skipping internal aliases and runtime builtins.
+     */
+    private extractMissingExternalPackages(typeCheckIssues: CodeIssue[]): string[] {
+        const packages = new Set<string>();
+        for (const issue of typeCheckIssues) {
+            const specifier = this.parseMissingModuleSpecifier(issue);
+            if (!specifier || !isExternalModule(specifier)) {
+                continue;
+            }
+            const pkg = this.getInstallablePackageName(specifier);
+            if (!pkg || !isValidNpmPackageName(pkg) || pkg.startsWith('@shared') || pkg.startsWith('node:') || pkg.startsWith('bun:') || pkg.includes('cloudflare:')) {
+                continue;
+            }
+            packages.add(pkg);
+        }
+        return [...packages];
+    }
+
+    /**
+     * Install npm packages referenced by unresolved TS2307 imports that are
+     * external (npm) modules. Packages already attempted (present in
+     * commandsHistory) are skipped so a failing install never loops. This runs
+     * before the LLM is asked to fix the issue, so the agent never wastes
+     * regenerate_file attempts on a missing package it cannot fix by editing code.
+     * Returns the package names that were installed this call.
+     */
+    protected async installMissingExternalModules(typeCheckIssues: CodeIssue[]): Promise<string[]> {
+        const packages = this.extractMissingExternalPackages(typeCheckIssues);
+        if (packages.length === 0) {
+            return [];
+        }
+        const toInstall = packages.filter(pkg => !this.installAlreadyAttempted(pkg));
+        if (toInstall.length === 0) {
+            return [];
+        }
+        // executeCommands persists only SUCCESSFUL commands to commandsHistory, so the
+        // install replays on redeploy / fresh sandbox and the dedup above holds.
+        // Apply pinned versions (e.g. nanoid@3) for Metro-incompatible latest releases.
+        await this.executeCommands(toInstall.map(pkg => `bun add ${this.getInstallSpec(pkg)}`), false);
+
+        // Treat only packages that actually landed in commandsHistory as installed —
+        // a failed `bun add` must stay visible to the LLM and be retried next turn,
+        // not silently stripped while the preview is still broken.
+        const installed = toInstall.filter(pkg => this.installAlreadyAttempted(pkg));
+        if (installed.length > 0) {
+            this.logger.info(`Auto-installed missing external packages: ${installed.join(', ')}`);
+        }
+        return installed;
+    }
+
+    /**
+     * Names of packages already present in the project's package.json
+     * (dependencies + devDependencies), reduced to installable package names.
+     * Used to avoid reinstalling deps the template already ships.
+     */
+    private getInstalledPackageNames(): Set<string> {
+        const names = new Set<string>();
+        const raw = this.state.lastPackageJson;
+        if (!raw) {
+            return names;
+        }
+        try {
+            const pkg = JSON.parse(raw) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+            for (const dep of [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})]) {
+                names.add(this.getInstallablePackageName(dep));
+            }
+        } catch {
+            // Malformed package.json — treat as no known deps; install logic dedups
+            // against commandsHistory regardless, so this can't cause an install loop.
+        }
+        return names;
+    }
+
+    /**
+     * Install the external npm frameworks a freshly-generated blueprint declares
+     * (e.g. date-fns, nanoid), up front — before the agent writes code that
+     * imports them. The blueprint already names these, so installing them
+     * deterministically removes the dependence on post-hoc TS2307 analysis, which
+     * a parse error elsewhere in the file can mask (leaving Metro stuck on
+     * "Unable to resolve module"). Skips packages already in package.json and any
+     * already attempted (commandsHistory), so it never loops. Agentic flow only.
+     */
+    protected async installBlueprintFrameworks(frameworks: string[] | undefined): Promise<void> {
+        if (!frameworks || frameworks.length === 0 || !this.state.sandboxInstanceId) {
+            return;
+        }
+        const alreadyInstalled = this.getInstalledPackageNames();
+        const packages = new Set<string>();
+        for (const framework of frameworks) {
+            const specifier = framework?.trim();
+            if (!specifier || !isExternalModule(specifier)) {
+                continue;
+            }
+            const pkg = this.getInstallablePackageName(specifier);
+            if (!pkg || !isValidNpmPackageName(pkg) || pkg.startsWith('@shared') || pkg.startsWith('node:') || pkg.startsWith('bun:') || pkg.includes('cloudflare:')) {
+                continue;
+            }
+            if (alreadyInstalled.has(pkg) || this.installAlreadyAttempted(pkg)) {
+                continue;
+            }
+            packages.add(pkg);
+        }
+        if (packages.size === 0) {
+            return;
+        }
+        this.logger.info(`Pre-installing blueprint frameworks: ${[...packages].join(', ')}`);
+        // bun add hits the live sandbox node_modules directly and persists to
+        // commandsHistory, so a later sandbox recycle replays it on redeploy. The
+        // next bundle request re-resolves node_modules, so no forced redeploy here.
+        // Apply pinned versions (e.g. nanoid@3) for Metro-incompatible latest releases.
+        await this.executeCommands([...packages].map(pkg => `bun add ${this.getInstallSpec(pkg)}`), false);
+    }
+
+    /**
+     * Drop TS2307 issues whose package we just installed, so they aren't surfaced
+     * to the LLM (or re-fixed) within the same analysis result.
+     */
+    private stripInstalledModuleIssues(issues: CodeIssue[], installedPackages: string[]): CodeIssue[] {
+        const installed = new Set(installedPackages);
+        return issues.filter(issue => {
+            const specifier = this.parseMissingModuleSpecifier(issue);
+            if (!specifier) {
+                return true;
+            }
+            return !installed.has(this.getInstallablePackageName(specifier));
+        });
+    }
+
+    /**
+     * Resolve a LOCAL import specifier to the project-relative path (no extension)
+     * where the missing module should live. `@/foo` and `src/foo` map to `src/foo`
+     * (the modern layout the agent uses; the template's multi-target `@/*` alias
+     * resolves both root and src/). Relative imports normalise against the importing
+     * file's directory. Returns null for any non-local / unrecognised form.
+     */
+    private resolveLocalModulePath(specifier: string, importerPath: string): string | null {
+        let base: string;
+        if (specifier.startsWith('@/')) {
+            base = `src/${specifier.slice(2)}`;
+        } else if (specifier.startsWith('src/')) {
+            base = specifier;
+        } else if (specifier.startsWith('./') || specifier.startsWith('../')) {
+            const dirParts = importerPath.split('/').slice(0, -1);
+            const normalized: string[] = [];
+            for (const part of [...dirParts, ...specifier.split('/')]) {
+                if (part === '..') {
+                    normalized.pop();
+                } else if (part !== '.' && part !== '') {
+                    normalized.push(part);
+                }
+            }
+            base = normalized.join('/');
+        } else {
+            return null;
+        }
+        return base.replace(/\.(ts|tsx|js|jsx)$/, '');
+    }
+
+    /**
+     * Whether a generated file already satisfies an extension-less module path,
+     * either directly (`base.ts`) or as a directory index (`base/index.ts`).
+     */
+    private localModuleExists(basePath: string): boolean {
+        const candidates = new Set<string>();
+        for (const ext of ['.ts', '.tsx', '.js', '.jsx']) {
+            candidates.add(basePath + ext);
+            candidates.add(`${basePath}/index${ext}`);
+        }
+        return this.fileManager.getAllFiles().some(f => candidates.has(f.filePath));
+    }
+
+    /**
+     * Best-effort extension for a module we're about to create: `.tsx` when the
+     * path looks like a React component (a component/screen dir or a PascalCase
+     * basename), `.ts` otherwise. Both resolve via Metro/tsc, so a wrong guess
+     * only affects whether JSX is allowed — never whether the import resolves.
+     */
+    private inferModuleExtension(basePath: string): string {
+        const basename = basePath.split('/').pop() || '';
+        const inComponentDir = /(^|\/)(components|screens|pages|views|layouts)\//.test(basePath);
+        const isPascalCase = /^[A-Z]/.test(basename);
+        return inComponentDir || isPascalCase ? '.tsx' : '.ts';
+    }
+
+    /**
+     * Generate LOCAL modules that are imported but were never created.
+     *
+     * The agentic builder sometimes writes a file importing a relative/`@/` module
+     * (e.g. `app/index.tsx` importing `@/store/habitStore`) and then never creates
+     * that module. A "Cannot find module" for a LOCAL path can never be fixed by
+     * editing the importer — re-importing does nothing — so the file/realtime fixer
+     * loops on the importer forever (the "going in circles" symptom). Detect those
+     * absent local modules and generate them from how the importing files use them,
+     * breaking the loop at its source.
+     *
+     * Agentic flow only: the phasic/website flow is structured and doesn't hit this,
+     * and Chris's constraint is to leave it untouched. Strictly additive — it only
+     * creates imported-but-absent files, so it can't degrade a working build.
+     * Returns true if any module was generated (the caller should re-analyse).
+     */
+    protected async generateMissingLocalModules(typeCheckIssues: CodeIssue[]): Promise<boolean> {
+        if (this.state.behaviorType !== 'agentic') {
+            return false;
+        }
+        // target module path -> importing files that reference it (usage context)
+        const missing = new Map<string, Set<string>>();
+        for (const issue of typeCheckIssues) {
+            const specifier = this.parseMissingModuleSpecifier(issue);
+            if (!specifier || isExternalModule(specifier)) {
+                continue;
+            }
+            const basePath = this.resolveLocalModulePath(specifier, issue.filePath);
+            if (!basePath || this.localModuleExists(basePath)) {
+                continue;
+            }
+            const targetPath = basePath + this.inferModuleExtension(basePath);
+            if (this.attemptedLocalModuleGeneration.has(targetPath)) {
+                continue;
+            }
+            if (!missing.has(targetPath)) {
+                missing.set(targetPath, new Set());
+            }
+            if (issue.filePath) {
+                missing.get(targetPath)!.add(issue.filePath);
+            }
+        }
+        if (missing.size === 0) {
+            return false;
+        }
+
+        const allFiles = this.fileManager.getAllFiles();
+        const fileConcepts: FileConceptType[] = [];
+        const requirements: string[] = [];
+        for (const [targetPath, importerSet] of missing) {
+            this.attemptedLocalModuleGeneration.add(targetPath);
+            const importers = [...importerSet];
+            fileConcepts.push({
+                path: targetPath,
+                purpose: `Module imported by ${importers.join(', ') || 'the app'} but never created. Implement it so those imports resolve.`,
+                changes: null,
+            });
+            for (const importer of importers) {
+                const file = allFiles.find(f => f.filePath === importer);
+                if (file) {
+                    requirements.push(
+                        `'${targetPath}' is imported by '${importer}'. Infer its exact exports (named vs default), TypeScript types, and runtime behaviour from how '${importer}' uses it — every imported symbol must exist with a matching signature. Importing file contents:\n\`\`\`tsx\n${file.fileContents}\n\`\`\``
+                    );
+                }
+            }
+        }
+        this.logger.info(`Generating ${missing.size} missing local module(s): ${[...missing.keys()].join(', ')}`);
+        await this.generateFiles(
+            'Create missing imported modules',
+            'Create local modules that existing files import but that were never generated, so the build resolves and the importer stops failing.',
+            requirements,
+            fileConcepts,
+        );
+        // generateFiles deploys new files; the cached analysis is now stale.
+        this.staticAnalysisCache = null;
+        return true;
+    }
+
+    /**
+     * Redeploy once if external packages were auto-installed during this turn so
+     * the running dev server / Metro bundler resolves them. Idempotent.
+     */
+    private async flushPendingMissingModuleRedeploy(): Promise<void> {
+        if (!this.pendingMissingModuleRedeploy) {
+            return;
+        }
+        this.pendingMissingModuleRedeploy = false;
+        await this.deployToSandbox([], true, "chore: install missing dependencies");
+        this.logger.info("Redeployed sandbox after installing missing modules");
+    }
+
+    /**
+     * Expo only: after a turn creates NEW files, restart Metro with its cache cleared.
+     *
+     * The sandbox has no Watchman, so Metro misses files created in new directories
+     * (e.g. a freshly generated `src/hooks/` tree) and caches "Unable to resolve
+     * module" for them — a page reload re-bundles from that stale resolver state, so
+     * the preview keeps showing the template even though the files are on disk and
+     * tsc resolves them fine. `expo start --clear` rebuilds Metro's haste/transform
+     * cache so the new modules resolve. Gated to expo-app and to turns that actually
+     * created new files (edits to existing files are picked up by HMR and don't need
+     * a restart). Best-effort: the sandbox call swallows its own failures.
+     */
+    protected async restartExpoServerForNewModules(createdNewFiles: boolean): Promise<void> {
+        if (!createdNewFiles || !isExpoTemplate(this.getTemplateDetails()?.name)) {
+            return;
+        }
+        const instanceId = this.state.sandboxInstanceId;
+        if (!instanceId) {
+            return;
+        }
+        // `bun run dev` is the exact command createInstance launches; appending
+        // `--clear` after `--` forwards it to that known-good `expo start` invocation
+        // (which binds ${PORT} on the allocated port, so the preview URL is unchanged).
+        this.logger.info('Restarting Expo dev server with cleared Metro cache (new modules created this turn)', { instanceId });
+        await this.getSandboxServiceClient().restartDevServer(instanceId, 'bun run dev -- --clear');
+    }
+
+    /**
      * Apply deterministic code fixes for common TypeScript errors
      */
     protected async applyDeterministicCodeFixes() : Promise<StaticAnalysisResponse | undefined> {
         try {
-            // Get static analysis and do deterministic fixes
-            const staticAnalysis = await this.runStaticAnalysisCode();
+            // Get static analysis and do deterministic fixes. runStaticAnalysisCode()
+            // already auto-installs missing external packages (TS2307) and strips them
+            // from the result, so the issues below are the genuinely code-fixable ones.
+            let staticAnalysis = await this.runStaticAnalysisCode();
+
+            // Heal missing LOCAL imports (agentic flow): generate any relative/@/ module
+            // that is imported but was never created. Editing the importer can never fix
+            // a missing local dependency, so without this the fixer loops on it forever.
+            // Re-analyse afterwards: the generated module resolves the import and may
+            // surface its own (now code-fixable) issues.
+            if (await this.generateMissingLocalModules(staticAnalysis.typecheck.issues)) {
+                staticAnalysis = await this.runStaticAnalysisCode();
+            }
+
             if (staticAnalysis.typecheck.issues.length == 0) {
+                // Packages may still have been installed (here or in the agent's tool
+                // loop) — make sure the preview picks them up before returning.
+                await this.flushPendingMissingModuleRedeploy();
                 this.logger.info("No typecheck issues found, skipping deterministic fixes");
                 return staticAnalysis;  // So that static analysis is not repeated again
             }
@@ -1036,24 +1455,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             });
 
             if (fixResult) {
-                // If there are unfixable issues but of type TS2307, extract external module names and install them
-                if (fixResult.unfixableIssues.length > 0) {
-                    const modulesNotFound = fixResult.unfixableIssues.filter(issue => issue.issueCode === 'TS2307');
-                    // Reason is of the form: External package "xyz" should be handled by package manager                    
-                    const moduleNames = modulesNotFound.flatMap(issue => {
-                        const match = issue.reason.match(/External package ["'](.+?)["']/);
-                        const name = match?.[1];
-                        return (typeof name === 'string' && name.trim().length > 0 && !name.startsWith('@shared')) ? [name] : [];
-                    }).filter((name) => !name.includes('cloudflare:'));
-                    if (moduleNames.length > 0) {
-                        const installCommands = moduleNames.map(moduleName => `bun install ${moduleName}`);
-                        await this.executeCommands(installCommands, false);
-
-                        this.logger.info(`Deterministic code fixer installed missing modules: ${moduleNames.join(', ')}`);
-                    } else {
-                        this.logger.info(`Deterministic code fixer detected no external modules to install from unfixable TS2307 issues`);
-                    }
+                // Belt-and-suspenders: install any external packages the analysis
+                // pre-pass didn't already handle (e.g. TS2307s surfaced only here).
+                const installed = await this.installMissingExternalModules(typeCheckIssues);
+                if (installed.length > 0) {
+                    this.pendingMissingModuleRedeploy = true;
                 }
+
                 if (fixResult.modifiedFiles.length > 0) {
                         this.logger.info("Applying deterministic fixes to files, Fixes: ", JSON.stringify(fixResult, null, 2));
                         const fixedFiles = fixResult.modifiedFiles.map(file => ({
@@ -1062,9 +1470,16 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                             fileContents: file.fileContents
                     }));
                     await this.fileManager.saveGeneratedFiles(fixedFiles, "fix: applied deterministic fixes");
-                    
+
                     await this.deployToSandbox(fixedFiles, false, "fix: applied deterministic fixes");
                     this.logger.info("Deployed deterministic fixes to sandbox");
+                    // The file deploy already refreshes the sandbox with the newly
+                    // installed packages, so a separate module-only redeploy is moot.
+                    this.pendingMissingModuleRedeploy = false;
+                } else {
+                    // No file fixes to deploy — redeploy on its own so the dev server
+                    // picks up the freshly installed packages.
+                    await this.flushPendingMissingModuleRedeploy();
                 }
             }
             this.logger.info(`Applied deterministic code fixes: ${JSON.stringify(fixResult, null, 2)}`);
@@ -1561,9 +1976,52 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         );
 
         this.resolveSandboxReady();
+
+        // Expo/Metro (no Watchman in our container) does NOT detect files added in
+        // NEW directories while the dev server is running, so expo-router's
+        // require.context('./app') is never re-scanned and the bundle 500s with
+        // "Unable to resolve module ./index" — the preview white-screens. The only
+        // reliable remedy (Expo/Metro docs + issues #21665/#36511) is restarting
+        // Metro with its cache cleared. Do it here, at the single deploy chokepoint,
+        // so EVERY write path is covered (initial build, follow-up edits, regenerate,
+        // retries) — not just the one post-generation spot that kept getting skipped.
+        // Expo-only and only when a brand-new directory appeared; harmless no-op
+        // otherwise. Best-effort: restartDevServer swallows its own failures.
+        if (result && files.length > 0 && isExpoTemplate(this.getTemplateDetails()?.name)) {
+            await this.restartMetroIfNewDirectories(files);
+        }
         return result;
     }
-    
+
+    private parentDir(path: string): string {
+        const i = path.lastIndexOf('/');
+        return i < 0 ? '' : path.slice(0, i);
+    }
+
+    /**
+     * Expo-only: if this deploy added a file in a directory that no previously
+     * existing file occupies, restart Metro with `--clear`. Without Watchman, Metro
+     * does not pick up newly created directories on a running server, so the new
+     * routes never bundle until Metro re-crawls the filesystem on a cache-cleared
+     * restart. New files in already-existing directories ARE detected, so we restart
+     * only when a genuinely new directory appears (keeps restarts to a minimum).
+     */
+    private async restartMetroIfNewDirectories(deployedFiles: FileOutputType[]): Promise<void> {
+        const instanceId = this.state.sandboxInstanceId;
+        if (!instanceId) return;
+        const deployedPaths = new Set(deployedFiles.map(f => f.filePath));
+        const existingDirs = new Set<string>();
+        for (const p of Object.keys(this.state.generatedFilesMap)) {
+            if (deployedPaths.has(p)) continue;
+            existingDirs.add(this.parentDir(p));
+        }
+        const newDirs = [...new Set(deployedFiles.map(f => this.parentDir(f.filePath)))]
+            .filter(dir => dir && !existingDirs.has(dir));
+        if (newDirs.length === 0) return;
+        this.logger.info('Restarting Expo dev server (--clear): deploy introduced new directories Metro cannot hot-detect', { instanceId, newDirs });
+        await this.getSandboxServiceClient().restartDevServer(instanceId, 'bun run dev -- --clear');
+    }
+
     /**
      * Deploy the generated code to Cloudflare Workers
      */

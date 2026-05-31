@@ -1,6 +1,7 @@
 import { Agent, AgentContext, ConnectionContext } from "agents";
 import { AgentInitArgs, AgentImportInitArgs, AgentSummary, DeployOptions, DeployResult, ExportOptions, ExportResult, DeploymentTarget, BehaviorType } from "./types";
-import { AgenticState, AgentState, BaseProjectState, CurrentDevState, MAX_PHASES, PhasicState } from "./state";
+import { AgenticState, AgentState, BaseProjectState, CurrentDevState, MAX_PHASES, PhasicState, type ProjectCheckpoint } from "./state";
+import { generateId } from "../../utils/idGenerator";
 import { Blueprint } from "../schemas";
 import { BaseCodingBehavior } from "./behaviors/base";
 import { createObjectLogger, StructuredLogger } from '../../logger';
@@ -375,6 +376,25 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return ''; // Unimplemented
     }
 
+    /**
+     * Shut down this app's sandbox instance (dev server + container process).
+     * Called when the app is deleted so we don't leak orphan sandboxes that keep
+     * holding instance slots until Cloudflare auto-recycles them. Best-effort:
+     * never throws, so a sandbox already gone (or never created) can't block delete.
+     */
+    async shutdownSandbox(): Promise<void> {
+        const instanceId = this.state.sandboxInstanceId;
+        if (!instanceId) {
+            return;
+        }
+        try {
+            await this.deploymentManager.getClient().shutdownInstance(instanceId);
+            this.logger().info('Shut down sandbox instance on app delete', { instanceId });
+        } catch (error) {
+            this.logger().warn('Best-effort sandbox shutdown on delete failed', { instanceId, error });
+        }
+    }
+
     deployToSandbox(
         files: FileOutputType[] = [],
         redeploy: boolean = false,
@@ -382,6 +402,75 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         clearLogs: boolean = false
     ): Promise<PreviewType | null> {
         return this.behavior.deployToSandbox(files, redeploy, commitMessage, clearLogs);
+    }
+
+    /**
+     * Capture a restore point at the current project state. Called before each user prompt
+     * so the user can roll back to "the app as it was before this prompt". Commits any
+     * uncommitted work (so the checkpoint reflects exactly what's live), then records the
+     * commit in state. Best-effort: never throws into the generation path.
+     */
+    async createCheckpoint(label: string): Promise<void> {
+        try {
+            // Commit any pending changes; if nothing changed, the current HEAD is the checkpoint.
+            const committed = await this.git.commit([], `checkpoint: ${label}`.slice(0, 120));
+            const commitSha = committed ?? await this.git.getHead();
+            if (!commitSha) {
+                this.logger().info('Skipping checkpoint — no commit available yet');
+                return;
+            }
+            const checkpoint: ProjectCheckpoint = {
+                id: generateId(),
+                label: (label.split('\n')[0].trim().slice(0, 80)) || 'Checkpoint',
+                commitSha,
+                createdAt: Date.now(),
+            };
+            // Dedup: don't stack a new checkpoint on the same commit as the last one.
+            const existing = this.state.checkpoints ?? [];
+            if (existing.length && existing[existing.length - 1].commitSha === commitSha) {
+                return;
+            }
+            const checkpoints = [...existing, checkpoint];
+            this.setState({ ...this.state, checkpoints });
+            this.broadcast(WebSocketMessageResponses.CHECKPOINTS_UPDATED, { checkpoints });
+            this.logger().info('Checkpoint created', { id: checkpoint.id, commitSha, label: checkpoint.label });
+        } catch (error) {
+            this.logger().warn('Failed to create checkpoint (non-fatal)', error);
+        }
+    }
+
+    /**
+     * Roll the project back to a checkpoint: git reset --hard to its commit (FileManager
+     * auto-syncs generatedFilesMap from the new HEAD), then redeploy so the preview reflects
+     * the restored files. Non-destructive: snapshots current state first so a restore is
+     * itself undoable. Runs outside the LLM loop, so it works even when the agent is idle.
+     */
+    async restoreCheckpoint(checkpointId: string): Promise<boolean> {
+        const checkpoint = (this.state.checkpoints ?? []).find(c => c.id === checkpointId);
+        if (!checkpoint) {
+            this.logger().warn('Restore requested for unknown checkpoint', { checkpointId });
+            this.broadcastError('Restore checkpoint', new Error('Checkpoint not found'));
+            return false;
+        }
+        try {
+            this.broadcast(WebSocketMessageResponses.CHECKPOINT_RESTORING, { checkpointId });
+            // Snapshot current state first so this restore can itself be undone.
+            await this.git.commit([], `before restore to: ${checkpoint.label}`.slice(0, 120));
+            // Reset to the checkpoint commit; onFilesChanged re-syncs generatedFilesMap from HEAD.
+            await this.git.reset(checkpoint.commitSha, { hard: true });
+            // Redeploy the restored files so the running preview reflects them.
+            const preview = await this.deployToSandbox([], true, `Restore checkpoint: ${checkpoint.label}`);
+            this.broadcast(WebSocketMessageResponses.CHECKPOINT_RESTORED, {
+                checkpointId,
+                previewURL: preview?.previewURL,
+            });
+            this.logger().info('Checkpoint restored', { checkpointId, commitSha: checkpoint.commitSha });
+            return true;
+        } catch (error) {
+            this.logger().error('Failed to restore checkpoint', { checkpointId, error });
+            this.broadcastError('Restore checkpoint', error);
+            return false;
+        }
     }
 
     deployToCloudflare(target?: DeploymentTarget): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
@@ -566,12 +655,16 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
      */
     async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
         try {
-            this.logger().info('Processing user input message', { 
+            this.logger().info('Processing user input message', {
                 messageLength: userMessage.length,
                 pendingInputsCount: this.state.pendingUserInputs.length,
                 hasImages: !!images && images.length > 0,
                 imageCount: images?.length || 0
             });
+
+            // Capture a restore point of the current (working) state before this prompt
+            // changes anything, so the user can roll back to it if the new turn breaks the app.
+            await this.createCheckpoint(userMessage);
 
             await this.behavior.handleUserInput(userMessage, images);
             if (!this.behavior.isCodeGenerating()) {

@@ -64,6 +64,13 @@
       "when": 1779997645258,
       "tag": "0008_plain_orphan",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1780158743269,
+      "tag": "0009_hard_tana_nile",
+      "breakpoints": true
     }
   ]
 }

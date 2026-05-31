@@ -1,5 +1,5 @@
 import type { WebSocket } from 'partysocket';
-import type { WebSocketMessage, BlueprintType, ConversationMessage, AgentState, PhasicState, BehaviorType, ProjectType, TemplateDetails } from '@/api-types';
+import type { WebSocketMessage, BlueprintType, ConversationMessage, AgentState, PhasicState, BehaviorType, ProjectType, TemplateDetails, ProjectCheckpoint } from '@/api-types';
 import { deduplicateMessages, isAssistantMessageDuplicate } from './deduplicate-messages';
 import { logger } from '@/utils/logger';
 import { getFileType } from '@/utils/string';
@@ -50,6 +50,9 @@ export interface HandleMessageDeps {
     setBlueprint: React.Dispatch<React.SetStateAction<BlueprintType | undefined>>;
     setQuery: React.Dispatch<React.SetStateAction<string | undefined>>;
     setPreviewUrl: React.Dispatch<React.SetStateAction<string | undefined>>;
+    setExpoTunnelUrl: React.Dispatch<React.SetStateAction<string | undefined>>;
+    setCheckpoints: React.Dispatch<React.SetStateAction<ProjectCheckpoint[]>>;
+    setRestoringCheckpointId: React.Dispatch<React.SetStateAction<string | undefined>>;
     setTotalFiles: React.Dispatch<React.SetStateAction<number | undefined>>;
     setIsRedeployReady: React.Dispatch<React.SetStateAction<boolean>>;
     setIsPreviewDeploying: React.Dispatch<React.SetStateAction<boolean>>;
@@ -149,6 +152,9 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setBlueprint,
             setQuery,
             setPreviewUrl,
+            setExpoTunnelUrl,
+            setCheckpoints,
+            setRestoringCheckpointId,
             setTotalFiles,
             setIsRedeployReady,
             setIsPreviewDeploying,
@@ -236,6 +242,10 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
                     if (previewUrl) {
                         setPreviewUrl(previewUrl);
+                    }
+
+                    if (state.checkpoints) {
+                        setCheckpoints(state.checkpoints);
                     }
 
                     if (templateDetails) {
@@ -700,6 +710,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
+            case 'generation_progress': {
+                // Activity signal for otherwise-silent windows (setup, blueprint TTFT).
+                // Shows the label + the animated thinking indicator so it never looks frozen.
+                sendMessage(createAIMessage('generation_progress', message.message));
+                setIsThinking(true);
+                break;
+            }
+
             case 'phase_generating': {
                 sendMessage(createAIMessage('phase_generating', message.message));
                 setIsThinking(true);
@@ -1127,6 +1145,37 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 sendMessage(createAIMessage(
                     'image_generating',
                     `Generating your images... ${index} of ${total}: ${label}`,
+                    true,
+                ));
+                break;
+            }
+
+            case 'expo_tunnel_url': {
+                setExpoTunnelUrl(message.tunnelUrl);
+                break;
+            }
+
+            case 'checkpoints_updated': {
+                setCheckpoints(message.checkpoints);
+                break;
+            }
+
+            case 'checkpoint_restoring': {
+                setRestoringCheckpointId(message.checkpointId);
+                setIsPreviewDeploying(true);
+                break;
+            }
+
+            case 'checkpoint_restored': {
+                setRestoringCheckpointId(undefined);
+                setIsPreviewDeploying(false);
+                if (message.previewURL) {
+                    setPreviewUrl(message.previewURL);
+                }
+                setShouldRefreshPreview(true);
+                sendMessage(createAIMessage(
+                    'checkpoint_restored',
+                    'Restored to the selected checkpoint.',
                     true,
                 ));
                 break;

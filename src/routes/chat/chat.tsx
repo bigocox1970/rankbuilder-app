@@ -17,6 +17,8 @@ import { type DebugMessage } from './components/debug-panel';
 import { DeploymentControls } from './components/deployment-controls';
 import { useChat } from './hooks/use-chat';
 import { type ModelConfigsInfo, type BlueprintType, type PhasicBlueprint, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type FileType, type SiteContentPlan } from '@/api-types';
+import type { AppType } from 'shared/constants/templates';
+import type { ProjectCheckpoint } from '@/api-types';
 import { featureRegistry } from '@/features';
 import { useFileContentStream } from './hooks/use-file-content-stream';
 import { logger } from '@/utils/logger';
@@ -52,6 +54,7 @@ export default function Chat() {
 	const urlRawQuery = searchParams.get('query');
 	const urlProjectType = searchParams.get('projectType') || 'app';
 	const urlSelectedTemplate = searchParams.get('selectedTemplate') || undefined;
+	const urlAppType = (searchParams.get('appType') as AppType | null) || undefined;
 	const urlImageGeneration = searchParams.get('imageGeneration') !== '0';
 	// selectedTemplate is the only signal the website flow sets — app flow must behave like vanilla.
 	const isWebsiteFlow = !!urlSelectedTemplate;
@@ -180,6 +183,10 @@ export default function Chat() {
 		sendUserMessage,
 		blueprint,
 		previewUrl,
+		expoTunnelUrl,
+		checkpoints,
+		restoringCheckpointId,
+		restoreCheckpoint,
 		clearEdit,
 		projectStages,
 		phaseTimeline,
@@ -218,6 +225,7 @@ export default function Chat() {
 		images: userImages,
 		projectType: urlProjectType as ProjectType,
 		selectedTemplate: urlSelectedTemplate,
+		appType: urlAppType,
 		imageGenerationEnabled: urlImageGeneration,
 		sitePlan,
 		onDebugMessage: addDebugMessage,
@@ -542,6 +550,26 @@ export default function Chat() {
 
 	const [mainMessage, ...otherMessages] = useMemo(() => messages, [messages]);
 
+	// Map each user message to the restore point captured before it ran, so the
+	// "Restore to here" control can sit inline in the conversation. Checkpoints are
+	// created one-per-prompt in order; match by the prompt's first line, consuming
+	// each checkpoint once so duplicate prompts map by order.
+	const messageCheckpoints = useMemo(() => {
+		const map = new Map<string, ProjectCheckpoint>();
+		if (!checkpoints.length) return map;
+		const remaining = [...checkpoints];
+		for (const m of messages) {
+			if (m.role !== 'user') continue;
+			const label = (m.content.split('\n')[0].trim().slice(0, 80)) || 'Checkpoint';
+			const idx = remaining.findIndex((c) => c.label === label);
+			if (idx !== -1) {
+				map.set(m.conversationId, remaining[idx]);
+				remaining.splice(idx, 1);
+			}
+		}
+		return map;
+	}, [checkpoints, messages]);
+
 	const { scrollToBottom } = useAutoScroll(messagesContainerRef, { behavior: 'smooth', watch: [messages] });
 
 	const prevMessagesLengthRef = useRef(0);
@@ -806,6 +834,9 @@ export default function Chat() {
 							)}
 									<UserMessage
 										message={query ?? displayQuery}
+										checkpoint={mainMessage ? messageCheckpoints.get(mainMessage.conversationId) : undefined}
+										isRestoring={!!mainMessage && restoringCheckpointId === messageCheckpoints.get(mainMessage.conversationId)?.id}
+										onRestore={restoreCheckpoint}
 									/>
 								</>
 							)}
@@ -952,6 +983,9 @@ export default function Chat() {
 										<UserMessage
 											key={message.conversationId}
 											message={message.content}
+											checkpoint={messageCheckpoints.get(message.conversationId)}
+											isRestoring={restoringCheckpointId === messageCheckpoints.get(message.conversationId)?.id}
+											onRestore={restoreCheckpoint}
 										/>
 									);
 								})}
@@ -1004,6 +1038,7 @@ export default function Chat() {
 								contentDetection={contentDetection}
 								projectType={projectType}
 								previewUrl={previewUrl}
+								expoTunnelUrl={expoTunnelUrl}
 								previewAvailable={previewAvailable}
 								showTooltip={showTooltip}
 								shouldRefreshPreview={shouldRefreshPreview}

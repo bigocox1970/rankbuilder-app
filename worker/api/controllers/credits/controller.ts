@@ -20,6 +20,27 @@ async function writeBalance(env: Env, userId: string, balance: number): Promise<
     await env.VibecoderStore.put(key(userId), String(Math.max(0, balance)));
 }
 
+/**
+ * Current credit balance for a user (0 if never granted). Read-only — does NOT
+ * trigger the first-read free-signup grant. Used for admin views.
+ */
+export async function readCreditBalance(env: Env, userId: string): Promise<number> {
+    const raw = await env.VibecoderStore.get(key(userId));
+    return raw === null ? 0 : parseFloat(raw);
+}
+
+/**
+ * Add credits to a user's balance and return the new total. Pure balance math on
+ * KV `user_credits:{userId}` — independent of Stripe/subscription state. Shared by
+ * the admin grant flow so credit math lives in one place.
+ */
+export async function grantCredits(env: Env, userId: string, amount: number): Promise<number> {
+    const current = await readCreditBalance(env, userId);
+    const next = current + amount;
+    await writeBalance(env, userId, next);
+    return next;
+}
+
 export class CreditsController extends BaseController {
     /**
      * GET /api/credits/balance

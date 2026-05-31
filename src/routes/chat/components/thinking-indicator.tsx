@@ -31,6 +31,7 @@ interface ThinkingIndicatorProps {
 
 export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
   const [phraseIndex, setPhraseIndex] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (!visible) {
@@ -45,7 +46,20 @@ export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
     return () => clearInterval(interval);
   }, [visible]);
 
+  // Live elapsed counter — visibly ticks so a long model pause reads as "working",
+  // not "stuck/frozen".
+  useEffect(() => {
+    if (!visible) {
+      setElapsed(0);
+      return;
+    }
+    const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [visible]);
+
   if (!visible) return null;
+
+  const elapsedLabel = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`;
 
   return (
     <AnimatePresence>
@@ -94,6 +108,11 @@ export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
               </motion.span>
             </motion.span>
           </AnimatePresence>
+          {elapsed >= 2 && (
+            <span className="text-xs tabular-nums text-text-50/40 font-medium ml-0.5">
+              {elapsedLabel}
+            </span>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

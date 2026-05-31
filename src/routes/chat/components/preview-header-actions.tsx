@@ -8,9 +8,11 @@ interface PreviewHeaderActionsProps {
 	onGitHubExportClick: () => void;
 	previewRef: RefObject<HTMLIFrameElement | null>;
 	previewUrl?: string;
+	expoTunnelUrl?: string;
 	onManualRefresh?: () => void;
 	viewportMode?: ViewportMode;
 	onViewportChange?: (mode: ViewportMode) => void;
+	templateName?: string;
 }
 
 export function PreviewHeaderActions({
@@ -19,9 +21,11 @@ export function PreviewHeaderActions({
 	onGitHubExportClick,
 	previewRef,
 	previewUrl,
+	expoTunnelUrl,
 	onManualRefresh,
 	viewportMode,
 	onViewportChange,
+	templateName,
 }: PreviewHeaderActionsProps) {
 	return (
 		<BaseHeaderActions
@@ -33,6 +37,9 @@ export function PreviewHeaderActions({
 			onManualRefresh={onManualRefresh}
 			viewportMode={viewportMode}
 			onViewportChange={onViewportChange}
+			templateName={templateName}
+			previewUrl={previewUrl}
+			expoTunnelUrl={expoTunnelUrl}
 		/>
 	);
 }

@@ -38,6 +38,11 @@ export function createGenerateBlueprintTool(
 					}
 				}
 			};
+			// Surface activity during blueprint time-to-first-token (the reasoning
+			// model can think for 20-40s before the first streamed chunk).
+			agent.broadcast(WebSocketMessageResponses.GENERATION_PROGRESS, {
+				message: 'Planning your app — mapping out screens and features…',
+			});
 			const blueprint = await generateBlueprint(args);
 
 			await agent.setBlueprint(blueprint);

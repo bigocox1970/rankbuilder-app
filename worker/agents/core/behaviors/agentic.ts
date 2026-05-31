@@ -370,9 +370,28 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
                 onAssistantMessage,
             };
 
+            // Snapshot existing file paths so we can detect NEW files created this
+            // turn (Expo/Metro needs a cache-clearing restart to see files added in
+            // new directories — see restartExpoServerForNewModules).
+            const filePathsBefore = new Set(Object.keys(this.state.generatedFilesMap));
+
             // Execute operation
             const operation = new AgenticProjectBuilderOperation();
             await operation.execute(builderInputs, this.getOperationOptions());
+
+            // Deterministically install any packages the generated code imports but
+            // didn't install (TS2307). The agentic builder relies on the LLM to run
+            // `bun add`, which it sometimes skips — this is the same auto-install
+            // backstop the phasic flow already runs, so missing deps self-heal
+            // instead of leaving the preview with "Unable to resolve module".
+            await this.applyDeterministicCodeFixes();
+
+            // If new files (incl. any healed missing local modules) were created this
+            // turn, restart Metro with --clear so it resolves them — without Watchman
+            // it otherwise serves a stale "module not found" and the preview is stuck
+            // on the template. Expo-only; no-op when nothing new was created.
+            const createdNewFiles = Object.keys(this.state.generatedFilesMap).some(p => !filePathsBefore.has(p));
+            await this.restartExpoServerForNewModules(createdNewFiles);
 
             // Final checks after generation completes
             await this.compactifyIfNeeded();

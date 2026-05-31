@@ -178,7 +178,8 @@
         },
         "CUSTOM_PREVIEW_DOMAIN": "rankbuilder.app",
         "MAX_SANDBOX_INSTANCES": "25",
-        "SANDBOX_INSTANCE_TYPE": "standard-3"
+        "SANDBOX_INSTANCE_TYPE": "standard-3",
+        "ALLOCATION_STRATEGY": "one_to_one"
     },
 	"workers_dev": false,
 	"preview_urls": false

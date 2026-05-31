@@ -11,6 +11,12 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources';
 export const COMPACTIFICATION_CONFIG = {
     MAX_TURNS: 40,            // Trigger after 40 conversation turns
     MAX_ESTIMATED_TOKENS: 100000,
+    // Trigger on raw message count too. Agentic builds produce many tool-call /
+    // tool-result messages per user turn, so the array can blow past the hard
+    // MAX_LLM_MESSAGES cap long before the turn/token thresholds are reached.
+    // Kept well below MAX_LLM_MESSAGES (constants.ts) to leave headroom for the
+    // messages added between compaction checks.
+    MAX_MESSAGES: 130,
     PRESERVE_RECENT_MESSAGES: 10, // Always keep last 10 messages uncompacted
     CHARS_PER_TOKEN: 4,         // Rough estimation: 1 token ≈ 4 characters
 } as const;
@@ -93,14 +99,18 @@ function estimateTokens(messages: ConversationMessage[]): number {
  */
 export function shouldCompactify(messages: ConversationMessage[]): {
     should: boolean;
-    reason?: 'turns' | 'tokens';
+    reason?: 'turns' | 'tokens' | 'messages';
     turns: number;
     estimatedTokens: number;
 } {
     const turns = countTurns(messages);
     const estimatedTokens = estimateTokens(messages);
 
-    console.log(`[ConversationCompactifier] shouldCompactify: turns=${turns}, estimatedTokens=${estimatedTokens}`);
+    console.log(`[ConversationCompactifier] shouldCompactify: turns=${turns}, estimatedTokens=${estimatedTokens}, messages=${messages.length}`);
+
+    if (messages.length >= COMPACTIFICATION_CONFIG.MAX_MESSAGES) {
+        return { should: true, reason: 'messages', turns, estimatedTokens };
+    }
 
     if (turns >= COMPACTIFICATION_CONFIG.MAX_TURNS) {
         return { should: true, reason: 'turns', turns, estimatedTokens };

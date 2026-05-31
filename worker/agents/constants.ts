@@ -5,6 +5,7 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     AGENT_CONNECTED: 'agent_connected',
 
     GENERATION_STARTED: 'generation_started',
+    GENERATION_PROGRESS: 'generation_progress',
     GENERATION_COMPLETE: 'generation_complete',
 
     PHASE_GENERATING: 'phase_generating',
@@ -93,6 +94,14 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     IMAGES_GENERATED: 'images_generated',
     IMAGE_GENERATING: 'image_generating',
 
+    // Expo tunnel
+    EXPO_TUNNEL_URL: 'expo_tunnel_url',
+
+    // Checkpoints / restore points
+    CHECKPOINTS_UPDATED: 'checkpoints_updated',
+    CHECKPOINT_RESTORING: 'checkpoint_restoring',
+    CHECKPOINT_RESTORED: 'checkpoint_restored',
+
     // Keepalive
     PONG: 'pong',
 } as const satisfies Record<string, WebSocketMessageType>;
@@ -111,7 +120,10 @@ export const WebSocketMessageRequests = {
     CAPTURE_SCREENSHOT: 'capture_screenshot',
     STOP_GENERATION: 'stop_generation',
     RESUME_GENERATION: 'resume_generation',
-    
+
+    // Restore the project to a checkpoint (git reset + redeploy)
+    RESTORE_CHECKPOINT: 'restore_checkpoint',
+
     // GitHub export request
     GITHUB_EXPORT: 'github_export',
     
@@ -136,7 +148,12 @@ export const WebSocketMessageRequests = {
 
 export const PREVIEW_EXPIRED_ERROR = 'Preview expired, attempting redeploy. Please try again after a minute or refresh the page';
 export const MAX_DEPLOYMENT_RETRIES = 5;
-export const MAX_LLM_MESSAGES = 200;
+// Hard safety cap on the raw message array sent to the LLM. Conversation
+// compactification (see conversationCompactifier.ts MAX_MESSAGES=130) keeps
+// healthy conversations well below this; the headroom above 130 exists so an
+// already-oversized conversation can run one turn and self-heal via compaction
+// instead of being permanently wedged.
+export const MAX_LLM_MESSAGES = 250;
 export const MAX_TOOL_CALLING_DEPTH_DEFAULT = 7;
 export const getMaxToolCallingDepth = (agentActionKey: AgentActionKey | 'testModelConfig') => {
     switch (agentActionKey) {

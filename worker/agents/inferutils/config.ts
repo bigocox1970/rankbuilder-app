@@ -129,10 +129,11 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         temperature: 0.6,
     },
     blueprint: {
-        name: AIModels.GEMINI_2_5_PRO,
+        // DeepSeek V4 Pro via OpenRouter — near-Claude code quality at ~1/10th the cost.
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         reasoning_effort: 'medium',
         max_tokens: 20000,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.GEMINI_2_5_PRO,
         temperature: 1,
     },
     projectSetup: {
@@ -150,40 +151,45 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         fallbackModel: AIModels.GEMINI_2_5_FLASH,
     },
     firstPhaseImplementation: {
-        name: AIModels.GEMINI_2_5_FLASH,
+        // Website/React build + edit step → DeepSeek V4 Pro (was Gemini Flash). Better
+        // instruction-following so edits actually execute, ~1/10th Claude cost.
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         ...SHARED_IMPLEMENTATION_CONFIG,
     },
     phaseImplementation: {
-        name: AIModels.GEMINI_2_5_FLASH,
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         ...SHARED_IMPLEMENTATION_CONFIG,
     },
     conversationalResponse: {
-        name: AIModels.GEMINI_2_5_FLASH_LITE,
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         reasoning_effort: 'low',
         max_tokens: 4000,
         temperature: 1,
         fallbackModel: AIModels.GEMINI_2_5_FLASH,
     },
     deepDebugger: {
-        name: AIModels.GEMINI_2_5_PRO,
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         reasoning_effort: 'high',
         max_tokens: 8000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.GEMINI_2_5_PRO,
     },
     fileRegeneration: {
-        name: AIModels.GEMINI_2_5_FLASH_LITE,
+        // Surgical file edits → DeepSeek V4 Pro. Low temp for deterministic diffs.
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         reasoning_effort: 'low',
         max_tokens: 32000,
-        temperature: 1,
+        temperature: 0.2,
         fallbackModel: AIModels.GEMINI_2_5_FLASH,
     },
     agenticProjectBuilder: {
-        name: AIModels.GEMINI_2_5_FLASH_LITE,
-        reasoning_effort: 'low',
+        // Drives the whole Expo build-and-edit tool loop → DeepSeek V4 Pro
+        // (near-Claude code quality, ~1/10th the cost). Gemini Flash fallback.
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
+        reasoning_effort: 'medium',
         max_tokens: 8000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.GEMINI_2_5_PRO,
     },
 };
 

@@ -9,6 +9,9 @@ import type{
 	AdminCostData,
 	AdminUsersData,
 	AdminUserActionData,
+	AdminGrantCreditsData,
+	AdminUserDetailData,
+	AdminMagicLinkData,
 	AdminKvStatusData,
 	AdminGatewayCostData,
 	UserPlanData,
@@ -1415,6 +1418,42 @@ class ApiClient {
 	async downgradeUser(userId: string): Promise<ApiResponse<AdminUserActionData>> {
 		return this.request<AdminUserActionData>(`/api/admin/users/${encodeURIComponent(userId)}/downgrade`, {
 			method: 'POST',
+		});
+	}
+
+	/**
+	 * Grant credits to a user (does not affect their Stripe subscription)
+	 */
+	async grantCreditsToUser(userId: string, amount: number): Promise<ApiResponse<AdminGrantCreditsData>> {
+		return this.request<AdminGrantCreditsData>(`/api/admin/users/${encodeURIComponent(userId)}/grant-credits`, {
+			method: 'POST',
+			body: JSON.stringify({ amount }),
+		});
+	}
+
+	/**
+	 * Full detail for one user (admin): apps, usage, balance, billing
+	 */
+	async getUserDetail(userId: string): Promise<ApiResponse<AdminUserDetailData>> {
+		return this.request<AdminUserDetailData>(`/api/admin/users/${encodeURIComponent(userId)}/detail`);
+	}
+
+	/**
+	 * Generate a one-time impersonation magic link for a user (admin)
+	 */
+	async createUserMagicLink(userId: string): Promise<ApiResponse<AdminMagicLinkData>> {
+		return this.request<AdminMagicLinkData>(`/api/admin/users/${encodeURIComponent(userId)}/magic-link`, {
+			method: 'POST',
+		});
+	}
+
+	/**
+	 * Redeem an impersonation token to log in as the target user (public)
+	 */
+	async impersonate(token: string): Promise<ApiResponse<LoginResponseData>> {
+		return this.request<LoginResponseData>('/api/auth/impersonate', {
+			method: 'POST',
+			body: JSON.stringify({ token }),
 		});
 	}
 

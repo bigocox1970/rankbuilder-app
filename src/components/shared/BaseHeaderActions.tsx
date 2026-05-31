@@ -2,6 +2,8 @@ import type { RefObject } from 'react';
 import { GitBranch, Github, Expand, RefreshCw, Monitor, Tablet, Smartphone } from 'lucide-react';
 import { HeaderButton } from '@/components/shared/header-actions';
 import { SupabaseHeaderButton } from '@/components/supabase/SupabaseHeaderButton';
+import { ExpoPhoneButton } from '@/components/expo/ExpoPhoneButton';
+import { isExpoTemplate } from 'shared/constants/templates';
 import type { ViewportMode } from '@/features/core/types';
 
 export interface BaseHeaderActionsProps {
@@ -13,6 +15,9 @@ export interface BaseHeaderActionsProps {
 	onManualRefresh?: () => void;
 	viewportMode?: ViewportMode;
 	onViewportChange?: (mode: ViewportMode) => void;
+	templateName?: string;
+	previewUrl?: string;
+	expoTunnelUrl?: string;
 }
 
 const VIEWPORT_CYCLE: { mode: ViewportMode; Icon: typeof Monitor; label: string }[] = [
@@ -30,6 +35,9 @@ export function BaseHeaderActions({
 	onManualRefresh,
 	viewportMode,
 	onViewportChange,
+	templateName,
+	previewUrl,
+	expoTunnelUrl,
 }: BaseHeaderActionsProps) {
 	const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled;
 
@@ -66,6 +74,7 @@ export function BaseHeaderActions({
 					/>
 				);
 			})()}
+			{isExpoTemplate(templateName) && <ExpoPhoneButton previewUrl={previewUrl} expoTunnelUrl={expoTunnelUrl} />}
 			<SupabaseHeaderButton />
 			<HeaderButton
 				icon={GitBranch}

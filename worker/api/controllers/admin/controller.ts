@@ -8,6 +8,11 @@ import { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
 import { AI_MODEL_CONFIG, AIModels } from 'worker/agents/inferutils/config.types';
 import { AiGatewayAnalyticsService } from 'worker/services/analytics/AiGatewayAnalyticsService';
+import { grantCredits, readCreditBalance } from '../credits/controller';
+import { getAdminBillingSummary } from '../stripe/controller';
+import { generateSecureToken, sha256Hash } from '../../../utils/cryptoUtils';
+import { generateId } from '../../../utils/idGenerator';
+import { extractRequestMetadata } from '../../../utils/authUtils';
 import type {
     AdminCostData,
     AdminCostEntry,
@@ -16,7 +21,15 @@ import type {
     AdminUserActionData,
     AdminKvStatusData,
     AdminGatewayCostData,
+    AdminGrantCreditsData,
+    AdminUserDetailData,
+    AdminUserAppEntry,
+    AdminUserUsageEntry,
+    AdminMagicLinkData,
 } from './types';
+
+const IMPERSONATION_TTL_SECONDS = 600;
+const IMPERSONATION_KEY_PREFIX = 'impersonation_token:';
 
 // Credit cost baseline: 1 credit = $0.25
 const CREDIT_TO_USD = 0.25;
@@ -44,6 +57,37 @@ interface CountRow {
     total: number;
 }
 
+interface UserDetailRow {
+    id: string;
+    email: string;
+    display_name: string;
+    provider: string;
+    created_at: number | null;
+    last_active_at: number | null;
+    is_active: number;
+    is_suspended: number;
+    stripe_customer_id: string | null;
+    stripe_subscription_id: string | null;
+    stripe_subscription_status: string | null;
+}
+
+interface AppRow {
+    id: string;
+    title: string;
+    framework: string | null;
+    status: string;
+    visibility: string;
+    deployment_id: string | null;
+    created_at: number | null;
+}
+
+interface UsageRowDetail {
+    model: string;
+    agent_action: string | null;
+    credit_cost: number;
+    created_at: number | null;
+}
+
 export class AdminController extends BaseController {
     static logger = createLogger('AdminController');
 
@@ -66,7 +110,7 @@ export class AdminController extends BaseController {
                 : '7d';
 
             let whereClause = '';
-            let bindings: number[] = [];
+            const bindings: number[] = [];
 
             if (period === '24h') {
                 whereClause = 'WHERE created_at > unixepoch() - 86400';
@@ -204,7 +248,14 @@ export class AdminController extends BaseController {
             const rows = dataResult.results ?? [];
             const total = countResult?.total ?? 0;
 
-            const users: AdminUserEntry[] = rows.map((row) => ({
+            // Current credit balance lives in KV (user_credits:{id}), separate from
+            // total_credits (lifetime usage from ai_usage_logs). Read per page row —
+            // the page is small (<=100) and this is an admin-only, low-traffic view.
+            const balances = await Promise.all(
+                rows.map((row) => readCreditBalance(env, row.id)),
+            );
+
+            const users: AdminUserEntry[] = rows.map((row, i) => ({
                 id: row.id,
                 email: row.email,
                 displayName: row.display_name,
@@ -215,6 +266,7 @@ export class AdminController extends BaseController {
                 isSuspended: row.is_suspended === 1,
                 appCount: row.app_count,
                 totalCredits: row.total_credits,
+                creditBalance: Math.floor(balances[i]),
                 hasKvOverride: false, // resolved client-side per-user via getUserKvStatus
             }));
 
@@ -319,6 +371,213 @@ export class AdminController extends BaseController {
             AdminController.logger.error('Error unsuspending user', error);
             return AdminController.createErrorResponse(
                 error instanceof Error ? error.message : 'Failed to unsuspend user',
+                500,
+            );
+        }
+    }
+
+    /**
+     * POST /api/admin/users/:id/grant-credits
+     * Add credits to a user's balance. Pure credit math — does NOT touch the user's
+     * Stripe customer/subscription. Body: { amount: number } (positive integer).
+     */
+    static async grantCredits(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        try {
+            const userId = context.pathParams.id;
+            if (!userId) {
+                return AdminController.createErrorResponse('User ID required', 400);
+            }
+
+            const parsed = await AdminController.parseJsonBody<{ amount?: number }>(request);
+            if (!parsed.success) {
+                return parsed.response!;
+            }
+            const amount = Number(parsed.data?.amount);
+            if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0 || amount > 1_000_000) {
+                return AdminController.createErrorResponse('Amount must be a positive integer (max 1,000,000)', 400);
+            }
+
+            const user = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first<{ id: string }>();
+            if (!user) {
+                return AdminController.createErrorResponse('User not found', 404);
+            }
+
+            const newBalance = await grantCredits(env, userId, amount);
+            AdminController.logger.info('Admin granted credits', { userId, amount, newBalance });
+
+            const data: AdminGrantCreditsData = {
+                success: true,
+                message: `Granted ${amount} credits`,
+                newBalance: Math.floor(newBalance),
+            };
+            return AdminController.createSuccessResponse(data);
+        } catch (error) {
+            AdminController.logger.error('Error granting credits', error);
+            return AdminController.createErrorResponse(
+                error instanceof Error ? error.message : 'Failed to grant credits',
+                500,
+            );
+        }
+    }
+
+    /**
+     * GET /api/admin/users/:id/detail
+     * Full profile for the admin user-detail drawer: apps, credit usage + balance,
+     * plan/subscription, and Stripe payment history. Stripe data is best-effort.
+     */
+    static async getUserDetail(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        try {
+            const userId = context.pathParams.id;
+            if (!userId) {
+                return AdminController.createErrorResponse('User ID required', 400);
+            }
+
+            const user = await env.DB.prepare(
+                `SELECT id, email, display_name, provider, created_at, last_active_at, is_active, is_suspended,
+                        stripe_customer_id, stripe_subscription_id, stripe_subscription_status
+                 FROM users WHERE id = ?`,
+            ).bind(userId).first<UserDetailRow>();
+            if (!user) {
+                return AdminController.createErrorResponse('User not found', 404);
+            }
+
+            const [appRows, usageTotals, recentUsageRows, balance, proOverride, billing] = await Promise.all([
+                env.DB.prepare(
+                    `SELECT id, title, framework, status, visibility, deployment_id, created_at
+                     FROM apps WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`,
+                ).bind(userId).all<AppRow>(),
+                env.DB.prepare(
+                    `SELECT COALESCE(SUM(credit_cost), 0) as total, COUNT(*) as calls
+                     FROM ai_usage_logs WHERE user_id = ?`,
+                ).bind(userId).first<{ total: number; calls: number }>(),
+                env.DB.prepare(
+                    `SELECT model, agent_action, credit_cost, created_at
+                     FROM ai_usage_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 20`,
+                ).bind(userId).all<UsageRowDetail>(),
+                readCreditBalance(env, userId),
+                env.VibecoderStore.get(`user_config:${userId}`),
+                getAdminBillingSummary(env, user.stripe_customer_id, user.stripe_subscription_id),
+            ]);
+
+            const apps: AdminUserAppEntry[] = (appRows.results ?? []).map((a) => ({
+                id: a.id,
+                title: a.title,
+                framework: a.framework,
+                status: a.status,
+                visibility: a.visibility,
+                deploymentId: a.deployment_id,
+                createdAt: a.created_at ? new Date(a.created_at * 1000) : null,
+            }));
+
+            const recentUsage: AdminUserUsageEntry[] = (recentUsageRows.results ?? []).map((u) => ({
+                model: u.model,
+                agentAction: u.agent_action,
+                creditCost: u.credit_cost,
+                createdAt: u.created_at ? new Date(u.created_at * 1000) : null,
+            }));
+
+            const data: AdminUserDetailData = {
+                id: user.id,
+                email: user.email,
+                displayName: user.display_name,
+                provider: user.provider,
+                createdAt: user.created_at ? new Date(user.created_at * 1000) : null,
+                lastActiveAt: user.last_active_at ? new Date(user.last_active_at * 1000) : null,
+                isActive: user.is_active === 1,
+                isSuspended: user.is_suspended === 1,
+                creditBalance: Math.floor(balance),
+                creditsUsed: usageTotals?.total ?? 0,
+                usageCallCount: usageTotals?.calls ?? 0,
+                recentUsage,
+                appCount: apps.length,
+                apps,
+                hasProOverride: proOverride !== null,
+                stripeCustomerId: user.stripe_customer_id,
+                stripeSubscriptionStatus: user.stripe_subscription_status,
+                subscription: billing.subscription,
+                payments: billing.payments,
+                billingError: billing.error,
+            };
+            return AdminController.createSuccessResponse(data);
+        } catch (error) {
+            AdminController.logger.error('Error getting user detail', error);
+            return AdminController.createErrorResponse(
+                error instanceof Error ? error.message : 'Failed to get user detail',
+                500,
+            );
+        }
+    }
+
+    /**
+     * POST /api/admin/users/:id/magic-link
+     * Mint a one-time, short-lived impersonation link the admin can open (e.g. in
+     * an incognito window) to log in AS the target user. The token is stored hashed
+     * in KV with a TTL; redeemed once at /api/auth/impersonate. Audit-logged.
+     */
+    static async createMagicLink(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<Response> {
+        try {
+            const userId = context.pathParams.id;
+            if (!userId) {
+                return AdminController.createErrorResponse('User ID required', 400);
+            }
+            const user = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first<{ id: string }>();
+            if (!user) {
+                return AdminController.createErrorResponse('User not found', 404);
+            }
+
+            const token = generateSecureToken(32);
+            const tokenHash = await sha256Hash(token);
+            await env.VibecoderStore.put(
+                `${IMPERSONATION_KEY_PREFIX}${tokenHash}`,
+                JSON.stringify({ userId, adminId: context.user?.id ?? null, createdAt: Date.now() }),
+                { expirationTtl: IMPERSONATION_TTL_SECONDS },
+            );
+
+            // Audit trail — admin impersonation is sensitive.
+            try {
+                const meta = extractRequestMetadata(request);
+                await env.DB.prepare(
+                    `INSERT INTO audit_logs (id, user_id, entity_type, entity_id, action, new_values, ip_address, user_agent, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+                ).bind(
+                    generateId(),
+                    context.user?.id ?? null,
+                    'user_session',
+                    userId,
+                    'admin_impersonate_link_generated',
+                    JSON.stringify({ targetUserId: userId }),
+                    meta.ipAddress ?? null,
+                    meta.userAgent ?? null,
+                ).run();
+            } catch (auditError) {
+                AdminController.logger.warn('Failed to write impersonation audit log', auditError);
+            }
+
+            const origin = new URL(request.url).origin;
+            const data: AdminMagicLinkData = {
+                link: `${origin}/impersonate?token=${token}`,
+                expiresInSeconds: IMPERSONATION_TTL_SECONDS,
+            };
+            return AdminController.createSuccessResponse(data);
+        } catch (error) {
+            AdminController.logger.error('Error creating magic link', error);
+            return AdminController.createErrorResponse(
+                error instanceof Error ? error.message : 'Failed to create magic link',
                 500,
             );
         }

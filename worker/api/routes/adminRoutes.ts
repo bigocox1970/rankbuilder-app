@@ -70,4 +70,25 @@ export function setupAdminRoutes(app: Hono<AppEnv>): void {
         setAuthLevel(AuthConfig.adminOnly),
         adaptController(AdminController, AdminController.downgradeUser),
     );
+
+    // Grant credits (does not affect Stripe subscription)
+    app.post(
+        '/api/admin/users/:id/grant-credits',
+        setAuthLevel(AuthConfig.adminOnly),
+        adaptController(AdminController, AdminController.grantCredits),
+    );
+
+    // User detail (profile + apps + usage + billing)
+    app.get(
+        '/api/admin/users/:id/detail',
+        setAuthLevel(AuthConfig.adminOnly),
+        adaptController(AdminController, AdminController.getUserDetail),
+    );
+
+    // Impersonation magic link (one-time, short-lived)
+    app.post(
+        '/api/admin/users/:id/magic-link',
+        setAuthLevel(AuthConfig.adminOnly),
+        adaptController(AdminController, AdminController.createMagicLink),
+    );
 }

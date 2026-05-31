@@ -3,11 +3,21 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeExternalLinks from 'rehype-external-links';
-import { LoaderCircle, Check, AlertTriangle, ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
+import { LoaderCircle, Check, AlertTriangle, ChevronDown, ChevronRight, MessageSquare, RotateCcw, Loader2 } from 'lucide-react';
 import type { ToolEvent } from '../utils/message-helpers';
-import type { ConversationMessage } from '@/api-types';
+import type { ConversationMessage, ProjectCheckpoint } from '@/api-types';
 import { useState, useEffect, useRef } from 'react';
 import { DebugSessionBubble } from './debug-session-bubble';
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 /**
  * Strip internal system tags that should not be displayed to users
@@ -17,11 +27,23 @@ function sanitizeMessageForDisplay(message: string): string {
 	return message.replace(/<system_context>[\s\S]*?<\/system_context>\n/gi, '').trim();
 }
 
-export function UserMessage({ message }: { message: string }) {
+export function UserMessage({
+	message,
+	checkpoint,
+	isRestoring,
+	onRestore,
+}: {
+	message: string;
+	/** The restore point captured before this prompt ran, if any. */
+	checkpoint?: ProjectCheckpoint;
+	isRestoring?: boolean;
+	onRestore?: (checkpointId: string) => void;
+}) {
 	const sanitizedMessage = sanitizeMessageForDisplay(message);
-	
+	const [confirmOpen, setConfirmOpen] = useState(false);
+
 	return (
-		<div className="flex gap-3">
+		<div className="group/user-msg flex gap-3">
 			<div className="align-text-top pl-1">
 				<div className="size-6 flex items-center justify-center rounded-full bg-accent text-text-on-brand">
 					<span className="text-xs">U</span>
@@ -30,7 +52,44 @@ export function UserMessage({ message }: { message: string }) {
 			<div className="flex flex-col gap-2 min-w-0">
 				<div className="font-medium text-text-50">You</div>
 				<Markdown className="text-text-primary/80">{sanitizedMessage}</Markdown>
+
+				{checkpoint && onRestore && (
+					<button
+						type="button"
+						onClick={() => setConfirmOpen(true)}
+						disabled={isRestoring}
+						title="Roll the app back to how it was just before this message"
+						className="self-start flex items-center gap-1 text-xs text-text-tertiary hover:text-accent transition-colors opacity-0 group-hover/user-msg:opacity-100 focus:opacity-100 disabled:opacity-100"
+					>
+						{isRestoring ? (
+							<Loader2 className="size-3 animate-spin" />
+						) : (
+							<RotateCcw className="size-3" />
+						)}
+						{isRestoring ? 'Restoring…' : 'Restore to here'}
+					</button>
+				)}
 			</div>
+
+			{checkpoint && onRestore && (
+				<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Restore to this point?</AlertDialogTitle>
+							<AlertDialogDescription>
+								This rolls the app back to how it was just before this message. Your current
+								state is saved first, so you can restore forward again afterwards.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction onClick={() => onRestore(checkpoint.id)}>
+								Restore
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			)}
 		</div>
 	);
 }

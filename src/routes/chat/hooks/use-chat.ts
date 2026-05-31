@@ -15,6 +15,8 @@ import {
 	type SiteContentPlan,
 	getBehaviorTypeForProject,
 } from '@/api-types';
+import type { AppType } from 'shared/constants/templates';
+import type { ProjectCheckpoint } from '@/api-types';
 import {
 	createRepairingJSONParser,
 	ndjsonStream,
@@ -54,6 +56,7 @@ export function useChat({
 	images: userImages,
 	projectType = 'app',
 	selectedTemplate,
+	appType,
 	imageGenerationEnabled = true,
 	sitePlan,
 	onDebugMessage,
@@ -65,6 +68,7 @@ export function useChat({
 	images?: ImageAttachment[];
 	projectType?: ProjectType;
 	selectedTemplate?: string;
+	appType?: AppType;
 	imageGenerationEnabled?: boolean;
 	sitePlan?: SiteContentPlan;
 	onDebugMessage?: (type: 'error' | 'warning' | 'info' | 'websocket', message: string, details?: string, source?: string, messageType?: string, rawMessage?: unknown) => void;
@@ -103,6 +107,9 @@ export function useChat({
 	const [bootstrapFiles, setBootstrapFiles] = useState<FileType[]>([]);
 	const [blueprint, setBlueprint] = useState<BlueprintType>();
 	const [previewUrl, setPreviewUrl] = useState<string>();
+	const [expoTunnelUrl, setExpoTunnelUrl] = useState<string>();
+	const [checkpoints, setCheckpoints] = useState<ProjectCheckpoint[]>([]);
+	const [restoringCheckpointId, setRestoringCheckpointId] = useState<string>();
 	const [query, setQuery] = useState<string>();
 	const [behaviorType, setBehaviorType] = useState<BehaviorType>(getInitialBehaviorType());
 	const [internalProjectType, setInternalProjectType] = useState<ProjectType>(projectType);
@@ -224,6 +231,9 @@ export function useChat({
 			setBlueprint,
 			setQuery,
 			setPreviewUrl,
+			setExpoTunnelUrl,
+			setCheckpoints,
+			setRestoringCheckpointId,
 			setTotalFiles,
 			setIsRedeployReady,
 			setIsPreviewDeploying,
@@ -513,6 +523,7 @@ export function useChat({
 						query: userQuery,
 						projectType,
 						selectedTemplate,
+						appType,
 						imageGenerationEnabled,
 						sitePlan,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
@@ -729,6 +740,12 @@ export function useChat({
 		sendWebSocketMessage(websocket, 'resume_generation');
 	}, [websocket]);
 
+	const restoreCheckpoint = useCallback((checkpointId: string) => {
+		if (sendWebSocketMessage(websocket, 'restore_checkpoint', { checkpointId })) {
+			setRestoringCheckpointId(checkpointId);
+		}
+	}, [websocket]);
+
 	const handleDeployToCloudflare = useCallback(async (instanceId: string) => {
 		try {
 			// Send deployment command via WebSocket instead of HTTP request
@@ -792,6 +809,10 @@ export function useChat({
 		files,
 		blueprint,
 		previewUrl,
+		expoTunnelUrl,
+		checkpoints,
+		restoringCheckpointId,
+		restoreCheckpoint,
 		isGeneratingBlueprint,
 		isBootstrapping,
 		totalFiles,

@@ -25,6 +25,9 @@ import { AppService } from '../../../database';
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
 const HEALTH_CHECK_INTERVAL_MS = 30000;
+// Number of consecutive unhealthy readings before a recovery redeploy. At a 30s
+// interval this gives a slow-booting dev server ~90s of grace before intervening.
+const HEALTH_CHECK_UNHEALTHY_THRESHOLD = 3;
 
 /**
  * Manages deployment operations for sandbox instances
@@ -186,16 +189,25 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         this.clearHealthCheckInterval();
         
         logger.info(`Starting health check interval for instance ${instanceId}`);
-        
+
+        // Require consecutive unhealthy readings before redeploying. A single miss is
+        // expected while a slow dev server (e.g. Expo's cold Metro web bundle) is still
+        // coming up; redeploying on the first miss kills it mid-bundle and loops forever.
+        let consecutiveUnhealthy = 0;
         this.healthCheckInterval = setInterval(async () => {
             try {
                 const client = this.getClient();
                 const status = await client.getInstanceStatus(instanceId);
-                
+
                 if (!status.success || !status.isHealthy) {
-                    logger.warn(`Instance ${instanceId} unhealthy, triggering redeploy`);
+                    consecutiveUnhealthy++;
+                    if (consecutiveUnhealthy < HEALTH_CHECK_UNHEALTHY_THRESHOLD) {
+                        logger.warn(`Instance ${instanceId} unhealthy (${consecutiveUnhealthy}/${HEALTH_CHECK_UNHEALTHY_THRESHOLD}), waiting before redeploy`);
+                        return;
+                    }
+                    logger.warn(`Instance ${instanceId} unhealthy ${consecutiveUnhealthy}x, triggering redeploy`);
                     this.clearHealthCheckInterval();
-                    
+
                     // Trigger redeploy to recover from unhealthy state
                     try {
                         await this.deployToSandbox();
@@ -203,6 +215,8 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                     } catch (redeployError) {
                         logger.error('Failed to redeploy after health check failure:', redeployError);
                     }
+                } else {
+                    consecutiveUnhealthy = 0;
                 }
             } catch (error) {
                 logger.error('Health check failed:', error);

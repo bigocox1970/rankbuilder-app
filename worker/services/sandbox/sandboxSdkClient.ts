@@ -356,28 +356,68 @@ export class SandboxSdkClient extends BaseSandboxService {
     async writeFilesBulk(instanceId: string, files: TemplateFile[]): Promise<WriteFilesResponse> {
         try {
             const session = await this.getInstanceSession(instanceId);
-            // Use batch script for efficient writing (3 requests for any number of files)
             const filesToWrite = files.map(file => ({
                 filePath: `/workspace/${instanceId}/${file.filePath}`,
                 fileContents: file.fileContents
             }));
-            
-            const writeResults = await this.writeFilesViaScript(filesToWrite, session);
-            
-            // Map results back to original format
-            const results: WriteFilesResponse['results'] = [];
-            for (const writeResult of writeResults) {
-                results.push({
-                    file: writeResult.file.replace(`/workspace/${instanceId}/`, ''),
-                    success: writeResult.success,
-                    error: writeResult.error
+
+            // Write in chunks. A single batch script holding every file inline as
+            // base64 can grow large enough to be truncated or time out, which
+            // silently dropped the files at the tail of the batch (e.g. a whole
+            // `src/` tree the agent generated). Chunking keeps each script small
+            // and each shell run fast, so writes don't get lost.
+            const CHUNK_SIZE = 20;
+            const resultByPath = new Map<string, { file: string; success: boolean; error?: string }>();
+
+            const writeChunked = async (targets: typeof filesToWrite) => {
+                for (let i = 0; i < targets.length; i += CHUNK_SIZE) {
+                    const chunk = targets.slice(i, i + CHUNK_SIZE);
+                    const chunkResults = await this.writeFilesViaScript(chunk, session);
+                    for (const r of chunkResults) {
+                        resultByPath.set(r.file, r);
+                    }
+                }
+            };
+
+            await writeChunked(filesToWrite);
+
+            // Retry any files that failed once — covers transient failures and any
+            // chunk whose OK marker was missed — so a partial write self-heals
+            // instead of leaving the instance missing modules.
+            const failedTargets = filesToWrite.filter(f => !resultByPath.get(f.filePath)?.success);
+            if (failedTargets.length > 0) {
+                this.logger.warn('Retrying failed file writes', {
+                    instanceId,
+                    count: failedTargets.length,
+                    files: failedTargets.map(f => f.filePath.replace(`/workspace/${instanceId}/`, ''))
+                });
+                await writeChunked(failedTargets);
+            }
+
+            const results: WriteFilesResponse['results'] = filesToWrite.map(f => {
+                const r = resultByPath.get(f.filePath);
+                return {
+                    file: f.filePath.replace(`/workspace/${instanceId}/`, ''),
+                    success: !!r?.success,
+                    error: r?.success ? undefined : (r?.error ?? 'Write failed')
+                };
+            });
+
+            // Report success only if EVERY file landed. Previously this returned
+            // `success: true` unconditionally, so partial writes were swallowed and
+            // the preview silently served the template with the real code missing.
+            const allSucceeded = results.every(r => r.success);
+            if (!allSucceeded) {
+                this.logger.error('Bulk write incomplete after retry', {
+                    instanceId,
+                    failed: results.filter(r => !r.success).map(r => r.file)
                 });
             }
 
             return {
-                success: true,
+                success: allSucceeded,
                 results,
-                message: 'Files written successfully'
+                message: allSucceeded ? 'Files written successfully' : 'Some files failed to write'
             };
         } catch (error) {
             this.logger.error('writeFiles', error, { instanceId });
@@ -590,24 +630,42 @@ export class SandboxSdkClient extends BaseSandboxService {
             /Local:\s+http/i,            // Vite local server line
             /Network:\s+http/i,          // Vite network server line
             /server running/i,           // Generic server running message
-            /listening on/i              // Generic listening message
+            /listening on/i,             // Generic listening message
+            /Web Bundled/i,              // Expo web first-bundle complete
+            /Bundled \d+ms/i,            // Expo/Metro bundle complete
+            /Waiting on http/i,          // Expo "Web is waiting on http://…"
+            /Logs for your project/i     // Expo dev server banner
         ];
 
         this.logger.info('Waiting for development server', { instanceId, processId, timeoutMs: maxWaitTimeMs });
+
+        // Tail helper: surface the real container Metro/Expo stdout in worker tail.
+        // Worker logs alone never showed the container's actual error, so we dump
+        // the last ~40 lines on both the ready path and the timeout path.
+        const tail = (text: string | undefined, n: number = 40): string =>
+            (text || '').split('\n').slice(-n).join('\n');
+        let lastStdout = '';
+        let lastStderr = '';
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 // Get recent logs only to avoid processing old content
                 const logsResult = await this.getLogs(instanceId, true);
-                
+
+                if (logsResult.success) {
+                    if (logsResult.logs.stdout) lastStdout = logsResult.logs.stdout;
+                    if (logsResult.logs.stderr) lastStderr = logsResult.logs.stderr;
+                }
+
                 if (logsResult.success && logsResult.logs.stdout) {
                     const logs = logsResult.logs.stdout;
-                    
+
                     // Check for any readiness pattern
                     for (const pattern of readinessPatterns) {
                         if (pattern.test(logs)) {
                             const elapsedTime = Date.now() - startTime;
                             this.logger.info('Development server ready', { instanceId, elapsedTimeMs: elapsedTime, attempts: `${attempt}/${maxAttempts}` });
+                            this.logger.info('Container stdout tail (ready)', { instanceId, stdoutTail: tail(lastStdout), stderrTail: tail(lastStderr) });
                             return true;
                         }
                     }
@@ -629,6 +687,7 @@ export class SandboxSdkClient extends BaseSandboxService {
         
         const elapsedTime = Date.now() - startTime;
         this.logger.warn('Development server readiness timeout', { instanceId, elapsedTimeMs: elapsedTime, totalAttempts: maxAttempts });
+        this.logger.warn('Container stdout tail (timeout)', { instanceId, stdoutTail: tail(lastStdout), stderrTail: tail(lastStderr) });
         return false;
     }
 
@@ -646,7 +705,9 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             // Wait for the server to be ready (non-blocking - always returns the process ID)
             try {
-                const isReady = await this.waitForServerReady(instanceId, process.id, 10000);
+                // Expo's first web bundle is slow (Metro cold-starts and transpiles
+                // the full RN web runtime), so allow well beyond Vite's quick boot.
+                const isReady = await this.waitForServerReady(instanceId, process.id, 90000);
                 if (isReady) {
                     this.logger.info('Development server is ready', { instanceId });
                 } else {
@@ -672,7 +733,20 @@ export class SandboxSdkClient extends BaseSandboxService {
             const session = await this.getInstanceSession(instanceId);
             
             // Read wrangler.jsonc file using absolute path
-            const wranglerFile = await session.readFile(`/workspace/${instanceId}/wrangler.jsonc`);
+            // readFile throws FileNotFoundError when missing rather than returning { success: false }
+            let wranglerFile: Awaited<ReturnType<typeof session.readFile>>;
+            try {
+                wranglerFile = await session.readFile(`/workspace/${instanceId}/wrangler.jsonc`);
+            } catch {
+                this.logger.info(`No wrangler.jsonc found for ${instanceId}, skipping resource provisioning`);
+                return {
+                    success: true,
+                    provisioned: [],
+                    failed: [],
+                    replacements: {},
+                    wranglerUpdated: false
+                };
+            }
             if (!wranglerFile.success) {
                 this.logger.info(`No wrangler.jsonc found for ${instanceId}, skipping resource provisioning`);
                 return {
@@ -940,9 +1014,23 @@ export class SandboxSdkClient extends BaseSandboxService {
                 tunnelUrlPromise = this.startCloudflaredTunnel(instanceId, allocatedPort);
             }
 
+            // Patch known-bad template values before bun install / dev start.
+            // - react/react-dom 18.3.2 don't exist on npm (latest 18.x is 18.3.1). The LLM
+            //   frequently hallucinates this version (with or without a ^/~ prefix), so match
+            //   tolerantly — an exact-string match misses "^18.3.2" / "~18.3.2" and the install fails.
+            // - expo dev/start scripts must bind to the sandbox-allocated $PORT on all interfaces.
+            //   They must NOT set CI=1: CI mode makes Expo treat the run as a one-shot build and
+            //   DISABLES Metro's file watcher ("running in CI mode, reloads are disabled"), so the
+            //   agent's edits never reach the running preview (frozen bundle / "edits don't apply").
+            //   Non-interactivity comes for free from the container's no-TTY launch — verified that
+            //   `bun run dev` without CI stays non-interactive AND live-reloads edits + new routes.
+            //   The trailing rule strips any pre-baked `CI=1 ` from template dev/start scripts.
+            // Single-quoted sed keeps ${PORT:-8081} literal so bun run dev expands it at start time.
+            await this.executeCommand(instanceId, `sed -i -E 's/("react(-dom)?"[[:space:]]*:[[:space:]]*")[~^]?18\\.3\\.2"/\\118.3.1"/g; s|"dev": "expo start --web --non-interactive"|"dev": "expo start --web --port \${PORT:-8081} --host lan"|g; s|"start": "expo start --non-interactive"|"start": "expo start --port \${PORT:-8081} --host lan"|g; s|: "CI=1 expo start|: "expo start|g' package.json 2>/dev/null || true`, { timeout: 5000 });
+
             this.logger.info('Installing dependencies', { instanceId });
             const [installResult, tunnelURL] = await Promise.all([
-                this.executeCommand(instanceId, `bun install`, { timeout: 40000 }),
+                this.executeCommand(instanceId, `bun install`, { timeout: 300000 }),
                 tunnelUrlPromise
             ]);
             this.logger.info('Dependencies installed', { instanceId, tunnelURL });
@@ -995,18 +1083,21 @@ export class SandboxSdkClient extends BaseSandboxService {
                 this.logger.info('Environment variables will be configured via session', { envVars: Object.keys(envVars) });
             }
             let instanceId: string;
-            if (env.ALLOCATION_STRATEGY === 'one_to_one') {
-                // Multiple instances shouldn't exist in the same sandbox
-
-                // If there are already instances running in sandbox, log them
+            // Default to one-to-one allocation unless many-to-one is explicitly
+            // configured. An unset ALLOCATION_STRATEGY must NOT fall through to the
+            // random-instance-id path below: that skips the dedup guard and mints a
+            // fresh instance + dev server + port on every createInstance call, which
+            // produces multiple live instances per app (preview points at a stale one).
+            if (env.ALLOCATION_STRATEGY !== AllocationStrategy.MANY_TO_ONE) {
+                // Exactly one instance should exist per sandbox. If one is already
+                // running, reuse it (healthy) or shut it down and recreate (unhealthy).
                 const instancesResp = await this.listAllInstances();
                 if (instancesResp.success && instancesResp.instances.length > 0) {
-                    this.logger.error('There are already instances running in sandbox, creating a new instance may cause issues', { instances: instancesResp.instances });
                     // Try to see if this instance actually exists and if the process is active
                     const firstInstance = instancesResp.instances[0];
                     const instanceStatus = await this.getInstanceStatus(firstInstance.runId);
                     if (instanceStatus.success && instanceStatus.isHealthy) {
-                        this.logger.error('Instance already exists and is active, creating a new instance may cause issues', { instance: firstInstance });
+                        this.logger.info('Reusing existing healthy instance instead of creating a duplicate', { instance: firstInstance });
                         // Return instance information
                         return {
                             success: true,
@@ -1017,7 +1108,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                             message: instanceStatus.message
                         };
                     } else {
-                        this.logger.error('Instance already exists but is not active, Removing old instance', { instance: firstInstance });
+                        this.logger.warn('Existing instance is not healthy, removing it before recreating', { instance: firstInstance });
                         await this.shutdownInstance(firstInstance.runId);
                     }
                 }
@@ -1236,6 +1327,45 @@ export class SandboxSdkClient extends BaseSandboxService {
                 success: false,
                 error: `Failed to shutdown instance: ${error instanceof Error ? error.message : 'Unknown error'}`
             };
+        }
+    }
+
+    /**
+     * Restart the dev server with its bundler cache cleared, reusing the same port
+     * so the preview URL stays valid.
+     *
+     * Why this is needed (Expo/Metro): the sandbox has no Watchman, so Metro relies
+     * on node file-watching, which misses files CREATED in new directories (e.g. a
+     * freshly generated src/hooks/ tree). Metro caches the resulting "Unable to
+     * resolve module" and a page reload (.reload-trigger) re-bundles from that stale
+     * resolver state — so the import keeps failing even though the file is on disk.
+     * `expo start --clear` rebuilds the haste map + transform cache, picking the new
+     * files up. Best-effort: never throws (a broken restart can't be worse than the
+     * already-broken stale-cache preview it's trying to repair).
+     */
+    async restartDevServer(instanceId: string, initCommand: string): Promise<boolean> {
+        try {
+            const metadata = await this.getInstanceMetadata(instanceId);
+            const port = metadata.allocatedPort;
+            if (!port) {
+                this.logger.warn('Cannot restart dev server: no allocated port', { instanceId });
+                return false;
+            }
+            const sandbox = this.getSandbox();
+            if (metadata.processId) {
+                try {
+                    await sandbox.killProcess(metadata.processId);
+                } catch (error) {
+                    this.logger.warn(`restartDevServer: failed to kill old process ${metadata.processId}`, error);
+                }
+            }
+            const processId = await this.startDevServer(instanceId, initCommand, port);
+            await this.storeInstanceMetadata(instanceId, { ...metadata, processId });
+            this.logger.info('Dev server restarted with cleared cache', { instanceId, processId, port });
+            return true;
+        } catch (error) {
+            this.logger.error('restartDevServer', error, { instanceId });
+            return false;
         }
     }
 
@@ -1483,9 +1613,66 @@ export class SandboxSdkClient extends BaseSandboxService {
     // ERROR MANAGEMENT
     // ==========================================
 
+    /**
+     * Probe the Expo web entry bundle from INSIDE the container and surface any
+     * Metro compile/transform error as a runtime error.
+     *
+     * Why this exists: a Metro TransformError (e.g. duplicate identifier, unresolved
+     * import) makes the bundle return HTTP 500 with a JSON error body. The JS never
+     * executes, so the client error logger never fires and `monitor-cli errors` stays
+     * EMPTY — the agent thinks the build succeeded while the user stares at a blank
+     * white screen. Probing localhost inside the container also works during the
+     * port-bind race (the platform proxy on 10.0.0.1 may be flaky while localhost is up).
+     *
+     * Self-gating: only Expo serves this path. Non-Expo templates 404/200 here, so this
+     * returns nothing for them and never touches the Vite/website flow. Transient states
+     * (connection refused while Metro restarts) are ignored — the agent can't fix those.
+     */
+    private async probeExpoBundleError(instanceId: string, port?: number): Promise<RuntimeError | null> {
+        if (!port) return null;
+        try {
+            const bundleUrl = `http://localhost:${port}/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable`;
+            const cmd = `curl -s -m 12 -w '\\n__HTTP_STATUS__%{http_code}' '${bundleUrl}'`;
+            const result = await this.executeCommand(instanceId, cmd, { timeout: 18000 });
+            const out = result.stdout || '';
+            const marker = out.lastIndexOf('__HTTP_STATUS__');
+            if (marker === -1) return null; // connection refused / Metro restarting — transient, ignore
+            const status = out.slice(marker + '__HTTP_STATUS__'.length).trim();
+            if (status !== '500') return null; // 200 = healthy, 404 = not an Expo app
+            const body = out.slice(0, marker);
+            let description = '';
+            try {
+                const parsed = JSON.parse(body) as { type?: string; message?: string; errors?: Array<{ description?: string }> };
+                description = parsed.errors?.[0]?.description || parsed.message || body;
+            } catch {
+                description = body;
+            }
+            // Strip ANSI colour codes so the agent gets clean text
+            description = description.replace(/\x1b\[[0-9;]*m/g, '').trim();
+            if (!description) return null;
+            const firstLine = description.split('\n')[0];
+            this.logger.warn('Expo bundle compile error detected', { instanceId, error: firstLine });
+            return {
+                timestamp: new Date().toISOString(),
+                level: 60, // fatal — a non-compiling bundle is a blank screen for the user
+                message: `Web bundle failed to compile (Metro returned 500, the preview is a blank white screen until this is fixed): ${firstLine}`,
+                rawOutput: `Metro TransformError on the web bundle:\n${description}`,
+            };
+        } catch (error) {
+            this.logger.warn('probeExpoBundleError failed (non-fatal)', { instanceId, error: error instanceof Error ? error.message : 'unknown' });
+            return null;
+        }
+    }
+
     async getInstanceErrors(instanceId: string, clear?: boolean): Promise<RuntimeErrorResponse> {
         try {
             let errors: RuntimeError[] = [];
+            // Surface Metro compile errors that produce a silent white screen (see probeExpoBundleError).
+            let bundleError: RuntimeError | null = null;
+            try {
+                const meta = await this.getInstanceMetadata(instanceId);
+                bundleError = await this.probeExpoBundleError(instanceId, meta.allocatedPort);
+            } catch { /* non-fatal */ }
             const cmd = `timeout 3s monitor-cli errors list -i ${instanceId} --format json ${clear ? '--reset' : ''}`;
             const result = await this.executeCommand(instanceId, cmd, { timeout: 15000 });
             
@@ -1501,6 +1688,8 @@ export class SandboxSdkClient extends BaseSandboxService {
                 if (response.success && response.errors) {
                     // Convert StoredError objects to RuntimeError format
                     errors = response.errors;
+                    // Prepend the bundle compile error (the silent white-screen cause) so the agent fixes it first.
+                    if (bundleError) errors = [bundleError, ...errors];
 
                     return {
                         success: true,
@@ -1508,14 +1697,15 @@ export class SandboxSdkClient extends BaseSandboxService {
                         hasErrors: errors.length > 0
                     };
                 }
-            } 
+            }
             this.logger.error(`Failed to get errors for instance ${instanceId}: STDERR: ${result.stderr}, STDOUT: ${result.stdout}`);
 
+            // Even when monitor-cli fails, a detected bundle compile error must still reach the agent.
             return {
-                success: false,
-                errors: [],
-                hasErrors: false,
-                error: `Failed to get errors for instance ${instanceId}: STDERR: ${result.stderr}, STDOUT: ${result.stdout}`
+                success: bundleError ? true : false,
+                errors: bundleError ? [bundleError] : [],
+                hasErrors: !!bundleError,
+                error: bundleError ? undefined : `Failed to get errors for instance ${instanceId}: STDERR: ${result.stderr}, STDOUT: ${result.stdout}`
             };
         } catch (error) {
             this.logger.error('getInstanceErrors', error, { instanceId });

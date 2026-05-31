@@ -100,6 +100,10 @@ export const TemplateInfoSchema = z.object({
     }),
     renderMode: z.enum(['sandbox', 'browser']).optional(),
     slideDirectory: z.string().optional(),
+    // Authoritative app category, self-declared by the template (definitions/*.yaml).
+    // Drives stack-constraint filtering and the preview display mode. Optional: legacy
+    // templates fall back to deriveAppType(name).
+    appType: z.enum(['mobile', 'website', 'webapp']).optional(),
     disabled: z.boolean(),
 })
 export type TemplateInfo = z.infer<typeof TemplateInfoSchema>

@@ -53,6 +53,83 @@ function getStripe(env: Env): Stripe {
     });
 }
 
+export interface AdminBillingSubscription {
+    id: string;
+    status: string;
+    amount: number | null;
+    currency: string | null;
+    interval: string | null;
+    currentPeriodEnd: number | null;
+    cancelAtPeriodEnd: boolean;
+}
+
+export interface AdminBillingPayment {
+    id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    description: string | null;
+    created: number;
+}
+
+export interface AdminBillingSummary {
+    subscription: AdminBillingSubscription | null;
+    payments: AdminBillingPayment[];
+    error: string | null;
+}
+
+/**
+ * Best-effort billing summary for the admin user-detail view: the live Stripe
+ * subscription (plan/amount/renewal) and the user's one-time payment history
+ * (there is no local payments table — Stripe is the source of truth). Never
+ * throws; on any Stripe error it returns what it has plus an `error` note so the
+ * admin view still renders the rest of the user's profile.
+ */
+export async function getAdminBillingSummary(
+    env: Env,
+    customerId: string | null | undefined,
+    subscriptionId: string | null | undefined,
+): Promise<AdminBillingSummary> {
+    if (!customerId) {
+        return { subscription: null, payments: [], error: null };
+    }
+    const stripe = getStripe(env);
+    let subscription: AdminBillingSubscription | null = null;
+    const payments: AdminBillingPayment[] = [];
+    let error: string | null = null;
+    try {
+        if (subscriptionId) {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const item = sub.items?.data?.[0];
+            const price = item?.price;
+            subscription = {
+                id: sub.id,
+                status: sub.status,
+                amount: price?.unit_amount ?? null,
+                currency: price?.currency ?? null,
+                interval: price?.recurring?.interval ?? null,
+                // current_period_end moved to the subscription item in recent Stripe API versions.
+                currentPeriodEnd: item?.current_period_end ?? null,
+                cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+            };
+        }
+        const charges = await stripe.charges.list({ customer: customerId, limit: 20 });
+        for (const ch of charges.data) {
+            payments.push({
+                id: ch.id,
+                amount: ch.amount,
+                currency: ch.currency,
+                status: ch.status,
+                description: ch.description ?? null,
+                created: ch.created,
+            });
+        }
+    } catch (e) {
+        error = e instanceof Error ? e.message : 'Failed to load Stripe billing';
+    }
+    return { subscription, payments, error };
+}
+
 function getAppUrl(env: Env): string {
     return `https://app.${env.CUSTOM_PREVIEW_DOMAIN}`;
 }

@@ -12,6 +12,7 @@ import { BaseSandboxService } from 'worker/services/sandbox/BaseSandboxService';
 import { AgentState, CurrentDevState } from './core/state';
 import { CodeGeneratorAgent } from './core/codingAgent';
 import { BehaviorType, ProjectType } from './core/types';
+import { getAppType, type AppType } from 'shared/constants/templates';
 
 type AgentStubProps = {
     behaviorType?: BehaviorType;
@@ -81,6 +82,7 @@ type TemplateQueryArgs = {
     images: ImageAttachment[] | undefined;
     logger: StructuredLogger;
     selectedTemplate?: string;
+    appType?: AppType;
 };
 
 async function handleGeneralType(): Promise<TemplateQueryResult> {
@@ -134,11 +136,25 @@ async function handleUserSelectedTemplate(
 }
 
 async function handleAITemplateSelection(args: Omit<TemplateQueryArgs, 'selectedTemplate'>): Promise<TemplateQueryResult> {
-    const { env, inferenceContext, query, projectType, images, logger } = args;
+    const { env, inferenceContext, query, projectType, images, logger, appType } = args;
 
     const templatesResponse = await SandboxSdkClient.listTemplates();
     if (!templatesResponse?.success) {
         throw new Error(`Failed to fetch templates from sandbox service, ${templatesResponse.error}`);
+    }
+
+    // Constrain the AI to the stack the user explicitly picked (mobile/website/webapp) so a
+    // "web app" prompt can never grab a mobile/Expo template, and vice-versa. If filtering would
+    // leave nothing (mis-tagged template list), fall back to the full set rather than break.
+    let candidateTemplates = templatesResponse.templates;
+    if (appType) {
+        const filtered = candidateTemplates.filter(t => getAppType(t) === appType);
+        if (filtered.length > 0) {
+            candidateTemplates = filtered;
+            logger.info('Constrained template candidates to appType', { appType, count: filtered.length });
+        } else {
+            logger.warn('No templates matched appType; using full set', { appType });
+        }
     }
 
     const aiSelection = await selectTemplate({
@@ -146,7 +162,7 @@ async function handleAITemplateSelection(args: Omit<TemplateQueryArgs, 'selected
         inferenceContext,
         query,
         projectType,
-        availableTemplates: templatesResponse.templates,
+        availableTemplates: candidateTemplates,
         images,
     });
 
@@ -185,6 +201,7 @@ export async function getTemplateForQuery(
     images: ImageAttachment[] | undefined,
     logger: StructuredLogger,
     selectedTemplate?: string,
+    appType?: AppType,
 ): Promise<TemplateQueryResult> {
     // Flow 1: General type - start from scratch
     if (projectType === 'general') {
@@ -196,6 +213,6 @@ export async function getTemplateForQuery(
         return handleUserSelectedTemplate(selectedTemplate, logger);
     }
 
-    // Flow 3: AI template selection
-    return handleAITemplateSelection({ env, inferenceContext, query, projectType, images, logger });
+    // Flow 3: AI template selection (constrained to appType when the user picked a stack)
+    return handleAITemplateSelection({ env, inferenceContext, query, projectType, images, logger, appType });
 }

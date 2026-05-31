@@ -11,6 +11,7 @@ import {
     MAX_AGENT_QUERY_LENGTH,
 } from './types';
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
+import { isExpoTemplate, getAppType } from 'shared/constants/templates';
 import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
 import { AppService, ModelConfigService } from '../../../database';
@@ -37,6 +38,8 @@ const resolveBehaviorType = (body: CodeGenArgs): BehaviorType => {
     if (body.behaviorType) return body.behaviorType;
     const pt = body.projectType;
     if (pt === 'presentation' || pt === 'workflow' || pt === 'general') return 'agentic';
+    // Expo apps use agentic: generate all files in one pass, deploy once (no per-phase sandbox waits)
+    if (isExpoTemplate(body.selectedTemplate)) return 'agentic';
     // default (including 'app' and when projectType omitted)
     return 'phasic';
 };
@@ -198,7 +201,7 @@ export class CodingAgentController extends BaseController {
             });
             this.logger.info(`Creating project of type: ${projectType}`);
 
-            const { templateDetails, selection, projectType: finalProjectType } = await getTemplateForQuery(env, inferenceContext, query, projectType, body.images, this.logger, body.selectedTemplate);
+            const { templateDetails, selection, projectType: finalProjectType } = await getTemplateForQuery(env, inferenceContext, query, projectType, body.images, this.logger, body.selectedTemplate, body.appType);
 
             const websocketUrl = `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/api/agent/${agentId}/ws`;
             const httpStatusUrl = `${url.origin}/api/agent/${agentId}`;
@@ -212,6 +215,10 @@ export class CodingAgentController extends BaseController {
                 userId: user.id,
                 title: query.substring(0, 100),
                 originalPrompt: query,
+                // Authoritative app type: the stack the user picked, else the template's
+                // self-declared appType (falling back to the name heuristic for legacy
+                // templates). upsertApp (agent) never overwrites this field.
+                appType: body.appType ?? getAppType(templateDetails),
                 visibility: 'private',
                 status: 'generating',
                 sessionToken: null,

@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { MoreVertical, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { MoreVertical, Trash2, Settings2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -31,6 +33,7 @@ export function AppActionsDropdown({
   size = 'icon',
   showOnHover = false
 }: AppActionsDropdownProps) {
+  const navigate = useNavigate();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -76,6 +79,19 @@ export function AppActionsDropdown({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              navigate(`/app/${appId}`);
+            }}
+          >
+            <Settings2 className="h-4 w-4 mr-2" />
+            App settings
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
           <DropdownMenuItem
             onClick={(e) => {
               e.stopPropagation();

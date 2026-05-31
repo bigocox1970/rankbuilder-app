@@ -260,6 +260,18 @@ export async function handleWebSocketMessage(
                 logger.info('Clearing conversation history');
                 agent.clearConversation();
                 break;
+            case WebSocketMessageRequests.RESTORE_CHECKPOINT: {
+                const checkpointId = (parsedMessage as { checkpointId?: string }).checkpointId;
+                if (!checkpointId) {
+                    sendError(connection, 'restore_checkpoint requires a checkpointId');
+                    break;
+                }
+                logger.info('Restoring checkpoint', { checkpointId });
+                agent.restoreCheckpoint(checkpointId).catch((error) => {
+                    logger.error('Error restoring checkpoint:', error);
+                });
+                break;
+            }
             case WebSocketMessageRequests.VAULT_UNLOCKED:
                 agent.handleVaultUnlocked();
                 break;

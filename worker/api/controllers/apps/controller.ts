@@ -14,6 +14,7 @@ import {
 } from './types';
 // import { withCache } from '../../../services/cache/wrapper';
 import { createLogger } from '../../../logger';
+import { getAgentStub } from '../../../agents';
 
 export class AppController extends BaseController {
     static logger = createLogger('AppController');
@@ -232,7 +233,7 @@ export class AppController extends BaseController {
     }
 
     // Delete app
-    static async deleteApp(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AppDeleteData>>> {
+    static async deleteApp(_request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AppDeleteData>>> {
         try {
             const user = context.user!;
 
@@ -249,6 +250,20 @@ export class AppController extends BaseController {
                                  result.error?.includes('only delete your own apps') ? 403 : 500;
                 return AppController.createErrorResponse<AppDeleteData>(result.error || 'Failed to delete app', statusCode);
             }
+
+            // Best-effort: tear down the app's sandbox instance so it doesn't leak as
+            // an orphan holding an instance slot until Cloudflare auto-recycles it.
+            // Runs in the background via waitUntil so delete still returns immediately.
+            ctx.waitUntil(
+                (async () => {
+                    try {
+                        const agentStub = await getAgentStub(env, appId);
+                        await agentStub.shutdownSandbox();
+                    } catch (error) {
+                        this.logger.warn('Failed to shut down sandbox for deleted app', { appId, error });
+                    }
+                })()
+            );
 
             const responseData: AppDeleteData = {
                 success: true,

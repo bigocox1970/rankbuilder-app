@@ -15,6 +15,8 @@ import {
 	CloudOff,
 	Loader2,
 	Github,
+	Smartphone,
+	LayoutGrid,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -25,6 +27,14 @@ import type {
 } from '@/api-types';
 import { AppActionsDropdown } from './AppActionsDropdown';
 import type { LucideIcon } from 'lucide-react';
+import { APP_TYPE_LABEL, type AppType } from 'shared/constants/templates';
+
+// App-type badge shown on each card (mobile / website / web app)
+const APP_TYPE_BADGE: Record<AppType, { icon: LucideIcon }> = {
+	mobile: { icon: Smartphone },
+	website: { icon: Globe },
+	webapp: { icon: LayoutGrid },
+};
 
 // Union type for both app types - make updatedAtFormatted optional
 type AppCardData =
@@ -559,6 +569,17 @@ export const AppCard = React.memo<AppCardProps>(
 									className="h-6 w-6 text-text-tertiary hover:text-text-primary bg-bg-3/90 backdrop-blur-sm hover:bg-bg-3"
 									size="sm"
 								/>
+							</div>
+						)}
+
+						{/* App-type badge (mobile / website / web app) */}
+						{app.appType && APP_TYPE_BADGE[app.appType as AppType] && (
+							<div className="absolute top-2 left-2 flex items-center gap-1 bg-bg-3/90 dark:bg-bg-4/90 backdrop-blur-sm rounded-md px-1.5 py-0.5 text-[10px] font-medium text-text-primary/80">
+								{(() => {
+									const Icon = APP_TYPE_BADGE[app.appType as AppType].icon;
+									return <Icon className="h-3 w-3" />;
+								})()}
+								<span>{APP_TYPE_LABEL[app.appType as AppType]}</span>
 							</div>
 						)}
 

@@ -1,5 +1,5 @@
 import type { CodeReviewOutputType, FileConceptType, FileOutputType } from "../agents/schemas";
-import type { AgentState } from "../agents/core/state";
+import type { AgentState, ProjectCheckpoint } from "../agents/core/state";
 import type { ConversationState } from "../agents/inferutils/common";
 import type { CodeIssue, RuntimeError, StaticAnalysisResponse, TemplateDetails } from "../services/sandbox/sandboxTypes";
 import type { CodeFixResult } from "../services/code-fixer";
@@ -159,6 +159,14 @@ type RuntimeErrorFoundMessage = {
 	type: 'runtime_error_found';
 	errors: RuntimeError[];
 	count: number;
+};
+
+// Lightweight "the model is working" signal for otherwise-silent windows (initial
+// project setup, blueprint/phase time-to-first-token). Carries a human label so the
+// UI can show what's happening instead of a frozen-looking blank.
+type GenerationProgressMessage = {
+	type: 'generation_progress';
+	message: string;
 };
 
 export type CodeFixEdits = {
@@ -462,6 +470,38 @@ type ServerLogMessage = {
 	source?: string;
 };
 
+type ExpoTunnelUrlMessage = {
+    type: 'expo_tunnel_url';
+    tunnelUrl: string;
+};
+
+// ========== CHECKPOINT / RESTORE MESSAGES ==========
+
+/** Server → client: the current list of restore points changed. */
+type CheckpointsUpdatedMessage = {
+    type: 'checkpoints_updated';
+    checkpoints: ProjectCheckpoint[];
+};
+
+/** Server → client: a restore has begun. */
+type CheckpointRestoringMessage = {
+    type: 'checkpoint_restoring';
+    checkpointId: string;
+};
+
+/** Server → client: restore finished; preview redeployed. */
+type CheckpointRestoredMessage = {
+    type: 'checkpoint_restored';
+    checkpointId: string;
+    previewURL?: string;
+};
+
+/** Client → server: roll the project back to a checkpoint. */
+type RestoreCheckpointMessage = {
+    type: 'restore_checkpoint';
+    checkpointId: string;
+};
+
 // ========== VAULT MESSAGES ==========
 
 /** Sent by client when vault is unlocked via dedicated vault WebSocket */
@@ -597,6 +637,7 @@ export type WebSocketMessage =
 	| TemplateUpdatedMessage
 	| ConversationStateMessage
 	| GenerationStartedMessage
+	| GenerationProgressMessage
 	| FileGeneratingMessage
 	| FileRegeneratingMessage
 	| FileChunkGeneratedMessage
@@ -655,6 +696,11 @@ export type WebSocketMessage =
 	| ImagesGeneratedMessage
     | ImageGeneratingMessage
 	| VaultRequiredMessage
+    | ExpoTunnelUrlMessage
+    | CheckpointsUpdatedMessage
+    | CheckpointRestoringMessage
+    | CheckpointRestoredMessage
+    | RestoreCheckpointMessage
 	| PongMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)

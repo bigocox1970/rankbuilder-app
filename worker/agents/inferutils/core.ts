@@ -653,11 +653,16 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             schema && schemaName && !format
                 ? { response_format: zodResponseFormat(schema, schemaName) }
                 : {};
-        const extraBody = modelName.includes('claude')? {
+        // Claude "extended thinking" adds a long silent reasoning phase before any
+        // output — great for one-shot planning (blueprint) but brutal latency + cost
+        // when applied to the high-frequency edit loop (every regenerate_file would
+        // pause for thousands of thinking tokens). Only enable it when a step
+        // explicitly asks for 'high' effort; everything else gets fast, direct output.
+        const extraBody = modelName.includes('claude') && reasoning_effort === 'high' ? {
                     extra_body: {
                         thinking: {
                             type: 'enabled',
-                            budget_tokens: claude_thinking_budget_tokens[reasoning_effort ?? 'medium'],
+                            budget_tokens: claude_thinking_budget_tokens.high,
                         },
                     },
                 }

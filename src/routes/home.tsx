@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { ProjectModeSelector, type ProjectModeOption } from '../components/project-mode-selector';
 import { MAX_AGENT_QUERY_LENGTH, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type SiteContentPlan } from '@/api-types';
+import type { AppType } from 'shared/constants/templates';
 import { useFeature } from '@/features';
 import { useAuthGuard } from '../hooks/useAuthGuard';
 import { usePaginatedApps } from '@/hooks/use-paginated-apps';
@@ -24,9 +25,21 @@ import { SitePlanner } from '@/components/SitePlanner';
 
 const SITE_PLAN_SESSION_KEY = 'rb_site_plan';
 
-type StackType = 'website' | 'app';
+type StackType = 'website' | 'app' | 'expo';
 
 const WEBSITE_TEMPLATE = 'tradesperson-sp';
+// Expo picker boots the blank `expo-app` scaffold (bare Expo Router shell) so the
+// agent builds from a minimal base with no heavy prebuilt code to corrupt.
+const EXPO_TEMPLATE = 'expo-app';
+
+// The stack the user picks is authoritative: it constrains which templates the
+// AI may choose from (so a "Web app" prompt can never grab a mobile/Expo template)
+// and is persisted on the app so badges/preview chrome stay consistent.
+const STACK_APP_TYPE: Record<StackType, AppType> = {
+	website: 'website',
+	app: 'webapp',
+	expo: 'mobile',
+};
 
 export default function Home() {
 	const navigate = useNavigate();
@@ -158,15 +171,19 @@ export default function Home() {
 		const encodedQuery = encodeURIComponent(q);
 		const encodedMode = encodeURIComponent(mode);
 		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
+		const appTypeParam = `&appType=${STACK_APP_TYPE[stack]}`;
+		if (stack === 'expo') {
+			return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}&selectedTemplate=${EXPO_TEMPLATE}${appTypeParam}${imageParam}`;
+		}
 		// App flow must match vanilla VibeSDK exactly — no website-flow params bleed through.
 		if (stack !== 'website') {
-			return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}`;
+			return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${appTypeParam}${imageParam}`;
 		}
 		const templateParam = `&selectedTemplate=${WEBSITE_TEMPLATE}`;
 		const imageGenEnabled = (() => { try { return localStorage.getItem('imageGeneration.enabled') !== 'false'; } catch { return true; } })();
 		const imageGenParam = imageGenEnabled ? '' : '&imageGeneration=0';
 		const keywordsParam = keywords.length > 0 ? `&keywords=${encodeURIComponent(keywords.join(','))}` : '';
-		return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${imageGenParam}${keywordsParam}`;
+		return `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${imageParam}${templateParam}${appTypeParam}${imageGenParam}${keywordsParam}`;
 	}, [images, stack, keywords]);
 
 	const navigateWithPlan = useCallback((q: string, mode: ProjectType, plan: SiteContentPlan) => {
@@ -299,13 +316,25 @@ export default function Home() {
 								<span className="text-sm font-medium">App</span>
 								<span className="text-xs mt-0.5 opacity-70">React · Interactive tools &amp; dashboards</span>
 							</button>
+							<button
+								type="button"
+								onClick={() => setStack('expo')}
+								className={`flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+									stack === 'expo'
+										? 'border-accent bg-accent/10 text-text-primary'
+										: 'border-text-primary/10 bg-bg-2/50 text-text-primary/50 hover:border-text-primary/20 hover:text-text-primary/70'
+								}`}
+							>
+								<span className="text-sm font-medium">Mobile</span>
+								<span className="text-xs mt-0.5 opacity-70">Expo · iOS &amp; Android</span>
+							</button>
 						</div>
 
 						<PromptBox
 							value={query}
 							onChange={setQuery}
 							onSubmit={() => handleCreateApp(query, projectMode)}
-							placeholder={stack === 'website' ? 'Website for a ' : 'Create a '}
+							placeholder={stack === 'website' ? 'Website for a ' : stack === 'expo' ? 'Build an iOS/Android app that ' : 'Create a '}
 							animatedPlaceholder
 							placeholderPhrases={placeholderPhrases}
 							images={images}

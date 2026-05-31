@@ -147,8 +147,9 @@ export const apps = sqliteTable('apps', {
     originalPrompt: text('original_prompt').notNull(), // The user's original request
     finalPrompt: text('final_prompt'), // The processed/refined prompt used for generation
     
-    // Generated Content  
+    // Generated Content
     framework: text('framework'), // 'react', 'vue', 'svelte', etc.
+    appType: text('app_type', { enum: ['mobile', 'website', 'webapp'] }), // Stack the user picked (drives badges/preview); null for legacy rows
     
     // Ownership and Context
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }), // Null for anonymous

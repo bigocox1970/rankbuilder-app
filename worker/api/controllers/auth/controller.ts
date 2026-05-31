@@ -135,7 +135,62 @@ export class AuthController extends BaseController {
             return AuthController.handleError(error, 'login user');
         }
     }
-    
+
+    /**
+     * POST /api/auth/impersonate
+     * Redeem a one-time admin-issued impersonation token (see AdminController.createMagicLink)
+     * and establish a session as the target user. Public route — authorization is the
+     * possession of the single-use, short-lived token, which is consumed on first use.
+     */
+    static async impersonate(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const bodyResult = await AuthController.parseJsonBody<{ token?: string }>(request);
+            if (!bodyResult.success) {
+                return bodyResult.response!;
+            }
+            const token = bodyResult.data?.token?.trim();
+            if (!token) {
+                return AuthController.createErrorResponse('Missing token', 400);
+            }
+
+            const tokenHash = await sha256Hash(token);
+            const kvKey = `impersonation_token:${tokenHash}`;
+            const raw = await env.VibecoderStore.get(kvKey);
+            if (!raw) {
+                return AuthController.createErrorResponse('This link is invalid or has expired', 400);
+            }
+            // One-time use: consume immediately so a replay can't reuse it.
+            await env.VibecoderStore.delete(kvKey);
+
+            const { userId } = JSON.parse(raw) as { userId: string };
+            const userService = new UserService(env);
+            const user = await userService.findUser({ id: userId });
+            if (!user) {
+                return AuthController.createErrorResponse('Target user no longer exists', 404);
+            }
+
+            const sessionService = new SessionService(env);
+            const { accessToken, session } = await sessionService.createSession(userId, request);
+
+            const response = AuthController.createSuccessResponse(
+                formatAuthResponse(mapUserResponse(user), session.sessionId, session.expiresAt),
+            );
+            setSecureAuthCookies(response, {
+                accessToken,
+                accessTokenExpiry: SessionService.config.sessionTTL,
+            });
+            if (CsrfService.defaults.rotateOnAuth) {
+                CsrfService.rotateToken(response);
+            }
+            return response;
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'impersonate user');
+        }
+    }
+
     /**
      * Logout current user
      * POST /api/auth/logout

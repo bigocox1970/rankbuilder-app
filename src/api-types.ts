@@ -41,6 +41,9 @@ export type {
   GitCloneTokenData
 } from 'worker/api/controllers/appView/types';
 
+// Checkpoint / restore-point type (one per user prompt)
+export type { ProjectCheckpoint } from 'worker/agents/core/state';
+
 // User-related API Types
 export type {
   UserAppsData,
@@ -316,6 +319,13 @@ export type {
     AdminUserEntry,
     AdminUsersData,
     AdminUserActionData,
+    AdminGrantCreditsData,
+    AdminUserDetailData,
+    AdminUserAppEntry,
+    AdminUserUsageEntry,
+    AdminBillingSubscriptionData,
+    AdminBillingPaymentData,
+    AdminMagicLinkData,
     AdminKvStatusData,
     AdminGatewayCostData,
 } from 'worker/api/controllers/admin/types';

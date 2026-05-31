@@ -121,6 +121,11 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             }
         })();
 
+        // Surface activity during blueprint time-to-first-token (reasoning think-time
+        // before the first streamed chunk — the "nothing's happening" pause).
+        this.broadcast(WebSocketMessageResponses.GENERATION_PROGRESS, {
+            message: 'Planning your app — mapping out screens and features…',
+        });
         const blueprint = await generateBlueprint({
             env: this.env,
             inferenceContext,

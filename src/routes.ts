@@ -5,6 +5,7 @@ import App from './App';
 import Home from './routes/home';
 import Chat from './routes/chat/chat';
 import ResetPassword from './routes/reset-password/index';
+import Impersonate from './routes/impersonate/index';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
 import AdminPage from './routes/admin/index';
@@ -53,6 +54,10 @@ const routes = [
 			{
 				path: 'reset-password',
 				Component: ResetPassword,
+			},
+			{
+				path: 'impersonate',
+				Component: Impersonate,
 			},
 		],
 	},

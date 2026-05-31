@@ -3,11 +3,14 @@ import type { ViewportMode } from '@/features/core/types';
 import { WebSocket } from 'partysocket';
 import { MonacoEditor } from '../../../components/monaco-editor/monaco-editor';
 import { motion } from 'framer-motion';
-import { RefreshCw, ChevronLeft, MousePointer2, PenLine } from 'lucide-react';
+import { RefreshCw, ChevronLeft, MousePointer2, PenLine, ExternalLink } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Blueprint } from './blueprint';
 import { FileExplorer } from './file-explorer';
 import { PreviewIframe } from './preview-iframe';
+import { ExpoPhoneFrame } from '@/components/expo/ExpoPhoneFrame';
+import { getAppType } from 'shared/constants/templates';
+import { ExpoTestPanel } from '@/components/expo/ExpoTestPanel';
 import { MarkdownDocsPreview } from './markdown-docs-preview';
 import { SeoPanel } from './seo-panel';
 import { SocialPreviewPanel } from './social-preview-panel';
@@ -36,6 +39,7 @@ interface MainContentPanelProps {
 	// Preview state
 	projectType: ProjectType;
 	previewUrl?: string;
+	expoTunnelUrl?: string;
 	previewAvailable: boolean;
 	showTooltip: boolean;
 	shouldRefreshPreview: boolean;
@@ -95,6 +99,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		contentDetection,
 		projectType,
 		previewUrl,
+		expoTunnelUrl,
 		previewAvailable,
 		showTooltip,
 		shouldRefreshPreview,
@@ -137,6 +142,15 @@ export function MainContentPanel(props: MainContentPanelProps) {
 	useEffect(() => {
 		if (view !== 'preview') setViewportMode('desktop');
 	}, [view]);
+
+	// Expo apps are mobile apps — display them in the iPhone frame. Drive this off the
+	// authoritative appType the template self-declares (and that the user picked), not the
+	// template-name heuristic, so it can't fall through to the web iframe. Keep the viewport
+	// indicator on 'mobile' for consistency with the toggle buttons.
+	const isExpo = getAppType(templateDetails) === 'mobile';
+	useEffect(() => {
+		if (isExpo && view === 'preview') setViewportMode('mobile');
+	}, [isExpo, view]);
 
 	// Element selector state — only active for browser-mode (HTML) templates
 	type SelectorMode = 'off' | 'select' | 'edit';
@@ -288,8 +302,15 @@ export function MainContentPanel(props: MainContentPanelProps) {
 			/>
 		);
 
-		// Wrap content in viewport stage when not in desktop mode
-		const viewportContent = viewportMode === 'desktop' ? previewContent : (
+		// Expo (mobile) apps ALWAYS render inside the iPhone frame + "Test on your phone" QR
+		// panel — independent of viewportMode, so the display can never fall through to the
+		// generic web iframe. Non-Expo apps keep the desktop/tablet/mobile viewport stage.
+		const viewportContent = isExpo ? (
+			<div className="flex-1 flex items-center justify-center bg-bg-2 overflow-hidden p-6 gap-2">
+				<ExpoPhoneFrame>{previewContent}</ExpoPhoneFrame>
+				<ExpoTestPanel previewUrl={previewUrl} expoTunnelUrl={expoTunnelUrl} />
+			</div>
+		) : viewportMode === 'desktop' ? previewContent : (
 			<div className="flex-1 flex justify-center bg-bg-2 overflow-hidden">
 				<div
 					className="flex flex-col overflow-hidden border-x border-border-primary shadow-inner"
@@ -341,9 +362,11 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				onGitHubExportClick={githubExport.openModal}
 				previewRef={previewRef}
 				previewUrl={previewUrl}
+				expoTunnelUrl={expoTunnelUrl}
 				onManualRefresh={onManualRefresh}
 				viewportMode={viewportMode}
 				onViewportChange={setViewportMode}
+				templateName={templateDetails?.name}
 			/>
 		);
 
@@ -366,9 +389,20 @@ export function MainContentPanel(props: MainContentPanelProps) {
 			</div>
 		) : null;
 
+		const openInBrowserButton = previewUrl ? (
+			<button
+				onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+				className="p-1.5 mr-1 rounded-md border border-border-primary text-text-primary/50 hover:text-text-primary hover:bg-bg-3 transition-colors"
+				title="Open preview in a new browser tab (to view console logs)"
+			>
+				<ExternalLink className="size-3.5" />
+			</button>
+		) : null;
+
 		return renderViewWithHeader(
 			viewportContent,
 			<div className="flex items-center">
+				{openInBrowserButton}
 				{selectorButtons}
 				{headerActions}
 			</div>

@@ -98,6 +98,7 @@ export abstract class BaseSandboxService {
                     projectType: t.projectType || 'app',
                     renderMode: t.renderMode,
                     slideDirectory: t.slideDirectory,
+                    appType: t.appType,
                 })),
                 count: filteredTemplates.length
             };
@@ -194,6 +195,7 @@ export abstract class BaseSandboxService {
                 frameworks: catalogInfo?.frameworks || [],
                 renderMode: catalogInfo?.renderMode,
                 slideDirectory: catalogInfo?.slideDirectory,
+                appType: catalogInfo?.appType,
             };
 
             templateDetailsCache[templateName] = { details: templateDetails, loadedAt: Date.now() };
@@ -246,7 +248,16 @@ export abstract class BaseSandboxService {
      * Returns: { success: boolean, message?: string, error?: string }
      */
     abstract shutdownInstance(instanceId: string): Promise<ShutdownResponse>;
-  
+
+    /**
+     * Restart the dev server with its bundler cache cleared, reusing the same port.
+     * Needed for Expo/Metro, which (without Watchman) misses files created in new
+     * directories and caches the resolve failure. Best-effort: returns false on
+     * failure rather than throwing. `initCommand` is the dev command to relaunch
+     * (callers pass the cache-clearing variant, e.g. `expo start --web --clear ...`).
+     */
+    abstract restartDevServer(instanceId: string, initCommand: string): Promise<boolean>;
+
     // ==========================================
     // FILE OPERATIONS (Required)
     // ==========================================

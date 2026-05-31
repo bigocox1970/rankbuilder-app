@@ -140,6 +140,15 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
         return this.makeRequest(`/instances/${instanceId}/status`, 'GET', BootstrapStatusResponseSchema);
     }
     /**
+     * Restart the dev server with cleared cache. The remote runner protocol has no
+     * endpoint for this, so it's a no-op here (the in-container SandboxSdkClient is
+     * what production uses and where the Expo/Metro cache restart actually runs).
+     */
+    async restartDevServer(_instanceId: string, _initCommand: string): Promise<boolean> {
+        return false;
+    }
+
+    /**
      * Write files to a runner instance.
      */
     async writeFiles(instanceId: string, files: WriteFilesRequest['files'], commitMessage?: string): Promise<WriteFilesResponse> {

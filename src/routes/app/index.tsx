@@ -555,7 +555,7 @@ export default function AppView() {
 
 								<div className="flex items-center gap-2 border rounded-xl">
 									<Badge variant={'default'}>
-										<Globe />
+										{app.visibility === 'public' ? <Globe /> : <Lock />}
 										{capitalizeFirstLetter(app.visibility)}
 									</Badge>
 									{isOwner && (
@@ -569,7 +569,7 @@ export default function AppView() {
 										>
 											{isUpdatingVisibility ? (
 												<Loader2 className="h-3 w-3 animate-spin text-text-primary" />
-											) : app.visibility === 'private' ? (
+											) : app.visibility === 'public' ? (
 												<Unlock className="h-3 w-3 text-text-primary" />
 											) : (
 												<Lock className="h-3 w-3 text-text-primary" />

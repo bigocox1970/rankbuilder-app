@@ -167,6 +167,44 @@ const MODELS_MASTER = {
         }
     },
 
+    // --- Claude via OpenRouter (uses OPENROUTER_API_KEY, billed on OpenRouter) ---
+    // directOverride + 'openrouter/' prefix → calls openrouter.ai directly and sends
+    // the bare slug 'anthropic/claude-sonnet-4.5'. This is the coding model the
+    // reliable AI app builders use; routes here when GOOGLE keys are the only direct ones.
+    OPENROUTER_CLAUDE_SONNET_4_5: {
+        id: 'openrouter/anthropic/claude-sonnet-4.5',
+        config: {
+            name: 'Claude Sonnet 4.5 (OpenRouter)',
+            size: ModelSize.LARGE,
+            provider: 'openrouter',
+            creditCost: 12,
+            contextSize: 200000,
+            directOverride: true,
+        }
+    },
+    OPENROUTER_CLAUDE_HAIKU_4_5: {
+        id: 'openrouter/anthropic/claude-haiku-4.5',
+        config: {
+            name: 'Claude Haiku 4.5 (OpenRouter)',
+            size: ModelSize.REGULAR,
+            provider: 'openrouter',
+            creditCost: 4, // ~3x cheaper than Sonnet; fast — for the high-frequency edit loop
+            contextSize: 200000,
+            directOverride: true,
+        }
+    },
+    OPENROUTER_DEEPSEEK_V4_PRO: {
+        id: 'openrouter/deepseek/deepseek-v4-pro',
+        config: {
+            name: 'DeepSeek V4 Pro (OpenRouter)',
+            size: ModelSize.LARGE,
+            provider: 'openrouter',
+            creditCost: 2, // ~$0.44/M in, $0.87/M out — ~10x cheaper than Claude, near-Claude code quality
+            contextSize: 128000,
+            directOverride: true,
+        }
+    },
+
     // --- OpenAI Models ---
     OPENAI_5: {
         id: 'openai/gpt-5',
