@@ -926,6 +926,52 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     /**
+     * Extracts the Expo Go `exp://…exp.direct` URL from a running `expo start --tunnel`
+     * dev-server process. Expo prints it once the ngrok tunnel is established (can take
+     * 15-40s). Non-fatal: resolves '' on timeout/error so a failed tunnel never blocks
+     * the (already-working) web preview — the QR just falls back to the web URL.
+     */
+    private async extractExpoTunnelUrl(processId: string): Promise<string> {
+        try {
+            const logStream = await this.getSandbox().streamProcessLogs(processId);
+            return new Promise<string>((resolve) => {
+                const timeout = setTimeout(() => {
+                    this.logger.warn('Timeout waiting for Expo exp:// tunnel URL');
+                    resolve('');
+                }, 45000); // ngrok tunnel setup is slow
+
+                const processLogs = async () => {
+                    try {
+                        for await (const event of parseSSEStream<LogEvent>(logStream)) {
+                            if (!event.data) continue;
+                            // e.g. "exp://abc-xyz.anonymous.app.exp.direct" (with optional :port)
+                            const match = event.data.match(/exp:\/\/[a-z0-9._-]+\.exp\.direct(?::\d+)?/i);
+                            if (match) {
+                                clearTimeout(timeout);
+                                this.logger.info(`Found Expo tunnel URL: ${match[0]}`);
+                                resolve(match[0]);
+                                return;
+                            }
+                            // Surface ngrok failures so we can see them in the worker tail
+                            if (/ngrok|tunnel/i.test(event.data) && /error|failed|denied/i.test(event.data)) {
+                                this.logger.warn(`Expo tunnel log: ${event.data}`);
+                            }
+                        }
+                    } catch (error) {
+                        this.logger.error('Expo tunnel log stream failed', error);
+                        clearTimeout(timeout);
+                        resolve('');
+                    }
+                };
+                processLogs();
+            });
+        } catch (error) {
+            this.logger.warn('Failed to extract Expo tunnel URL', error);
+            return '';
+        }
+    }
+
+    /**
      * Updates project configuration files with the specified project name
      */
     private async updateProjectConfiguration(instanceId: string, projectName: string): Promise<void> {
@@ -977,6 +1023,7 @@ export class SandboxSdkClient extends BaseSandboxService {
         instanceId: string,
         projectName: string,
         initCommand: string,
+        isExpo: boolean,
         localEnvVars?: Record<string, string>,
     ): Promise<{previewURL: string, tunnelURL: string, processId: string, allocatedPort: number} | undefined> {
         try {
@@ -1029,7 +1076,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             await this.executeCommand(instanceId, `sed -i -E 's/("react(-dom)?"[[:space:]]*:[[:space:]]*")[~^]?18\\.3\\.2"/\\118.3.1"/g; s|"dev": "expo start --web --non-interactive"|"dev": "expo start --web --port \${PORT:-8081} --host lan"|g; s|"start": "expo start --non-interactive"|"start": "expo start --port \${PORT:-8081} --host lan"|g; s|: "CI=1 expo start|: "expo start|g' package.json 2>/dev/null || true`, { timeout: 5000 });
 
             this.logger.info('Installing dependencies', { instanceId });
-            const [installResult, tunnelURL] = await Promise.all([
+            let [installResult, tunnelURL] = await Promise.all([
                 this.executeCommand(instanceId, `bun install`, { timeout: 300000 }),
                 tunnelUrlPromise
             ]);
@@ -1044,6 +1091,14 @@ export class SandboxSdkClient extends BaseSandboxService {
                     // Start dev server on allocated port
                     const processId = await this.startDevServer(instanceId, initCommand, allocatedPort);
                     this.logger.info('Instance created successfully', { instanceId, processId, port: allocatedPort });
+
+                    // For Expo, the native Expo Go URL comes from `expo start --tunnel`'s
+                    // own output (ngrok). Extract it from the dev-server logs; '' on failure
+                    // so the web preview is never blocked.
+                    if (isExpo && !tunnelURL) {
+                        tunnelURL = await this.extractExpoTunnelUrl(processId);
+                        this.logger.info('Expo tunnel URL resolved', { instanceId, tunnelURL: tunnelURL || '(none)' });
+                    }
                         
                     // Expose the same port for preview URL
                     const previewResult = await sandbox.exposePort(allocatedPort, { hostname: getPreviewDomain(env) });
@@ -1137,7 +1192,12 @@ export class SandboxSdkClient extends BaseSandboxService {
                 };
             }
             
-            const results = await this.setupInstance(instanceId, projectName, initCommand, envVars);
+            // Detect Expo from the template's dev script so we know to extract the
+            // native exp:// tunnel URL (Expo templates run `expo start --tunnel`).
+            const pkgJsonFile = files.find(f => f.filePath === 'package.json');
+            const isExpo = pkgJsonFile ? /expo start/.test(pkgJsonFile.fileContents) : false;
+
+            const results = await this.setupInstance(instanceId, projectName, initCommand, isExpo, envVars);
             if (!results) {
                 return {
                     success: false,

@@ -1964,6 +1964,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 },
                 onCompleted: (data) => {
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, data);
+                    // Native Expo Go: if a tunnel URL is present (Expo `--tunnel`), broadcast
+                    // it so the frontend QR encodes the native exp:// URL instead of the web one.
+                    if (data.tunnelURL) {
+                        this.broadcast(WebSocketMessageResponses.EXPO_TUNNEL_URL, { tunnelUrl: data.tunnelURL });
+                    }
                 },
                 onError: (data) => {
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, data);

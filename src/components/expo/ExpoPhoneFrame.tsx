@@ -22,7 +22,7 @@ export function ExpoPhoneFrame({ children }: ExpoPhoneFrameProps) {
                 }}
             >
                 {/* Dynamic island */}
-                <div className="absolute top-[18px] left-1/2 -translate-x-1/2 z-10 h-[26px] w-[34%] bg-black rounded-full" />
+                <div className="absolute top-[14px] left-1/2 -translate-x-1/2 z-10 h-[20px] w-[20%] bg-black rounded-full" />
                 {/* Screen */}
                 <div className="relative h-full w-full overflow-hidden rounded-[2.4rem] bg-white">
                     {children}
