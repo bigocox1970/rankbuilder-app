@@ -115,7 +115,7 @@ export class SupabaseConnectController extends BaseController {
     }
 
     static async getStatus(
-        _request: Request,
+        request: Request,
         env: Env,
         _ctx: ExecutionContext,
         context: RouteContext,
@@ -124,16 +124,21 @@ export class SupabaseConnectController extends BaseController {
         if (!user) return SupabaseConnectController.createErrorResponse('Authentication required', 401);
         try {
             const svc = new SupabaseConnectionService(env);
+            // `connected` is the per-USER OAuth account (log in once). `linkedProject` is
+            // per-APP (per agentId/chatId) — a project linked to one app must NOT show as
+            // linked on others.
             const connection = await svc.getConnection(user.id);
             if (!connection) return SupabaseConnectController.createSuccessResponse({ connected: false });
+            const chatId = new URL(request.url).searchParams.get('chatId') ?? undefined;
+            const linked = chatId ? await svc.getLinkedProjectForAgent(chatId) : null;
             return SupabaseConnectController.createSuccessResponse({
                 connected: true,
-                linkedProject: connection.projectRef
+                linkedProject: linked
                     ? {
-                        projectRef: connection.projectRef,
-                        projectName: connection.projectName,
-                        projectUrl: connection.projectUrl,
-                        anonKey: connection.anonKey,
+                        projectRef: linked.projectRef,
+                        projectName: linked.projectName,
+                        projectUrl: linked.projectUrl,
+                        anonKey: linked.anonKey,
                     }
                     : null,
             });
@@ -172,8 +177,9 @@ export class SupabaseConnectController extends BaseController {
         const user = context.user;
         if (!user) return SupabaseConnectController.createErrorResponse('Authentication required', 401);
         try {
-            const body = await request.json() as { projectRef: string };
+            const body = await request.json() as { projectRef: string; chatId?: string };
             if (!body.projectRef) return SupabaseConnectController.createErrorResponse('projectRef required', 400);
+            if (!body.chatId) return SupabaseConnectController.createErrorResponse('chatId required', 400);
 
             const svc = new SupabaseConnectionService(env);
             const accessToken = await svc.getAccessToken(user.id);
@@ -184,7 +190,8 @@ export class SupabaseConnectController extends BaseController {
             if (!project) return SupabaseConnectController.createErrorResponse('Project not found', 404);
 
             const keys = await svc.getProjectApiKeys(accessToken, body.projectRef);
-            await svc.linkProject(user.id, project, keys);
+            // Link to THIS app only (per-agent), not the whole user account.
+            await svc.linkProjectForAgent(user.id, body.chatId, project, keys);
 
             return SupabaseConnectController.createSuccessResponse({
                 projectRef: project.ref,
@@ -228,7 +235,7 @@ export class SupabaseConnectController extends BaseController {
     }
 
     static async disconnect(
-        _request: Request,
+        request: Request,
         env: Env,
         _ctx: ExecutionContext,
         context: RouteContext,
@@ -237,7 +244,14 @@ export class SupabaseConnectController extends BaseController {
         if (!user) return SupabaseConnectController.createErrorResponse('Authentication required', 401);
         try {
             const svc = new SupabaseConnectionService(env);
-            await svc.disconnect(user.id);
+            const chatId = new URL(request.url).searchParams.get('chatId') ?? undefined;
+            // With chatId: unlink the project from THIS app only, leaving the user's OAuth
+            // account (and other apps' links) intact. Without: full account disconnect.
+            if (chatId) {
+                await svc.unlinkAgent(chatId);
+            } else {
+                await svc.disconnect(user.id);
+            }
             return SupabaseConnectController.createSuccessResponse({ disconnected: true });
         } catch (err) {
             SupabaseConnectController.logger.error('Error disconnecting Supabase', err);

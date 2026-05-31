@@ -1459,23 +1459,25 @@ class ApiClient {
 
 	// --- Supabase integration ---
 
-	async getSupabaseStatus(): Promise<ApiResponse<SupabaseStatusData>> {
-		return this.request<SupabaseStatusData>('/api/integrations/supabase/status');
+	async getSupabaseStatus(chatId?: string): Promise<ApiResponse<SupabaseStatusData>> {
+		const qs = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+		return this.request<SupabaseStatusData>(`/api/integrations/supabase/status${qs}`);
 	}
 
 	async listSupabaseProjects(): Promise<ApiResponse<SupabaseProjectsData>> {
 		return this.request<SupabaseProjectsData>('/api/integrations/supabase/projects');
 	}
 
-	async linkSupabaseProject(projectRef: string): Promise<ApiResponse<SupabaseLinkedProject>> {
+	async linkSupabaseProject(projectRef: string, chatId: string): Promise<ApiResponse<SupabaseLinkedProject>> {
 		return this.request<SupabaseLinkedProject>('/api/integrations/supabase/link-project', {
 			method: 'POST',
-			body: JSON.stringify({ projectRef }),
+			body: JSON.stringify({ projectRef, chatId }),
 		});
 	}
 
-	async disconnectSupabase(): Promise<ApiResponse<{ disconnected: boolean }>> {
-		return this.request<{ disconnected: boolean }>('/api/integrations/supabase/disconnect', {
+	async disconnectSupabase(chatId?: string): Promise<ApiResponse<{ disconnected: boolean }>> {
+		const qs = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+		return this.request<{ disconnected: boolean }>(`/api/integrations/supabase/disconnect${qs}`, {
 			method: 'DELETE',
 		});
 	}

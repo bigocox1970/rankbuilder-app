@@ -175,6 +175,74 @@ export class SupabaseConnectionService {
             .where(eq(schema.supabaseConnections.userId, userId));
     }
 
+    // --- Per-app (per-agent) project links ---
+    // The OAuth account/token stays per-user above; the SELECTED PROJECT is stored here
+    // keyed by agentId so each app links its own DB independently.
+
+    async linkProjectForAgent(userId: string, agentId: string, project: SupabaseProject, keys: SupabaseProjectApiKeys): Promise<void> {
+        const encryptedServiceRole = await encryptTokens(
+            { accessToken: keys.serviceRoleKey, expiresAt: 0, tokenType: 'service_role', userId },
+            this.env,
+        );
+        const existing = await this.db.select({ id: schema.supabaseProjectLinks.id })
+            .from(schema.supabaseProjectLinks)
+            .where(eq(schema.supabaseProjectLinks.agentId, agentId))
+            .get();
+        if (existing) {
+            await this.db.update(schema.supabaseProjectLinks)
+                .set({
+                    userId,
+                    projectRef: project.ref,
+                    projectName: project.name,
+                    projectUrl: keys.projectUrl,
+                    anonKey: keys.anonKey,
+                    encryptedServiceRoleKey: encryptedServiceRole,
+                    updatedAt: new Date(),
+                })
+                .where(eq(schema.supabaseProjectLinks.agentId, agentId));
+        } else {
+            await this.db.insert(schema.supabaseProjectLinks).values({
+                id: crypto.randomUUID(),
+                userId,
+                agentId,
+                projectRef: project.ref,
+                projectName: project.name,
+                projectUrl: keys.projectUrl,
+                anonKey: keys.anonKey,
+                encryptedServiceRoleKey: encryptedServiceRole,
+            });
+        }
+    }
+
+    async getLinkedProjectForAgent(agentId: string): Promise<LinkedProjectInfo | null> {
+        const row = await this.db.select()
+            .from(schema.supabaseProjectLinks)
+            .where(eq(schema.supabaseProjectLinks.agentId, agentId))
+            .get();
+        if (!row?.projectRef || !row.projectUrl || !row.anonKey) return null;
+        return {
+            projectRef: row.projectRef,
+            projectName: row.projectName ?? row.projectRef,
+            projectUrl: row.projectUrl,
+            anonKey: row.anonKey,
+        };
+    }
+
+    async getServiceRoleKeyForAgent(agentId: string): Promise<string | null> {
+        const row = await this.db.select({ key: schema.supabaseProjectLinks.encryptedServiceRoleKey })
+            .from(schema.supabaseProjectLinks)
+            .where(eq(schema.supabaseProjectLinks.agentId, agentId))
+            .get();
+        if (!row?.key) return null;
+        const decrypted = await decryptTokens(row.key, this.env);
+        return decrypted?.accessToken ?? null;
+    }
+
+    async unlinkAgent(agentId: string): Promise<void> {
+        await this.db.delete(schema.supabaseProjectLinks)
+            .where(eq(schema.supabaseProjectLinks.agentId, agentId));
+    }
+
     // --- Supabase Management API calls ---
 
     async createProject(accessToken: string, name: string, region: string, organizationId: string): Promise<{ ref: string; name: string }> {

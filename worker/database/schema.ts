@@ -684,3 +684,22 @@ export const supabaseConnections = sqliteTable('supabase_connections', {
 
 export type SupabaseConnection = typeof supabaseConnections.$inferSelect;
 export type NewSupabaseConnection = typeof supabaseConnections.$inferInsert;
+
+// Per-app (per-agent) Supabase project link. The OAuth *account* connection above is
+// per-user (log in once); the SELECTED PROJECT must be per-app so linking a DB to one
+// app does not show as linked on every other app. Keyed by agentId (the chat/DO id).
+export const supabaseProjectLinks = sqliteTable('supabase_project_links', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    agentId: text('agent_id').notNull().unique(),
+    projectRef: text('project_ref').notNull(),
+    projectName: text('project_name'),
+    projectUrl: text('project_url'),
+    anonKey: text('anon_key'),
+    encryptedServiceRoleKey: text('encrypted_service_role_key'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+});
+
+export type SupabaseProjectLink = typeof supabaseProjectLinks.$inferSelect;
+export type NewSupabaseProjectLink = typeof supabaseProjectLinks.$inferInsert;

@@ -107,11 +107,14 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         // Fetch Supabase context if the user has a linked project
         const supabaseCtx = await (async () => {
             try {
-                const userId = inferenceContext.metadata.userId;
+                // Supabase project links are PER-APP (per agent), not per-user — so this app
+                // only uses the DB the user linked to THIS app (not whatever they last linked
+                // elsewhere). agentId === the chat/DO id the frontend links against.
+                const agentId = this.getAgentId();
                 const connSvc = new SupabaseConnectionService(this.env);
-                const linked = await connSvc.getLinkedProject(userId);
+                const linked = await connSvc.getLinkedProjectForAgent(agentId);
                 if (!linked) return undefined;
-                const serviceRoleKey = await connSvc.getServiceRoleKey(userId);
+                const serviceRoleKey = await connSvc.getServiceRoleKeyForAgent(agentId);
                 if (!serviceRoleKey) return { projectUrl: linked.projectUrl, anonKey: linked.anonKey, tables: [] };
                 const schemaSvc = new SupabaseSchemaService();
                 const tables = await schemaSvc.fetchSchema(linked.projectUrl, serviceRoleKey);

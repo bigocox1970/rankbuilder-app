@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router';
 import { Database, Loader2, CheckCircle, ExternalLink, Unlink, RefreshCw, Plus, ArrowLeft } from 'lucide-react';
 import {
     Dialog,
@@ -31,6 +32,7 @@ const REGIONS = [
 ];
 
 export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: SupabaseConnectModalProps) {
+    const { chatId } = useParams();
     const [view, setView] = useState<ModalView>('loading');
     const [status, setStatus] = useState<SupabaseStatusData | null>(null);
     const [projects, setProjects] = useState<SupabaseProject[]>([]);
@@ -52,7 +54,7 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
     async function loadStatus() {
         setView('loading');
         setError(null);
-        const resp = await apiClient.getSupabaseStatus();
+        const resp = await apiClient.getSupabaseStatus(chatId);
         if (!resp.success || !resp.data) {
             setView('disconnected');
             return;
@@ -86,9 +88,10 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
     }
 
     async function handleLinkProject(ref: string) {
+        if (!chatId) { setError('No app context — open this from inside an app.'); return; }
         setLinkingRef(ref);
         setError(null);
-        const resp = await apiClient.linkSupabaseProject(ref);
+        const resp = await apiClient.linkSupabaseProject(ref, chatId);
         if (!resp.success) {
             setError('Failed to link project. Please try again.');
             setLinkingRef(null);
@@ -126,12 +129,14 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
 
     async function handleDisconnect() {
         setDisconnecting(true);
-        await apiClient.disconnectSupabase();
-        const cleared = { connected: false, linkedProject: null };
-        setStatus(cleared);
-        onStatusChange?.(cleared);
-        setView('disconnected');
+        // Unlink this app's DB only (the user's Supabase OAuth account stays connected so
+        // they can link a different project here or in other apps without re-auth).
+        await apiClient.disconnectSupabase(chatId);
+        // Clear this app's linked indicator immediately, then refresh: still OAuth-connected
+        // with no project → the picker, so they can choose a new DB for this app.
+        onStatusChange?.({ connected: true, linkedProject: null });
         setDisconnecting(false);
+        await loadStatus();
     }
 
     return (

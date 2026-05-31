@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router';
 import { Database } from 'lucide-react';
 import { SupabaseConnectModal } from './SupabaseConnectModal';
 import { apiClient } from '@/lib/api-client';
@@ -6,14 +7,17 @@ import { toast } from 'sonner';
 import type { SupabaseStatusData } from '@/api-types';
 
 export function SupabaseHeaderButton() {
+    const { chatId } = useParams();
     const [isOpen, setIsOpen] = useState(false);
     const [status, setStatus] = useState<SupabaseStatusData | null>(null);
 
     useEffect(() => {
-        apiClient.getSupabaseStatus().then(r => {
+        // Linked state is per-app (per chatId) — a DB linked to one app must not show
+        // as linked on others.
+        apiClient.getSupabaseStatus(chatId).then(r => {
             if (r.success && r.data) setStatus(r.data);
         });
-    }, []);
+    }, [chatId]);
 
     // Handle return from Supabase OAuth on headerless routes (e.g. /chat/).
     // GlobalHeader is suppressed on these routes so it never reads ?supabase=connected.
