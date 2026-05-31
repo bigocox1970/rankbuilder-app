@@ -931,25 +931,28 @@ export class SandboxSdkClient extends BaseSandboxService {
      * 15-40s). Non-fatal: resolves '' on timeout/error so a failed tunnel never blocks
      * the (already-working) web preview — the QR just falls back to the web URL.
      */
-    private async extractExpoTunnelUrl(processId: string): Promise<string> {
-        // Poll the FULL buffered process output (not a live stream): the dev server has
-        // usually been up for a while by the time we get here, so the exp:// line that
-        // Expo prints at startup is already in the buffer. A live stream would miss it.
+    private async extractExpoTunnelUrl(instanceId: string): Promise<string> {
+        // Read the actual dev-server output via getLogs(instanceId) — the same source
+        // waitForServerReady uses. (getProcessLogs returns the process-monitor WRAPPER's
+        // output, not Expo/Metro's, so the exp:// line never appears there.) Poll the
+        // full logs so an early-printed exp:// line is still caught.
         const urlRe = /exp:\/\/[a-z0-9._-]+\.exp\.direct(?::\d+)?/i;
         const intervalMs = 3000;
         const maxPolls = 15; // ~45s — ngrok tunnel setup is slow
         let lastCombined = '';
         for (let i = 0; i < maxPolls; i++) {
             try {
-                const logs = await this.getSandbox().getProcessLogs(processId);
-                lastCombined = `${logs.stdout || ''}\n${logs.stderr || ''}`;
-                const match = lastCombined.match(urlRe);
-                if (match) {
-                    this.logger.info(`Found Expo tunnel URL: ${match[0]}`);
-                    return match[0];
+                const logsResult = await this.getLogs(instanceId, false);
+                if (logsResult.success) {
+                    lastCombined = `${logsResult.logs.stdout || ''}\n${logsResult.logs.stderr || ''}`;
+                    const match = lastCombined.match(urlRe);
+                    if (match) {
+                        this.logger.info(`Found Expo tunnel URL: ${match[0]}`);
+                        return match[0];
+                    }
                 }
             } catch (error) {
-                this.logger.warn('getProcessLogs failed during Expo tunnel extraction', error);
+                this.logger.warn('getLogs failed during Expo tunnel extraction', error);
             }
             await new Promise((r) => setTimeout(r, intervalMs));
         }
@@ -1090,7 +1093,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                     // own output (ngrok). Extract it from the dev-server logs; '' on failure
                     // so the web preview is never blocked.
                     if (isExpo && !tunnelURL) {
-                        tunnelURL = await this.extractExpoTunnelUrl(processId);
+                        tunnelURL = await this.extractExpoTunnelUrl(instanceId);
                         this.logger.info('Expo tunnel URL resolved', { instanceId, tunnelURL: tunnelURL || '(none)' });
                     }
                         
