@@ -5,7 +5,7 @@ opens the real native React Native app in Expo Go on a physical phone, while the
 in-builder web preview pane also renders the app. Both work simultaneously.
 
 Deployed state at time of writing:
-- Worker: `vibesdk-production` version `078e4297` (native tunnel flow + bundle pre-warm)
+- Worker: `vibesdk-production` version `ef80bf8a` (native tunnel flow + bundle pre-warm + warm-on-deploy + warming/ready QR gating)
 - Templates (R2 `vibesdk-templates`): Expo templates on **SDK 54** with the metro host-header fix
 
 ---
@@ -81,6 +81,22 @@ localhost inside the sandbox** (no edge timeout) so the compile runs to completi
 populates Metro's transform cache. The real over-tunnel scan then serves the cached bundle.
 Measured: native bundle went from `502 after 94s` to `200 in 2.18s` (full 6 MB). See the
 pre-warm block in `setupInstance()` in `sandboxSdkClient.ts`.
+
+There are TWO warms: (a) at `setupInstance` (warms the framework/Hermes module cache early,
+on the template, during codegen); (b) **warm-on-deploy** — `base.ts` `onCompleted` calls
+`BaseSandboxService.warmExpoNativeBundle(instanceId)` which discovers Metro's port via
+netstat and warms the **final** app's bundle after each deploy. Together they make
+"scan the instant the QR appears" reliable, not luck.
+
+### 8. Warming/ready QR gating + user-facing status
+A user must not scan before the bundle is warm. The `expo_tunnel_url` WS message now carries
+`status: 'warming' | 'ready'`. `base.ts` `onCompleted` broadcasts `warming` immediately, runs
+the warm, then `ready`. The frontend (`handle-websocket-message.ts`) holds the scannable QR
+back until `ready` (sets `expoTunnelUrl` only then) and shows a persistent sonner toast
+"Preparing native build for Expo Go…" → "Native build ready" — so the user is told what's
+happening and can't scan a cold bundle. Zero prop-threading: the gating rides on the existing
+`expoTunnelUrl` (only set when ready) and the toast. Confirmed: user scanned the instant the
+QR appeared and the app loaded.
 
 ---
 

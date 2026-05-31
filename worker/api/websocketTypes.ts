@@ -473,6 +473,10 @@ type ServerLogMessage = {
 type ExpoTunnelUrlMessage = {
     type: 'expo_tunnel_url';
     tunnelUrl: string;
+    // Native bundle readiness: 'warming' while the iOS Hermes bundle is being
+    // pre-compiled in the sandbox, 'ready' once it will serve fast over the tunnel.
+    // Absent on legacy/web-only paths (treated as ready).
+    status?: 'warming' | 'ready';
 };
 
 // ========== CHECKPOINT / RESTORE MESSAGES ==========

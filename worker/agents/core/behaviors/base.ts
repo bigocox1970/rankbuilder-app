@@ -1964,10 +1964,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 },
                 onCompleted: (data) => {
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, data);
-                    // Native Expo Go: if a tunnel URL is present (Expo `--tunnel`), broadcast
-                    // it so the frontend QR encodes the native exp:// URL instead of the web one.
+                    // Native Expo Go: broadcast the exp:// tunnel URL so the QR encodes the
+                    // native target. The just-deployed app's iOS bundle still needs a Hermes
+                    // compile, so first tell the UI we're "warming", pre-compile the bundle in
+                    // the sandbox over localhost, then flip to "ready" — the user only scans
+                    // once it will load fast (no first-scan 502 / "could not connect").
                     if (data.tunnelURL) {
-                        this.broadcast(WebSocketMessageResponses.EXPO_TUNNEL_URL, { tunnelUrl: data.tunnelURL });
+                        this.broadcast(WebSocketMessageResponses.EXPO_TUNNEL_URL, { tunnelUrl: data.tunnelURL, status: 'warming' });
+                        const markReady = () => this.broadcast(WebSocketMessageResponses.EXPO_TUNNEL_URL, { tunnelUrl: data.tunnelURL, status: 'ready' });
+                        this.getSandboxServiceClient().warmExpoNativeBundle(data.instanceId).then(markReady, markReady);
                     }
                 },
                 onError: (data) => {

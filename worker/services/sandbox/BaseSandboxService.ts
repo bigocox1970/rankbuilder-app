@@ -285,7 +285,27 @@ export abstract class BaseSandboxService {
      * Returns: { success: boolean, results: [...], message?: string, error?: string }
      */
     abstract executeCommands(instanceId: string, commands: string[], timeout?: number): Promise<ExecuteCommandsResponse>;
- 
+
+    /**
+     * Pre-compile the native (iOS) Hermes bundle of the CURRENT app from inside the
+     * sandbox over localhost, so the first Expo Go scan serves a cached bundle instead
+     * of triggering a 60-90s compile that exceeds Cloudflare's ~100s edge timeout (502 /
+     * "Could not connect to development server"). Discovers Metro's listening port via
+     * netstat (the only 80xx listener in the container) and curls the bundle. Concrete:
+     * reuses the abstract executeCommands so both local + remote clients work unchanged.
+     * Best-effort: never throws — a failed warm just means the scan may be slow.
+     */
+    async warmExpoNativeBundle(instanceId: string): Promise<void> {
+        const bundlePath = 'node_modules/expo-router/entry.bundle?platform=ios&dev=true&hot=false&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable';
+        // Single-quoted so the sandbox shell does the port discovery + curl at run time.
+        const cmd = `PORT=$(netstat -tlnp 2>/dev/null | grep -oE '[0-9.]+:80[0-9][0-9]' | grep -oE '80[0-9][0-9]' | sort -u | head -1); [ -n "$PORT" ] && curl -s -o /dev/null --max-time 240 "http://localhost:$PORT/${bundlePath}" || true`;
+        try {
+            await this.executeCommands(instanceId, [cmd], 250000);
+        } catch {
+            // best-effort warm; ignore
+        }
+    }
+
     abstract updateProjectName(instanceId: string, projectName: string): Promise<boolean>;
   
     // ==========================================
