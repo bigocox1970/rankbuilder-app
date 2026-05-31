@@ -60,7 +60,10 @@ export function BaseHeaderActions({
 					iconOnly
 				/>
 			)}
-			{viewportMode && onViewportChange && (() => {
+			{/* Viewport toggle is a no-op for Expo (the preview always renders inside the
+			    phone frame), so hide it there — on mobile the QR/Expo-Go button below is
+			    the relevant control instead. */}
+			{viewportMode && onViewportChange && !isExpoTemplate(templateName) && (() => {
 				const currentIndex = VIEWPORT_CYCLE.findIndex(v => v.mode === viewportMode);
 				const current = VIEWPORT_CYCLE[currentIndex] ?? VIEWPORT_CYCLE[0];
 				const next = VIEWPORT_CYCLE[(currentIndex + 1) % VIEWPORT_CYCLE.length];

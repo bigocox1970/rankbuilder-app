@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Smartphone } from 'lucide-react';
+import { QrCode, Smartphone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     Popover,
@@ -23,26 +23,38 @@ export function ExpoPhoneButton({ previewUrl, expoTunnelUrl }: ExpoPhoneButtonPr
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    title="Preview on phone"
+                    title={isNative ? 'Open in Expo Go / scan QR' : 'Preview on phone'}
                     className="flex items-center px-1.5 py-1.5 rounded-md transition-all duration-200 ease-in-out hover:bg-bg-4 border border-transparent hover:border-border-primary hover:shadow-sm"
                 >
-                    <Smartphone className="size-4 text-text-primary/50 hover:text-accent transition-colors duration-200" />
+                    <QrCode className="size-4 text-text-primary/50 hover:text-accent transition-colors duration-200" />
                 </button>
             </PopoverTrigger>
             <PopoverContent className="w-72 bg-bg-1 border-bg-4 p-4" align="end">
                 <div className="space-y-3">
                     <div>
-                        <p className="text-sm font-medium text-text-primary">Preview on your phone</p>
+                        <p className="text-sm font-medium text-text-primary">Run on your phone</p>
                         <p className="text-xs text-text-tertiary mt-0.5">
                             {isNative
-                                ? <>Open <span className="text-text-secondary">Expo Go</span> and scan to run this app natively on your device.</>
+                                ? <>Open it in <span className="text-text-secondary">Expo Go</span> to run natively on your device.</>
                                 : <>Scan with your phone camera to open this app in your mobile browser.</>
                             }
                         </p>
                     </div>
 
+                    {/* Native: primary deep-link — tapping on THIS phone launches Expo Go straight
+                        into the project (no scanning your own screen). */}
+                    {isNative && expoTunnelUrl && (
+                        <a
+                            href={expoTunnelUrl}
+                            className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded-md bg-[#00E676] text-black text-sm font-medium hover:bg-[#00c965] transition-colors"
+                        >
+                            <Smartphone className="size-4" />
+                            Open in Expo Go
+                        </a>
+                    )}
+
                     {qrUrl ? (
-                        <div className="flex justify-center py-2">
+                        <div className="flex flex-col items-center gap-1.5 py-1">
                             <div className="bg-white p-3 rounded-lg">
                                 <QRCodeSVG
                                     value={qrUrl}
@@ -50,6 +62,11 @@ export function ExpoPhoneButton({ previewUrl, expoTunnelUrl }: ExpoPhoneButtonPr
                                     level="M"
                                 />
                             </div>
+                            <p className="text-[11px] text-text-tertiary text-center">
+                                {isNative
+                                    ? 'Or scan from another device with Expo Go.'
+                                    : 'Scan with your phone camera.'}
+                            </p>
                         </div>
                     ) : (
                         <div className="flex justify-center py-4">
