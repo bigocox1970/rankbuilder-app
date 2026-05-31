@@ -14,6 +14,7 @@ interface ViewHeaderProps {
 	previewUrl?: string;
 	rightActions?: React.ReactNode;
 	projectType?: ProjectType;
+	isExpo?: boolean;
 }
 
 export function ViewHeader({
@@ -27,6 +28,7 @@ export function ViewHeader({
 	previewUrl,
 	rightActions,
 	projectType,
+	isExpo,
 }: ViewHeaderProps) {
 	return (
 		<div className={`flex items-center justify-between ${HEADER_STYLES.padding} ${HEADER_STYLES.container}`}>
@@ -41,6 +43,7 @@ export function ViewHeader({
 					hasLlmsTxt={hasLlmsTxt}
 					previewUrl={previewUrl}
 					projectType={projectType}
+					isExpo={isExpo}
 				/>
 			</div>
 			<div className="flex items-center justify-end">

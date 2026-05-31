@@ -217,6 +217,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		hasLlmsTxt,
 		previewUrl,
 		projectType,
+		isExpo,
 	};
 
 	const renderViewWithHeader = (

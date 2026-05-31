@@ -28,6 +28,7 @@ export function ViewModeSwitch({
 	hasLlmsTxt = false,
 	previewUrl,
 	projectType,
+	isExpo = false,
 }: {
 	view: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo' | 'social' | 'llms'
 	onChange: (mode: 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation' | 'seo' | 'social' | 'llms') => void;
@@ -38,6 +39,7 @@ export function ViewModeSwitch({
 	hasLlmsTxt: boolean;
 	previewUrl?: string;
 	projectType?: ProjectType;
+	isExpo?: boolean;
 }) {
 	// Get feature definition to determine icon and label
 	const featureDefinition = projectType ? featureRegistry.getDefinition(projectType) : null;
@@ -114,7 +116,7 @@ export function ViewModeSwitch({
 			)}
 
 			{/* SEO tab — always shown when there's a live preview */}
-			{previewAvailable && (
+			{previewAvailable && !isExpo && (
 				<button
 					onClick={() => onChange('seo')}
 					className={clsx(
@@ -132,7 +134,7 @@ export function ViewModeSwitch({
 			)}
 
 			{/* Social sharing tab — always shown when there's a live preview */}
-			{previewAvailable && (
+			{previewAvailable && !isExpo && (
 				<button
 					onClick={() => onChange('social')}
 					className={clsx(
@@ -150,7 +152,7 @@ export function ViewModeSwitch({
 			)}
 
 			{/* LLMs.txt tab — always shown when there's a live preview */}
-			{previewAvailable && (
+			{previewAvailable && !isExpo && (
 				<button
 					onClick={() => onChange('llms')}
 					className={clsx(
