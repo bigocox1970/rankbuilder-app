@@ -21,6 +21,7 @@ import { fetchImportedBinaries } from '../../../services/github/importedBinaries
 import { buildDeploymentConfig, deployToDispatch, deployWorker, parseWranglerConfig } from '../../../services/deployer/deploy';
 import { createAssetManifest } from '../../../services/deployer/utils/index';
 import { AppService } from '../../../database';
+import { SupabaseConnectionService } from '../../../services/supabase/SupabaseConnectionService';
 
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
@@ -601,6 +602,25 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                     )
                 };
             }
+        }
+
+        // Auto-inject the linked Supabase project's public credentials so the generated
+        // app connects with zero manual setup. Both naming conventions are set so the code
+        // works whichever it references: EXPO_PUBLIC_* (Expo) and VITE_* (web/Vite).
+        try {
+            const linked = await new SupabaseConnectionService(this.env).getLinkedProjectForAgent(state.metadata.agentId);
+            if (linked?.projectUrl && linked.anonKey) {
+                localEnvVars = {
+                    ...localEnvVars,
+                    EXPO_PUBLIC_SUPABASE_URL: linked.projectUrl,
+                    EXPO_PUBLIC_SUPABASE_ANON_KEY: linked.anonKey,
+                    VITE_SUPABASE_URL: linked.projectUrl,
+                    VITE_SUPABASE_ANON_KEY: linked.anonKey,
+                };
+                this.getLog().info('Injected Supabase env vars for linked project', { agentId: state.metadata.agentId, projectUrl: linked.projectUrl });
+            }
+        } catch (e) {
+            this.getLog().warn('Could not inject Supabase env vars', { error: e instanceof Error ? e.message : String(e) });
         }
 
         // Get latest files

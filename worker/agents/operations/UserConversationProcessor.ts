@@ -1,5 +1,6 @@
 import { ConversationalResponseType } from "../schemas";
-import { createAssistantMessage, createUserMessage, createMultiModalUserMessage } from "../inferutils/common";
+import { createAssistantMessage, createUserMessage, createMultiModalUserMessage, createSystemMessage } from "../inferutils/common";
+import { SupabaseConnectionService } from "../../services/supabase/SupabaseConnectionService";
 import { executeInference } from "../inferutils/infer";
 import { WebSocketMessageResponses } from "../constants";
 import { WebSocketMessageData } from "../../api/websocketTypes";
@@ -381,7 +382,25 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
 
         try {
             const systemPromptMessages = getSystemPromptWithProjectContext(SYSTEM_PROMPT, context, CodeSerializerType.SIMPLE);
-            
+
+            // If a Supabase project is linked to this app, tell the agent — so it uses the
+            // pre-injected env-var credentials instead of asking the user for them.
+            const supabaseSystemMessages = await (async () => {
+                try {
+                    const agentId = options.inferenceContext?.metadata?.agentId;
+                    if (!agentId) return [];
+                    const linked = await new SupabaseConnectionService(env).getLinkedProjectForAgent(agentId);
+                    if (!linked?.projectUrl) return [];
+                    return [createSystemMessage(`## Linked Supabase project
+This app has a Supabase project connected: ${linked.projectName ?? linked.projectRef} — ${linked.projectUrl}
+Its credentials are ALREADY configured as environment variables in the build. Do NOT ask the user for the URL or keys, and do NOT add placeholders. Read them from env and use \`@supabase/supabase-js\`:
+- Expo / React Native: \`process.env.EXPO_PUBLIC_SUPABASE_URL\`, \`process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY\`
+- Vite / web: \`import.meta.env.VITE_SUPABASE_URL\`, \`import.meta.env.VITE_SUPABASE_ANON_KEY\``)];
+                } catch {
+                    return [];
+                }
+            })();
+
             // Create user message with optional images for inference
             const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true);
             const userMessageForInference = images && images.length > 0
@@ -430,7 +449,7 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
                 });
             }
 
-            const messagesForInference =  [...systemPromptMessages, ...compactHistory, {...userMessageForInference, conversationId: IdGenerator.generateConversationId()}];
+            const messagesForInference =  [...systemPromptMessages, ...supabaseSystemMessages, ...compactHistory, {...userMessageForInference, conversationId: IdGenerator.generateConversationId()}];
 
 
             logger.info("Executing inference for user message", { 

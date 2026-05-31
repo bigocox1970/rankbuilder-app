@@ -412,13 +412,16 @@ export async function generateBlueprint(
                     return `**${t.name}**\n${cols}`;
                 }).join('\n\n')
                 : 'Schema not yet available — generate code with placeholders.';
-            systemPrompt = `${systemPrompt}\n\n## Supabase Project
-The user has connected a Supabase project. Use it for database, auth, and storage.
+            systemPrompt = `${systemPrompt}\n\n## Supabase Project (connected)
+The user has linked a Supabase project. Use it for database, auth, and storage.
 
 - Project URL: \`${supabaseContext.projectUrl}\`
 - Anon Key: \`${supabaseContext.anonKey}\`
 - Client: \`import { createClient } from '@supabase/supabase-js'\`
-- Always reference credentials via \`import.meta.env.VITE_SUPABASE_URL\` and \`import.meta.env.VITE_SUPABASE_ANON_KEY\` in generated code. Note in the plan that the user must add these env vars.
+- **The credentials are ALREADY configured as environment variables in the build — do NOT ask the user for them and do NOT add placeholders.** Read them from env:
+  - Expo / React Native: \`process.env.EXPO_PUBLIC_SUPABASE_URL\` and \`process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY\`
+  - Vite / web: \`import.meta.env.VITE_SUPABASE_URL\` and \`import.meta.env.VITE_SUPABASE_ANON_KEY\`
+  (Both names point to the same project; use whichever matches this app's framework.)
 
 ### Database Schema
 ${schemaText}
