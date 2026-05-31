@@ -1097,19 +1097,17 @@ export class SandboxSdkClient extends BaseSandboxService {
                         } catch {
                             this.logger.warn('Could not parse cloudflared tunnel URL for exp:// QR', { instanceId, tunnelURL });
                         }
-
-                        // Pre-warm the native (iOS) Hermes bundle from INSIDE the sandbox over
-                        // localhost, before the user scans. The first compile of a full RN app to
-                        // Hermes bytecode takes 60-90s on the constrained sandbox; over the tunnel
-                        // that exceeds Cloudflare's ~100s edge timeout, so Expo Go's first bundle
-                        // request 502s / "could not connect to development server". Compiling on
-                        // localhost (no edge timeout) populates Metro's transform cache, so the
-                        // real over-tunnel request then serves the cached bundle fast. Fire-and-
-                        // forget: must not block setup; '|| true' so a slow/failed warm is harmless.
+                        // Warm the native (iOS) Hermes bundle so the first Expo Go scan isn't a
+                        // cold 60-90s compile that exceeds Cloudflare's ~100s edge timeout (502).
+                        // CRITICAL: run it FULLY DETACHED (setsid + background) so executeCommand
+                        // returns in <1s and the warm never holds the sandbox session — a blocking
+                        // warm here serialises with the agent's later deploys and stalls generation
+                        // ("deployment timed out" / preview 500/502). Metro compiles it in the
+                        // background; best-effort, failures are harmless.
                         const warmUrl = `http://localhost:${allocatedPort}/node_modules/expo-router/entry.bundle?platform=ios&dev=true&hot=false&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable`;
-                        this.executeCommand(instanceId, `curl -s -o /dev/null --max-time 240 "${warmUrl}" || true`, { timeout: 250000 })
-                            .then(() => this.logger.info('Expo native bundle pre-warm finished', { instanceId }))
-                            .catch((e) => this.logger.warn('Expo native bundle pre-warm failed', { instanceId, err: e instanceof Error ? e.message : String(e) }));
+                        this.executeCommand(instanceId, `setsid sh -c 'curl -s -o /dev/null --max-time 240 "${warmUrl}"' >/dev/null 2>&1 < /dev/null & true`, { timeout: 10000 })
+                            .then(() => this.logger.info('Expo native bundle warm dispatched (detached)', { instanceId }))
+                            .catch(() => {});
                     }
 
                     // Expose the same port for preview URL

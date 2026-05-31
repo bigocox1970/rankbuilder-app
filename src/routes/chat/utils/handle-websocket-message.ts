@@ -1151,27 +1151,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'expo_tunnel_url': {
-                // Native Expo Go. The bundle is Hermes-compiled on first request, which is
-                // slow enough to time out an immediate scan. The backend warms it after
-                // deploy and reports status: hold the scannable QR until 'ready' and tell the
-                // user what's happening with a persistent toast so they don't scan a cold one.
-                if (message.status === 'warming') {
-                    setExpoTunnelUrl(undefined);
-                    toast.loading('Preparing native build for Expo Go…', {
-                        id: 'expo-native-warming',
-                        description: 'Compiling your app — the QR will be scannable in a moment.',
-                    });
-                } else {
-                    setExpoTunnelUrl(message.tunnelUrl);
-                    if (message.status === 'ready') {
-                        toast.success('Native build ready', {
-                            id: 'expo-native-warming',
-                            description: 'Scan the QR with Expo Go to run it on your phone.',
-                        });
-                    } else {
-                        toast.dismiss('expo-native-warming');
-                    }
-                }
+                setExpoTunnelUrl(message.tunnelUrl);
                 break;
             }
 
