@@ -1189,10 +1189,12 @@ export class SandboxSdkClient extends BaseSandboxService {
                 };
             }
             
-            // Detect Expo from the template's dev script so we know to extract the
-            // native exp:// tunnel URL (Expo templates run `expo start --tunnel`).
+            // Only attempt native exp:// tunnel extraction when the dev script actually
+            // runs a tunnel (`expo start --tunnel`). Plain `--web` Expo builds skip it so
+            // they aren't delayed polling for a URL that will never appear. (ngrok/--tunnel
+            // is currently disabled: it hangs in the sandbox — see tunnel notes.)
             const pkgJsonFile = files.find(f => f.filePath === 'package.json');
-            const isExpo = pkgJsonFile ? /expo start/.test(pkgJsonFile.fileContents) : false;
+            const isExpo = pkgJsonFile ? /expo start[^"]*--tunnel/.test(pkgJsonFile.fileContents) : false;
 
             const results = await this.setupInstance(instanceId, projectName, initCommand, isExpo, envVars);
             if (!results) {
