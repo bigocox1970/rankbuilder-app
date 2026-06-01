@@ -9,9 +9,8 @@ import { ExportResult } from 'worker/agents/core/types';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { validateRedirectUrl } from '../../../utils/authUtils';
 import { generateId } from '../../../utils/idGenerator';
-import { importRepository, parseGitHubRepoUrl } from '../../../services/github/GitHubImporter';
+import { importRepositoryStreaming, parseGitHubRepoUrl } from '../../../services/github/GitHubImporter';
 import { scaffoldCloudflareImport } from '../../../services/github/CloudflareScaffold';
-import { uploadImportedBinaries } from '../../../services/github/importedBinaries';
 
 export interface GitHubExportData {
     success: boolean;
@@ -381,7 +380,7 @@ export class GitHubExporterController extends BaseController {
         const { userId, importData } = state;
         const { owner, repo, branch, agentId } = importData;
 
-        const importResult = await importRepository({ owner, repo, requestedBranch: branch, token });
+        const importResult = await importRepositoryStreaming({ owner, repo, requestedBranch: branch, token, env, agentId });
         if (!importResult.success) {
             this.logger.warn('GitHub import failed', { userId, owner, repo, branch, reason: importResult.reason });
             return Response.redirect(
@@ -422,17 +421,12 @@ export class GitHubExporterController extends BaseController {
             this.logger.info('Cloudflare scaffold applied to imported project', {
                 added: scaffolded.addedPaths,
                 totalFiles: scaffolded.files.length,
-                binaries: importResult.binaries.length,
+                binaries: importResult.binaryPaths.length,
             });
 
-            // Upload binary assets (images, fonts) to R2 in parallel so they
-            // can be re-injected into the sandbox at deploy time without
-            // bloating DO state past its 2MB row limit.
-            const importedBinaryPaths = await uploadImportedBinaries({
-                env,
-                agentId,
-                binaries: importResult.binaries,
-            });
+            // Binary assets (images, fonts) were already streamed straight to R2
+            // during import — out of DO state and out of worker memory.
+            const importedBinaryPaths = importResult.binaryPaths;
 
             await agentStub.initializeFromImport({
                 files: scaffolded.files.map(f => ({
