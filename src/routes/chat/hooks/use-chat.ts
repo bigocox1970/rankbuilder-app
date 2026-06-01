@@ -758,10 +758,13 @@ export function useChat({
 					deploymentTimeoutRef.current = null;
 				}
 				
-				// Set 1-minute timeout for deployment
+				// Timeout for deployment. A Cloudflare deploy builds the worker in the
+				// sandbox and uploads it — for a heavier app this comfortably exceeds a
+				// minute, so a 60s cap declared a still-running deploy "timed out" and
+				// reset the UI under it. Match the sandbox deploy budget (~4 min).
 				deploymentTimeoutRef.current = setTimeout(() => {
 					if (isDeploying) {
-						logger.warn('Deployment timeout after 1 minute');
+						logger.warn('Deployment timeout after 4 minutes');
 
 						// Reset deployment state
 						setIsDeploying(false);
@@ -769,17 +772,17 @@ export function useChat({
 						setIsRedeployReady(false);
 
 						// Show timeout message
-						sendMessage(createAIMessage('deployment_timeout', `Deployment timed out after 1 minute.\n\nPlease try deploying again. The server may be busy.`));
+						sendMessage(createAIMessage('deployment_timeout', `Deployment timed out after 4 minutes.\n\nPlease try deploying again. The server may be busy.`));
 
 						// Debug logging for timeout
 						onDebugMessage?.('warning',
 							'Deployment Timeout',
-							`Deployment for ${instanceId} timed out after 60 seconds`,
+							`Deployment for ${instanceId} timed out after 240 seconds`,
 							'Deployment Timeout Management'
 						);
 					}
 					deploymentTimeoutRef.current = null;
-				}, 60000); // 1 minute = 60,000ms
+				}, 240000); // 4 minutes = 240,000ms
 
 			} else {
 				throw new Error('WebSocket connection not available');

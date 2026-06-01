@@ -928,8 +928,11 @@ export default function Chat() {
 								/>
 							)}
 
-							{/* Deployment and Generation Controls - Only for phasic mode */}
-							{chatId && behaviorType !== 'agentic' && (
+							{/* Deployment / publish card. Phasic builds gate on Phase 1; agentic
+							    builds (incl. GitHub imports) have no Phase 1, so show the card once
+							    there's something deployable (a live preview or generated files) —
+							    otherwise imported projects could never reach the publish control. */}
+							{chatId && (behaviorType !== 'agentic' || !!previewUrl || files.length > 0) && (
 								<motion.div
 									ref={deploymentControlsRef}
 									initial={{ opacity: 0, y: 20 }}
@@ -938,9 +941,12 @@ export default function Chat() {
 									className="px-4 mb-6"
 								>
 									<DeploymentControls
-										isPhase1Complete={isPhase1Complete}
+										isPhase1Complete={behaviorType === 'agentic' ? (!!previewUrl || files.length > 0) : isPhase1Complete}
 										isDeploying={isDeploying}
-										deploymentUrl={cloudflareDeploymentUrl}
+										// Fall back to the persisted deployment URL (app.cloudflareUrl, derived
+										// from the stored deploymentId) so reopening an already-published
+										// project shows the live URL instead of resetting to "Ready to Deploy".
+										deploymentUrl={cloudflareDeploymentUrl || app?.cloudflareUrl || undefined}
 										instanceId={chatId || ''}
 										isRedeployReady={isRedeployReady}
 										deploymentError={deploymentError}
