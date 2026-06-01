@@ -1914,7 +1914,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             this.broadcast(WebSocketMessageResponses.PREVIEW_FORCE_REFRESH, {});
             return `Deployment successful: ${response.previewURL}`;
         }
-        return `Failed to deploy: ${response?.tunnelURL}`;
+        // deployToSandbox returns null when every retry was exhausted within the master
+        // timeout (e.g. the sandbox could not finish installing dependencies / booting the
+        // dev server). Return an actionable message so the assistant tells the user what
+        // happened instead of going silent on an undefined preview URL.
+        return 'The preview did not finish starting in time — the app may still be installing dependencies. Try deploying the preview again in a moment; if it keeps failing, the dependency install or dev server is erroring (check the logs).';
     }
 
     async deployToSandbox(files: FileOutputType[] = [], redeploy: boolean = false, commitMessage?: string, clearLogs: boolean = false): Promise<PreviewType | null> {

@@ -1153,16 +1153,22 @@ export class SandboxSdkClient extends BaseSandboxService {
                     return { previewURL, tunnelURL: expoGoUrl, processId, allocatedPort };
                 } catch (error) {
                     this.logger.warn('Failed to start dev server', error);
-                    return undefined;
+                    throw error instanceof Error ? error : new Error('Failed to start dev server');
                 }
             } else {
-                this.logger.warn('Failed to install dependencies', installResult.stderr);
+                // Surface the real install failure (exit code + stderr tail) instead of a
+                // silent undefined — otherwise the deploy layer only sees a generic
+                // "Failed to setup instance" and the user gets a blind hang with no reason.
+                const stderrTail = (installResult.stderr || '').split('\n').slice(-25).join('\n').trim();
+                this.logger.warn('Failed to install dependencies', { instanceId, exitCode: installResult.exitCode, stderrTail });
+                throw new Error(`Dependency install failed (exit ${installResult.exitCode})${stderrTail ? `: ${stderrTail}` : ''}`);
             }
         } catch (error) {
+            // Propagate the real reason so createInstance reports it (was: swallowed to
+            // undefined → generic "Failed to setup instance" → invisible cause).
             this.logger.warn('Failed to setup instance', error);
+            throw error instanceof Error ? error : new Error('Failed to setup instance');
         }
-        
-        return undefined;
     }
     
     async createInstance(

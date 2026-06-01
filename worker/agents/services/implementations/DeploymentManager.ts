@@ -23,8 +23,16 @@ import { createAssetManifest } from '../../../services/deployer/utils/index';
 import { AppService } from '../../../database';
 import { SupabaseConnectionService, buildSupabaseEnvVars, formatEnvFile } from '../../../services/supabase/SupabaseConnectionService';
 
-const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
-const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
+// A single attempt must outlast a cold `bun install` + dev-server boot. New-instance
+// creation runs `bun install` (up to 300s internally) + the dev-server readiness wait
+// synchronously inside one attempt, and `withTimeout` does NOT abort the underlying work
+// — it just stops waiting and retries. With the old 60s cap, any project whose install
+// exceeded 60s (e.g. an imported TanStack/Next app with a heavy dep tree) timed out
+// mid-bootstrap; the retry then collided with the still-initializing sandbox session
+// ("Session 'i-…' already exists") and wedged, so the preview never came up. Light
+// projects (plain Vite+React) install in well under a minute and were unaffected.
+const PER_ATTEMPT_TIMEOUT_MS = 240000;  // 4 minutes — must exceed a cold install + boot
+const MASTER_DEPLOYMENT_TIMEOUT_MS = 360000;  // 6 minutes total (one full attempt + a respin)
 const HEALTH_CHECK_INTERVAL_MS = 30000;
 // Number of consecutive unhealthy readings before a recovery redeploy. At a 30s
 // interval this gives a slow-booting dev server ~90s of grace before intervening.
@@ -484,8 +492,14 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                     errorMsg.includes('Internal error in Durable Object storage') ||
                     // A wedged sandbox session ("already exists" / unresponsive) can't be reused —
                     // a fresh sessionId yields a new sandbox whose session ids can't collide.
-                    errorMsg.includes(SANDBOX_SESSION_WEDGED)) {
-                    logger.warn('Session-level error detected, resetting sessionId');
+                    errorMsg.includes(SANDBOX_SESSION_WEDGED) ||
+                    // A bare "already exists" (the sandbox SDK's collision error) or a timed-out
+                    // attempt both mean a previous attempt left a session mid-initialization on
+                    // this sandbox. Reusing the same sessionId just collides again and wedges the
+                    // loop; mint a fresh sandbox so the next attempt starts clean.
+                    /already exists/i.test(errorMsg) ||
+                    /timed out/i.test(errorMsg)) {
+                    logger.warn('Session-level error detected, resetting sessionId', { errorMsg });
                     this.resetSessionId();
                 }
                 
