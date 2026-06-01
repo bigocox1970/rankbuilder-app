@@ -48,7 +48,9 @@ export default function Home() {
 	const [projectMode, setProjectMode] = useState<ProjectType>('app');
 	const [stack, setStack] = useState<StackType>('website');
 	const [query, setQuery] = useState('');
-	const [keywords, setKeywords] = useState<string[]>([]);
+	// SEO keyword capture was removed from the home input (it caused a layout jump when
+	// switching tabs); keywords stays empty so the site planner / nav URL still work.
+	const [keywords] = useState<string[]>([]);
 	const [plannerQuery, setPlannerQuery] = useState<string | null>(null);
 
 	// Surface a friendly error when the GitHub import OAuth flow fails before
@@ -286,7 +288,7 @@ export default function Home() {
 						transition={{ layout: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }}
 						className="px-6 p-8 flex flex-col items-center z-10"
 					>
-						<h1 className="font-bold leading-[1.1] tracking-tight text-5xl w-full mb-6 text-text-primary">
+						<h1 className="font-bold leading-[1.1] tracking-tight text-5xl w-full mb-6 md:mt-10 text-text-primary">
 							What should we <span style={{ color: '#00E676' }}>build</span> today?
 						</h1>
 
@@ -334,7 +336,7 @@ export default function Home() {
 							value={query}
 							onChange={setQuery}
 							onSubmit={() => handleCreateApp(query, projectMode)}
-							placeholder={stack === 'website' ? 'Website for a ' : stack === 'expo' ? 'Build an iOS/Android app that ' : 'Create a '}
+							placeholder={stack === 'website' ? 'Website for a ' : 'Create a '}
 							animatedPlaceholder
 							placeholderPhrases={placeholderPhrases}
 							images={images}
@@ -348,9 +350,6 @@ export default function Home() {
 							onConnectCloudflare={handleConnectCloudflare}
 							variant="expanded"
 							submitIcon={user && usageLimitsLoading ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-							keywords={keywords}
-							onKeywordsChange={setKeywords}
-							showKeywords={stack === 'website'}
 							leftActions={
 								stack === 'app' && showModeSelector ? (
 									<ProjectModeSelector
@@ -583,8 +582,10 @@ export default function Home() {
 				</AnimatePresence>
 			</LayoutGroup>
 
-			{/* Nudge towards Discover */}
-			{user && <CurvedArrow sourceRef={discoverLinkRef} target={{ x: 50, y: window.innerHeight - 60 }} />}
+			{/* Nudge towards Discover — points up to the sidebar toggle icon in the top-left
+			    header (sticky, so this viewport position is constant), not the empty bottom-left
+			    corner where the old sidebar used to live. */}
+			{user && <CurvedArrow sourceRef={discoverLinkRef} target={{ x: 44, y: 40 }} />}
 
 			{/* Usage limit dialogs */}
 			{showLimitDialog}
@@ -726,7 +727,10 @@ export const CurvedArrow: React.FC<ArrowProps> = ({
 
 	const hidden = hideWhenInvalid && (!start || !end);
 
-	if (start && end && (end.y - start.y > 420 || start.x - end.x < 100)) {
+	// Keep it a small hand-drawn nudge: hide if the source is too far (in either direction)
+	// from the target or not far enough to its right, so we never draw a giant arrow across
+	// the page when the Discover section is well below the fold.
+	if (start && end && (Math.abs(end.y - start.y) > 520 || start.x - end.x < 100)) {
 		return null;
 	}
 

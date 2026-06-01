@@ -59,7 +59,7 @@ export function UserMessage({
 						onClick={() => setConfirmOpen(true)}
 						disabled={isRestoring}
 						title="Roll the app back to how it was just before this message"
-						className="self-start flex items-center gap-1 text-xs text-text-tertiary hover:text-accent transition-colors opacity-0 group-hover/user-msg:opacity-100 focus:opacity-100 disabled:opacity-100"
+						className="self-start flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors"
 					>
 						{isRestoring ? (
 							<Loader2 className="size-3 animate-spin" />

@@ -2,6 +2,7 @@ import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { SupabaseConnectOAuthProvider } from '../../../services/oauth/supabase-connect';
 import { SupabaseConnectionService } from '../../../services/supabase/SupabaseConnectionService';
+import { getAgentStub } from '../../../agents';
 import { createLogger } from '../../../logger';
 import { signState, verifyState } from '../../../utils/stateSigning';
 
@@ -196,6 +197,19 @@ export class SupabaseConnectController extends BaseController {
             const keys = await svc.getProjectApiKeys(accessToken, body.projectRef);
             // Link to THIS app only (per-agent), not the whole user account.
             await svc.linkProjectForAgent(user.id, body.chatId, project, keys);
+
+            // Push the creds into the app's running sandbox immediately (if it has one) so an
+            // existing app connects without waiting to be recreated. Best-effort — a failure
+            // here must not fail the link (new apps pick up creds at sandbox creation).
+            try {
+                const agentStub = await getAgentStub(env, body.chatId);
+                await agentStub.applyLinkedSupabaseEnv();
+            } catch (e) {
+                SupabaseConnectController.logger.warn('Could not push Supabase creds to running sandbox', {
+                    chatId: body.chatId,
+                    error: e instanceof Error ? e.message : String(e),
+                });
+            }
 
             return SupabaseConnectController.createSuccessResponse({
                 projectRef: project.ref,

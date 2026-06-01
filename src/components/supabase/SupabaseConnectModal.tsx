@@ -322,7 +322,7 @@ export function SupabaseConnectModal({ open, onOpenChange, onStatusChange }: Sup
                             </div>
                         </div>
                         <p className="text-xs text-text-tertiary">
-                            New builds will use this project's schema, auth, and storage automatically.
+                            This app uses this project for its database, auth, and storage. Each app links its own project — other apps you build are unaffected.
                         </p>
                         <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => { setView('picking'); loadProjects(); }} className="flex-1">

@@ -21,7 +21,7 @@ import { fetchImportedBinaries } from '../../../services/github/importedBinaries
 import { buildDeploymentConfig, deployToDispatch, deployWorker, parseWranglerConfig } from '../../../services/deployer/deploy';
 import { createAssetManifest } from '../../../services/deployer/utils/index';
 import { AppService } from '../../../database';
-import { SupabaseConnectionService } from '../../../services/supabase/SupabaseConnectionService';
+import { SupabaseConnectionService, buildSupabaseEnvVars, formatEnvFile } from '../../../services/supabase/SupabaseConnectionService';
 
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
@@ -79,6 +79,50 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             );
         }
         return this.cachedSandboxClient;
+    }
+
+    /**
+     * Public env vars contributed by linked external services (currently just the linked
+     * Supabase project). Injected into the sandbox build so generated code connects with
+     * zero manual setup. This is the seam a future generic Connectors page extends.
+     */
+    private async getConnectorEnvVars(): Promise<Record<string, string>> {
+        try {
+            const linked = await new SupabaseConnectionService(this.env).getLinkedProjectForAgent(this.getAgentId());
+            if (linked?.projectUrl && linked.anonKey) {
+                return buildSupabaseEnvVars(linked);
+            }
+        } catch (e) {
+            this.getLog().warn('Could not resolve connector env vars', { error: e instanceof Error ? e.message : String(e) });
+        }
+        return {};
+    }
+
+    /**
+     * Push connector env vars (.env + .dev.vars) to the RUNNING sandbox and restart the dev
+     * server so Vite/Expo pick them up. Lets an already-running app receive Supabase creds
+     * the instant a project is linked, instead of waiting for the sandbox to be recreated.
+     * Returns false (no-op) when there is no running instance or nothing to inject.
+     */
+    async injectConnectorEnvVarsLive(): Promise<boolean> {
+        const instanceId = this.getState().sandboxInstanceId;
+        if (!instanceId) return false;
+        const envVars = await this.getConnectorEnvVars();
+        if (Object.keys(envVars).length === 0) return false;
+        try {
+            const client = this.getClient();
+            const content = formatEnvFile(envVars);
+            await client.writeFiles(instanceId, [
+                { filePath: '.env', fileContents: content },
+                { filePath: '.dev.vars', fileContents: content },
+            ]);
+            await client.restartDevServer(instanceId, 'bun run dev -- --clear');
+            this.getLog().info('Injected connector env vars into running instance', { instanceId, keys: Object.keys(envVars) });
+            return true;
+        } catch (e) {
+            this.getLog().warn('Failed to inject connector env vars live', { error: e instanceof Error ? e.message : String(e) });
+            return false;
+        }
     }
 
     /**
@@ -605,22 +649,12 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         }
 
         // Auto-inject the linked Supabase project's public credentials so the generated
-        // app connects with zero manual setup. Both naming conventions are set so the code
-        // works whichever it references: EXPO_PUBLIC_* (Expo) and VITE_* (web/Vite).
-        try {
-            const linked = await new SupabaseConnectionService(this.env).getLinkedProjectForAgent(state.metadata.agentId);
-            if (linked?.projectUrl && linked.anonKey) {
-                localEnvVars = {
-                    ...localEnvVars,
-                    EXPO_PUBLIC_SUPABASE_URL: linked.projectUrl,
-                    EXPO_PUBLIC_SUPABASE_ANON_KEY: linked.anonKey,
-                    VITE_SUPABASE_URL: linked.projectUrl,
-                    VITE_SUPABASE_ANON_KEY: linked.anonKey,
-                };
-                this.getLog().info('Injected Supabase env vars for linked project', { agentId: state.metadata.agentId, projectUrl: linked.projectUrl });
-            }
-        } catch (e) {
-            this.getLog().warn('Could not inject Supabase env vars', { error: e instanceof Error ? e.message : String(e) });
+        // app connects with zero manual setup. Written to .env (frontend) and .dev.vars
+        // (worker) by the sandbox client, under both EXPO_PUBLIC_* and VITE_* names.
+        const connectorEnvVars = await this.getConnectorEnvVars();
+        if (Object.keys(connectorEnvVars).length > 0) {
+            localEnvVars = { ...localEnvVars, ...connectorEnvVars };
+            this.getLog().info('Injected connector env vars for new instance', { agentId: state.metadata.agentId, keys: Object.keys(connectorEnvVars) });
         }
 
         // Get latest files

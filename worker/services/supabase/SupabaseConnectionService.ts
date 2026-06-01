@@ -28,6 +28,36 @@ export interface LinkedProjectInfo {
     anonKey: string;
 }
 
+export interface RunSqlResult {
+    success: boolean;
+    error?: string;
+    rows?: unknown[];
+}
+
+/**
+ * The public Supabase credentials a generated app needs, keyed under both naming
+ * conventions so the same values work whichever frontend references them:
+ *  - EXPO_PUBLIC_* — read by the Expo CLI / Metro from `.env`
+ *  - VITE_*        — read by Vite from `.env` into `import.meta.env`
+ * Both keys are public-by-design (they ship in the client bundle). This is the seam a
+ * future generic Connectors page extends with additional service env vars.
+ */
+export function buildSupabaseEnvVars(linked: { projectUrl: string; anonKey: string }): Record<string, string> {
+    return {
+        EXPO_PUBLIC_SUPABASE_URL: linked.projectUrl,
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: linked.anonKey,
+        VITE_SUPABASE_URL: linked.projectUrl,
+        VITE_SUPABASE_ANON_KEY: linked.anonKey,
+    };
+}
+
+/** Serialise an env var map to the `KEY=value` file format used by `.env` / `.dev.vars`. */
+export function formatEnvFile(envVars: Record<string, string>): string {
+    return Object.entries(envVars)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n');
+}
+
 export class SupabaseConnectionService {
     private db;
 
@@ -241,6 +271,59 @@ export class SupabaseConnectionService {
     async unlinkAgent(agentId: string): Promise<void> {
         await this.db.delete(schema.supabaseProjectLinks)
             .where(eq(schema.supabaseProjectLinks.agentId, agentId));
+    }
+
+    /**
+     * Run SQL against the project linked to this app, via the Supabase Management API.
+     * Used by the builder to apply the generated schema to the user's real database with
+     * zero manual steps. Authenticates with the linking user's OAuth token (requires the
+     * `database` write scope). Returns a structured result instead of throwing so callers
+     * (the agent tool) can surface SQL errors back to the model for self-correction.
+     */
+    async runSqlForAgent(agentId: string, sql: string): Promise<RunSqlResult> {
+        const link = await this.db.select({
+            projectRef: schema.supabaseProjectLinks.projectRef,
+            userId: schema.supabaseProjectLinks.userId,
+        })
+            .from(schema.supabaseProjectLinks)
+            .where(eq(schema.supabaseProjectLinks.agentId, agentId))
+            .get();
+        if (!link?.projectRef || !link.userId) {
+            return { success: false, error: 'No Supabase project is linked to this app.' };
+        }
+
+        const accessToken = await this.getAccessToken(link.userId);
+        if (!accessToken) {
+            return { success: false, error: 'Supabase account is not connected (token unavailable). Ask the user to reconnect Supabase.' };
+        }
+
+        try {
+            const resp = await fetch(`https://api.supabase.com/v1/projects/${link.projectRef}/database/query`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: sql }),
+            });
+            if (!resp.ok) {
+                const text = await resp.text();
+                // 403 here almost always means the `database` write scope was not granted —
+                // the user connected before the scope was added and must reconnect.
+                const hint = resp.status === 403
+                    ? ' (the Supabase connection may be missing the database permission — ask the user to reconnect Supabase)'
+                    : '';
+                logger.warn('Supabase SQL query failed', { agentId, status: resp.status });
+                return { success: false, error: `Supabase rejected the SQL (${resp.status})${hint}: ${text}` };
+            }
+            const rows = await resp.json() as unknown[];
+            logger.info('Applied SQL to Supabase project', { agentId, projectRef: link.projectRef });
+            return { success: true, rows };
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error('Error running Supabase SQL', err);
+            return { success: false, error: message };
+        }
     }
 
     /** All of a user's per-app project links, with the RankBuilder app title, so the

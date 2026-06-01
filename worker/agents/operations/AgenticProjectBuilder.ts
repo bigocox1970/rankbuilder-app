@@ -32,6 +32,7 @@ import { createExecCommandsTool } from '../tools/toolkit/exec-commands';
 import { createWaitTool } from '../tools/toolkit/wait';
 import { createGitTool } from '../tools/toolkit/git';
 import { createGenerateImagesTool } from '../tools/toolkit/generate-images';
+import { createApplyDatabaseSchemaTool } from '../tools/toolkit/apply-database-schema';
 
 export interface AgenticProjectBuilderInputs {
     query: string;
@@ -262,6 +263,8 @@ export class AgenticProjectBuilderOperation extends AgentOperationWithTools<
             createGitTool(session.agent, logger),
             // WIP: images
             createGenerateImagesTool(session.agent, logger),
+            // Apply DB schema to the linked Supabase project during the build
+            createApplyDatabaseSchemaTool(session.agent, logger),
         ];
 
         if (!inputs.selectedTemplate || inputs.selectedTemplate === 'scratch') {

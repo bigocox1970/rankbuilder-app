@@ -20,6 +20,7 @@ import { createWaitForGenerationTool } from './toolkit/wait-for-generation';
 import { createWaitForDebugTool } from './toolkit/wait-for-debug';
 import { createGitTool } from './toolkit/git';
 import { createRegenerateImageTool } from './toolkit/regenerate-image';
+import { createApplyDatabaseSchemaTool } from './toolkit/apply-database-schema';
 import { ICodingAgent } from '../services/interfaces/ICodingAgent';
 import { Message } from '../inferutils/common';
 import { ChatCompletionMessageFunctionToolCall } from 'openai/resources';
@@ -63,6 +64,8 @@ export function buildTools(
         createRegenerateImageTool(agent, logger),
         createRegenerateFileTool(agent, logger),
         createReadFilesTool(agent, logger),
+        // Applies DB schema to the linked Supabase project (no-op message if none linked)
+        createApplyDatabaseSchemaTool(agent, logger),
     ];
 }
 

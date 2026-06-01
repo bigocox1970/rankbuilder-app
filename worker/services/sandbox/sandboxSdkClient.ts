@@ -977,16 +977,23 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     private async setLocalEnvVars(instanceId: string, localEnvVars: Record<string, string>): Promise<void> {
         try {
-            // Write .dev.vars file - tools will read environment variables from this file
             const session = await this.getInstanceSession(instanceId);
             const envVarsContent = Object.entries(localEnvVars)
                 .map(([key, value]) => `${key}=${value}`)
                 .join('\n');
-            const result = await session.writeFile(`/workspace/${instanceId}/.dev.vars`, envVarsContent);
-            if (!result.success) {
-                throw new Error('Failed to write .dev.vars file');
+            // Write BOTH conventions:
+            //  - .dev.vars : the Cloudflare worker side (wrangler / vite-plugin reads it)
+            //  - .env      : the frontend build. Vite (VITE_*) and Expo (EXPO_PUBLIC_*) only
+            //                read env from .env — NOT .dev.vars — so client creds like the
+            //                Supabase URL/anon key must live here to reach the app at runtime.
+            const [devVars, dotEnv] = await Promise.all([
+                session.writeFile(`/workspace/${instanceId}/.dev.vars`, envVarsContent),
+                session.writeFile(`/workspace/${instanceId}/.env`, envVarsContent),
+            ]);
+            if (!devVars.success || !dotEnv.success) {
+                throw new Error('Failed to write env files (.dev.vars/.env)');
             }
-            this.logger.info('Environment variables written to .dev.vars', { instanceId, varCount: Object.keys(localEnvVars).length });
+            this.logger.info('Environment variables written to .dev.vars and .env', { instanceId, varCount: Object.keys(localEnvVars).length });
         } catch (error) {
             this.logger.error(`Error setting local environment variables: ${error}`);
             throw error;

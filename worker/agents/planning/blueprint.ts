@@ -413,18 +413,24 @@ export async function generateBlueprint(
                 }).join('\n\n')
                 : 'Schema not yet available — generate code with placeholders.';
             systemPrompt = `${systemPrompt}\n\n## Supabase Project (connected)
-The user has linked a Supabase project. Use it for database, auth, and storage.
+The user has linked a Supabase project. Use it as the app's PRIMARY data store — read and write through Supabase directly. Do NOT add an on/off feature flag (e.g. \`USE_SUPABASE\`) that defaults to local storage, and do NOT default to AsyncStorage/localStorage with Supabase as an opt-in: the linked project + injected credentials mean Supabase is configured, so use it. (Local storage is fine only as an offline cache layered on top, never as the default backend.)
 
 - Project URL: \`${supabaseContext.projectUrl}\`
 - Anon Key: \`${supabaseContext.anonKey}\`
 - Client: \`import { createClient } from '@supabase/supabase-js'\`
-- **The credentials are ALREADY configured as environment variables in the build — do NOT ask the user for them and do NOT add placeholders.** Read them from env:
+- **The credentials are ALREADY configured for this app — do NOT ask the user for them and do NOT add placeholders.** How you reference them depends on the app type:
   - Expo / React Native: \`process.env.EXPO_PUBLIC_SUPABASE_URL\` and \`process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY\`
-  - Vite / web: \`import.meta.env.VITE_SUPABASE_URL\` and \`import.meta.env.VITE_SUPABASE_ANON_KEY\`
-  (Both names point to the same project; use whichever matches this app's framework.)
+  - Vite / web app: \`import.meta.env.VITE_SUPABASE_URL\` and \`import.meta.env.VITE_SUPABASE_ANON_KEY\`
+  - Static HTML site (no build step): there is no env at runtime, so embed the literal Project URL and Anon Key shown above directly in the page and load the client from a CDN (\`https://esm.sh/@supabase/supabase-js\`). The anon key is public by design — safe to embed.
 
 ### Database Schema
 ${schemaText}
+
+### Applying the schema (the builder does it for the user)
+Do NOT write a \`schema.sql\` file for the user to run, and do NOT tell them to open the Supabase SQL editor. When the app needs tables, policies, functions, or triggers, call the **apply_database_schema** tool with idempotent SQL and the builder runs it against this project automatically. Requirements:
+- Make every statement idempotent: \`CREATE TABLE IF NOT EXISTS\`, \`DROP POLICY IF EXISTS\` before \`CREATE POLICY\`, \`CREATE OR REPLACE FUNCTION\`. Re-running must be safe.
+- Enable Row Level Security and add policies for any table holding user data.
+- Never write destructive SQL (\`DROP TABLE\`, \`DELETE\`, \`TRUNCATE\`).
 
 Include \`@supabase/supabase-js\` in the frameworks list. Generate real queries against the schema above.`;
         }

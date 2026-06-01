@@ -8,7 +8,11 @@ export class SupabaseConnectOAuthProvider extends BaseOAuthProvider {
     protected readonly userInfoUrl = '';
     // `organizations` is needed to list orgs when CREATING a project (projects write +
     // organizations read must also be granted on the Supabase OAuth app itself).
-    protected readonly scopes = ['projects', 'secrets', 'organizations'];
+    // `database` (write) authorizes the Management API SQL query endpoint so the builder
+    // can apply the generated schema to the user's project. The matching scope must also
+    // be enabled on the Supabase OAuth app in the dashboard; existing users must reconnect
+    // once to grant it.
+    protected readonly scopes = ['projects', 'secrets', 'organizations', 'database'];
     protected readonly clientAuthMethod = 'basic' as const;
 
     // Override to use a clean minimal OAuth URL — no Google-specific params, no PKCE

@@ -8,6 +8,7 @@ export type ToolEvent = {
     timestamp: number;
     contentLength?: number; // Position in content when event was added (for inline rendering)
     result?: string; // Tool execution result (for completed tools)
+    args?: Record<string, unknown>; // Tool arguments (e.g. file path, SQL) for the detail view
 };
 
 export type ChatMessage = Omit<ConversationMessage, 'content'> & {

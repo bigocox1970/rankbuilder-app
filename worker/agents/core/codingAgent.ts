@@ -307,7 +307,18 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     getAgentId() {
         return this.state.metadata.agentId;
     }
-    
+
+    /**
+     * Push the linked Supabase project's public creds (.env + .dev.vars) into the running
+     * sandbox and restart the dev server, so an already-running app picks them up the
+     * instant the user links a project — no sandbox recreation needed. Called by the
+     * Supabase link controller. Returns false when there is no running instance yet (the
+     * creds will be injected when the sandbox is next created).
+     */
+    async applyLinkedSupabaseEnv(): Promise<boolean> {
+        return this.deploymentManager.injectConnectorEnvVarsLive();
+    }
+
     getWebSockets(): WebSocket[] {
         return this.ctx.getWebSockets();
     }

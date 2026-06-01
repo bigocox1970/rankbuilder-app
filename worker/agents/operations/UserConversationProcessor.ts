@@ -393,9 +393,14 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
                     if (!linked?.projectUrl) return [];
                     return [createSystemMessage(`## Linked Supabase project
 This app has a Supabase project connected: ${linked.projectName ?? linked.projectRef} — ${linked.projectUrl}
-Its credentials are ALREADY configured as environment variables in the build. Do NOT ask the user for the URL or keys, and do NOT add placeholders. Read them from env and use \`@supabase/supabase-js\`:
+Its credentials are ALREADY configured for the build. Do NOT ask the user for the URL or keys, and do NOT add placeholders. Use \`@supabase/supabase-js\`:
 - Expo / React Native: \`process.env.EXPO_PUBLIC_SUPABASE_URL\`, \`process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY\`
-- Vite / web: \`import.meta.env.VITE_SUPABASE_URL\`, \`import.meta.env.VITE_SUPABASE_ANON_KEY\``)];
+- Vite / web: \`import.meta.env.VITE_SUPABASE_URL\`, \`import.meta.env.VITE_SUPABASE_ANON_KEY\`
+- Static HTML (no build): embed the URL/anon key literally (\`${linked.projectUrl}\`, anon key) and load the client from \`https://esm.sh/@supabase/supabase-js\`.
+
+Use Supabase as the app's PRIMARY data store. Do NOT add an on/off flag (e.g. \`USE_SUPABASE\`) that defaults to local storage, and do NOT default to AsyncStorage/localStorage with Supabase opt-in — the linked project + injected creds mean it's configured, so read/write through Supabase directly (local storage only as an optional offline cache on top).
+
+To create or change database tables, policies, functions, or triggers, call the **apply_database_schema** tool with idempotent SQL — the builder applies it to this project for the user. Never tell the user to run SQL in the Supabase dashboard, and never write a schema.sql file for them to run.`)];
                 } catch {
                     return [];
                 }
