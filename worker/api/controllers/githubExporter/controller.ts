@@ -403,6 +403,9 @@ export class GitHubExporterController extends BaseController {
                 originalPrompt: `Imported from GitHub: ${importResult.repoInfo.fullName}@${importResult.effectiveBranch}`,
                 visibility: 'private',
                 status: 'generating',
+                // Imported Vite/React + TanStack Start projects are web apps — set the type
+                // so the card shows the "Web app" badge (and the right preview treatment).
+                appType: 'webapp',
                 sessionToken: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
