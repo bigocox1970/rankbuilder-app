@@ -132,12 +132,12 @@ function MobileCardPreview({
 		<div className="absolute inset-0 flex items-center justify-center gap-4 px-4 bg-gradient-to-br from-bg-2 to-bg-3">
 			<div className="relative h-[94%]" style={{ aspectRatio: '390 / 844' }}>
 				<div
-					className="relative h-full w-full rounded-[18px] bg-black p-[3px] ring-1 ring-white/10"
+					className="relative h-full w-full rounded-[10px] bg-black p-[3px] ring-1 ring-white/10"
 					style={{ boxShadow: '0 0 8px 1px rgba(0,230,118,0.40), 0 0 18px 3px rgba(0,230,118,0.15)' }}
 				>
 					{/* dynamic island */}
-					<div className="absolute top-[4px] left-1/2 z-10 h-[4px] w-[26%] -translate-x-1/2 rounded-full bg-black" />
-					<div className="relative h-full w-full overflow-hidden rounded-[15px] bg-white">
+					<div className="absolute top-[4px] left-1/2 z-10 h-[4px] w-[24%] -translate-x-1/2 rounded-full bg-black" />
+					<div className="relative h-full w-full overflow-hidden rounded-[8px] bg-white">
 						{screenshotUrl ? (
 							<img
 								src={screenshotUrl}
