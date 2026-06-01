@@ -408,8 +408,6 @@ export class GitHubExporterController extends BaseController {
                 updatedAt: new Date(),
             });
 
-            const agentStub = await getAgentStub(env, agentId, { behaviorType: 'phasic', projectType: 'app' });
-
             const projectName = importResult.packageJson.name
                 || importResult.repoInfo.fullName.split('/').pop()!.replace(/[^a-z0-9-_]/gi, '-').toLowerCase();
 
@@ -433,38 +431,58 @@ export class GitHubExporterController extends BaseController {
             // during import — out of DO state and out of worker memory.
             const importedBinaryPaths = importResult.binaryPaths;
 
-            await agentStub.initializeFromImport({
-                files: scaffolded.files.map(f => ({
-                    filePath: f.filePath,
-                    fileContents: f.fileContents,
-                    filePurpose: scaffolded.addedPaths.includes(f.filePath)
-                        ? 'RankBuilder-added Cloudflare scaffold'
-                        : 'Imported from GitHub',
-                })),
-                hostname: new URL(baseUrl).host,
-                inferenceContext: {
-                    metadata: {
-                        agentId,
-                        userId,
-                    },
-                    enableRealtimeCodeFix: false,
-                    enableFastSmartCodeFix: false,
-                    shouldUseUserKey: false,
-                },
-                projectName,
-                repoFullName: importResult.repoInfo.fullName,
-                repoUrl: importResult.repoInfo.htmlUrl,
-                branch: importResult.effectiveBranch,
-                branchFallback: importResult.branchFallback,
-                description: importResult.repoInfo.description ?? importResult.packageJson.description ?? null,
-                isPrivate: importResult.repoInfo.isPrivate,
-                frameworks: frameworksList.length > 0 ? frameworksList : ['react', 'vite'],
-                extraDontTouch: [
-                    ...scaffolded.addedPaths.filter(p => p !== 'package.json'),
-                    ...importedBinaryPaths,
-                ],
-                importedBinaryPaths,
-            });
+            // A freshly-created agent DO can be reset mid-init shortly after a deploy
+            // ("Durable Object reset because its code was updated") while the new code
+            // version settles across DO placement. That reset is one-shot — the DO adopts
+            // the new code and is stable on the next call — so retry the init a few times
+            // with backoff before giving up.
+            for (let attempt = 1; ; attempt++) {
+                try {
+                    const agentStub = await getAgentStub(env, agentId, { behaviorType: 'phasic', projectType: 'app' });
+                    await agentStub.initializeFromImport({
+                        files: scaffolded.files.map(f => ({
+                            filePath: f.filePath,
+                            fileContents: f.fileContents,
+                            filePurpose: scaffolded.addedPaths.includes(f.filePath)
+                                ? 'RankBuilder-added Cloudflare scaffold'
+                                : 'Imported from GitHub',
+                        })),
+                        hostname: new URL(baseUrl).host,
+                        inferenceContext: {
+                            metadata: {
+                                agentId,
+                                userId,
+                            },
+                            enableRealtimeCodeFix: false,
+                            enableFastSmartCodeFix: false,
+                            shouldUseUserKey: false,
+                        },
+                        projectName,
+                        repoFullName: importResult.repoInfo.fullName,
+                        repoUrl: importResult.repoInfo.htmlUrl,
+                        branch: importResult.effectiveBranch,
+                        branchFallback: importResult.branchFallback,
+                        description: importResult.repoInfo.description ?? importResult.packageJson.description ?? null,
+                        isPrivate: importResult.repoInfo.isPrivate,
+                        frameworks: frameworksList.length > 0 ? frameworksList : ['react', 'vite'],
+                        extraDontTouch: [
+                            ...scaffolded.addedPaths.filter(p => p !== 'package.json'),
+                            ...importedBinaryPaths,
+                        ],
+                        importedBinaryPaths,
+                    });
+                    break;
+                } catch (initErr) {
+                    const msg = initErr instanceof Error ? initErr.message : String(initErr);
+                    const transient = /Durable Object reset|code was updated|Network connection lost|Internal error in Durable Object/i.test(msg);
+                    if (transient && attempt < 4) {
+                        this.logger.warn('Import init hit a transient DO reset, retrying', { agentId, attempt, error: msg });
+                        await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+                        continue;
+                    }
+                    throw initErr;
+                }
+            }
 
             this.logger.info('GitHub import completed', { userId, agentId, repo: importResult.repoInfo.fullName });
 
