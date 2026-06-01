@@ -385,7 +385,7 @@ export class GitHubExporterController extends BaseController {
         if (!importResult.success) {
             this.logger.warn('GitHub import failed', { userId, owner, repo, branch, reason: importResult.reason });
             return Response.redirect(
-                `${baseUrl}/?github_import=error&reason=${encodeURIComponent(importResult.reason)}&message=${encodeURIComponent(importResult.message)}`,
+                `${baseUrl}/?github_import=error&reason=${encodeURIComponent(importResult.reason)}&repo=${encodeURIComponent(`${owner}/${repo}`)}&message=${encodeURIComponent(importResult.message)}`,
                 302,
             );
         }

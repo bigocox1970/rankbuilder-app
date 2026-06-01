@@ -59,21 +59,25 @@ export default function Home() {
 		const importStatus = searchParams.get('github_import');
 		if (importStatus !== 'error') return;
 		const reason = searchParams.get('reason') || 'github_error';
-		const message = searchParams.get('message');
-		const friendly = (() => {
+		const serverMessage = searchParams.get('message');
+		const repo = searchParams.get('repo');
+		const who = repo ? `“${repo}”` : 'That repository';
+		const { title, description } = (() => {
 			switch (reason) {
-				case 'repo_not_found': return 'GitHub repository not found.';
-				case 'access_denied': return 'You do not have access to that repository.';
-				case 'branch_not_found_no_default': return 'That branch does not exist.';
-				case 'too_large': return 'Repository is too large to import.';
-				case 'too_many_files': return 'Repository has too many files to import.';
-				case 'file_too_large': return 'A file in the repository is too large.';
-				case 'unsupported_project_type': return 'Only Vite + React projects can be imported right now.';
-				case 'extract_failed': return 'Could not extract the repository archive.';
-				default: return message || 'GitHub import failed.';
+				case 'repo_not_found': return { title: 'Repository not found', description: `${who} couldn’t be found. Check the URL and that you have access to it.` };
+				case 'access_denied': return { title: 'No access to that repository', description: `RankBuilder isn’t authorised to read ${who}. Reconnect GitHub and grant access, then try again.` };
+				case 'branch_not_found_no_default': return { title: 'Branch not found', description: serverMessage || `That branch doesn’t exist in ${who}.` };
+				case 'too_large': return { title: `${repo ?? 'That repository'} is too large to import`, description: 'Repositories must unzip to under 50 MB. This one is mostly large images — compress or remove them (e.g. the HD files in src/assets) and try again.' };
+				case 'too_many_files': return { title: 'Too many files to import', description: `${who} is over the 5,000-file limit.` };
+				case 'file_too_large': return { title: 'A file is too large', description: serverMessage || 'A single file exceeds the 5 MB limit. Remove or shrink it and try again.' };
+				case 'unsupported_project_type': return { title: 'Unsupported project', description: 'Only Vite + React projects can be imported right now.' };
+				case 'extract_failed': return { title: 'Couldn’t read the repository', description: serverMessage || 'The repository archive couldn’t be extracted.' };
+				default: return { title: 'GitHub import failed', description: serverMessage || 'Something went wrong importing that repository.' };
 			}
 		})();
-		toast.error(friendly);
+		// Persist until dismissed — the old transient toast was too easy to miss after the
+		// OAuth full-page redirect dropped the user back here.
+		toast.error(title, { description, duration: Infinity });
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 	const { user } = useAuth();
