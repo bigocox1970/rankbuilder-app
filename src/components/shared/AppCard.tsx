@@ -28,7 +28,6 @@ import type {
 import { AppActionsDropdown } from './AppActionsDropdown';
 import type { LucideIcon } from 'lucide-react';
 import { APP_TYPE_LABEL, type AppType } from 'shared/constants/templates';
-import { ExpoPhoneFrame } from '@/components/expo/ExpoPhoneFrame';
 import { QRCodeSVG } from 'qrcode.react';
 
 // App-type badge shown on each card (mobile / website / web app)
@@ -131,22 +130,29 @@ function MobileCardPreview({
 }) {
 	return (
 		<div className="absolute inset-0 flex items-center justify-center gap-4 px-4 bg-gradient-to-br from-bg-2 to-bg-3">
-			<div className="h-[92%] py-1">
-				<ExpoPhoneFrame>
-					{screenshotUrl ? (
-						<img
-							src={screenshotUrl}
-							alt={`${title} preview`}
-							className="w-full h-full object-cover object-top"
-							loading="lazy"
-							decoding="async"
-						/>
-					) : (
-						<div className="flex h-full w-full items-center justify-center bg-bg-2">
-							<Smartphone className="h-7 w-7 text-text-tertiary/50" />
-						</div>
-					)}
-				</ExpoPhoneFrame>
+			<div className="relative h-[94%]" style={{ aspectRatio: '390 / 844' }}>
+				<div
+					className="relative h-full w-full rounded-[18px] bg-black p-[3px] ring-1 ring-white/10"
+					style={{ boxShadow: '0 0 8px 1px rgba(0,230,118,0.40), 0 0 18px 3px rgba(0,230,118,0.15)' }}
+				>
+					{/* dynamic island */}
+					<div className="absolute top-[4px] left-1/2 z-10 h-[4px] w-[26%] -translate-x-1/2 rounded-full bg-black" />
+					<div className="relative h-full w-full overflow-hidden rounded-[15px] bg-white">
+						{screenshotUrl ? (
+							<img
+								src={screenshotUrl}
+								alt={`${title} preview`}
+								className="h-full w-full object-cover object-top"
+								loading="lazy"
+								decoding="async"
+							/>
+						) : (
+							<div className="flex h-full w-full items-center justify-center bg-bg-2">
+								<Smartphone className="h-7 w-7 text-text-tertiary/50" />
+							</div>
+						)}
+					</div>
+				</div>
 			</div>
 			{deploymentUrl && (
 				<div className="hidden flex-col items-center gap-1.5 sm:flex">

@@ -307,8 +307,13 @@ export class GitHubExporterController extends BaseController {
             if (!tokenResult || !tokenResult.accessToken) {
                 this.logger.error('Failed to exchange OAuth code', { userId });
 
+                // The OAuth code is single-use — a reused/expired code (e.g. the user
+                // re-clicked the auth link) lands here. Label it import-vs-export correctly
+                // and tell them what to do, instead of a misleading "Export Failed".
+                const failParam = isImportState(parsedState) ? 'github_import' : 'github_export';
+                const failMsg = 'The GitHub sign-in link was already used or expired. Please start again.';
                 return Response.redirect(
-                    `${validatedReturnUrl}?github_export=error&reason=token_exchange_failed`,
+                    `${validatedReturnUrl}?${failParam}=error&reason=token_exchange_failed&message=${encodeURIComponent(failMsg)}`,
                     302,
                 );
             }
@@ -474,6 +479,13 @@ export class GitHubExporterController extends BaseController {
             return Response.redirect(`${baseUrl}/chat/${agentId}?${params.toString()}`, 302);
         } catch (error) {
             this.logger.error('Import ingestion failed', { error, userId, owner, repo });
+            // Ingestion failed after the app row was created — remove the orphan so the
+            // user doesn't land on a broken app (404 on /api/apps, 403 on /connect).
+            try {
+                await new AppService(env).deleteApp(agentId, userId);
+            } catch (cleanupError) {
+                this.logger.warn('Failed to clean up orphaned import app', { agentId, error: cleanupError });
+            }
             const message = error instanceof Error ? error.message : 'Unknown error';
             return Response.redirect(
                 `${baseUrl}/?github_import=error&reason=github_error&message=${encodeURIComponent(message)}`,
