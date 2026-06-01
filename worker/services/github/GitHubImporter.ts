@@ -389,6 +389,65 @@ export function detectViteReactProject(files: TemplateFile[]): ParsedPackageJson
     return pkg;
 }
 
+export type ImportedFramework = 'vite-react' | 'tanstack-start';
+
+export interface DetectedProject {
+    packageJson: ParsedPackageJson;
+    framework: ImportedFramework;
+}
+
+/**
+ * Detect an importable project and its framework from the file set.
+ * Supports classic Vite + React SPAs and TanStack Start (Vite-based SSR — its
+ * plugins own the entry, so there is no index.html / src/main). Returns the
+ * parsed package.json + framework, or a failure for anything else.
+ */
+export function detectImportableProject(files: TemplateFile[]): DetectedProject | ImportFailure {
+    const pkgFile = files.find(f => f.filePath === 'package.json');
+    if (!pkgFile) {
+        return { success: false, reason: 'unsupported_project_type', message: 'No package.json found at the repository root.' };
+    }
+    let pkg: ParsedPackageJson;
+    try {
+        const parsed = JSON.parse(pkgFile.fileContents) as {
+            name?: string;
+            description?: string;
+            dependencies?: Record<string, string>;
+            devDependencies?: Record<string, string>;
+        };
+        pkg = {
+            name: parsed.name,
+            description: parsed.description,
+            dependencies: parsed.dependencies ?? {},
+            devDependencies: parsed.devDependencies ?? {},
+            raw: pkgFile.fileContents,
+        };
+    } catch {
+        return { success: false, reason: 'unsupported_project_type', message: 'Could not parse package.json.' };
+    }
+
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const hasVite = 'vite' in allDeps;
+    const hasTanStackStart = '@tanstack/react-start' in allDeps || '@tanstack/start' in allDeps;
+
+    // TanStack Start: Vite-based SSR. No index.html / src/main entry to require.
+    if (hasTanStackStart && hasVite) {
+        return { packageJson: pkg, framework: 'tanstack-start' };
+    }
+
+    // Classic Vite + React SPA.
+    const hasReact = 'react' in allDeps || 'react-dom' in allDeps;
+    if (!hasVite || !hasReact) {
+        return { success: false, reason: 'unsupported_project_type', message: 'RankBuilder currently supports Vite + React and TanStack Start projects. More frameworks can be added on request.' };
+    }
+    const hasIndexHtml = files.some(f => f.filePath === 'index.html');
+    const hasMain = files.some(f => f.filePath === 'src/main.tsx' || f.filePath === 'src/main.jsx');
+    if (!hasIndexHtml || !hasMain) {
+        return { success: false, reason: 'unsupported_project_type', message: 'Expected a Vite project with index.html at the root and src/main.tsx (or src/main.jsx).' };
+    }
+    return { packageJson: pkg, framework: 'vite-react' };
+}
+
 /**
  * Full import pipeline: repo info → branch fallback → zipball → extract → detect.
  */
@@ -488,6 +547,7 @@ export interface ImportStreamSuccess {
     effectiveBranch: string;
     branchFallback: boolean;
     packageJson: ParsedPackageJson;
+    framework: ImportedFramework;
 }
 
 export type ImportStreamResult = ImportStreamSuccess | ImportFailure;
@@ -645,14 +705,14 @@ export async function importRepositoryStreaming(args: {
     await Promise.all(Array.from({ length: Math.min(GITHUB_BLOB_CONCURRENCY, blobs.length) }, () => worker()));
     if (failure) return failure;
 
-    const detection = detectViteReactProject(files);
+    const detection = detectImportableProject(files);
     if ('success' in detection && detection.success === false) return detection;
-    const packageJson = detection as ParsedPackageJson;
+    const { packageJson, framework } = detection as DetectedProject;
 
     logger.info('Streaming GitHub import complete', {
-        agentId, owner, repo, branch: effectiveBranch,
+        agentId, owner, repo, branch: effectiveBranch, framework,
         textFiles: files.length, binaries: binaryPaths.length, dropped: dropped.length, textKB: Math.round(textBytes / 1024),
     });
 
-    return { success: true, files, binaryPaths, repoInfo: info, effectiveBranch, branchFallback, packageJson };
+    return { success: true, files, binaryPaths, repoInfo: info, effectiveBranch, branchFallback, packageJson, framework };
 }

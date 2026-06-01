@@ -416,7 +416,7 @@ export class GitHubExporterController extends BaseController {
             const scaffolded = scaffoldCloudflareImport(importResult.files, {
                 projectName,
                 repoFullName: importResult.repoInfo.fullName,
-            });
+            }, importResult.framework);
 
             this.logger.info('Cloudflare scaffold applied to imported project', {
                 added: scaffolded.addedPaths,

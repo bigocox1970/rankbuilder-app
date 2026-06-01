@@ -33,36 +33,50 @@ interface ScaffoldResult {
  * record of which paths were added/modified (so the import flow can extend
  * the dontTouch set to protect them from the LLM).
  */
-export function scaffoldCloudflareImport(files: TemplateFile[], args: ScaffoldArgs): ScaffoldResult {
+export function scaffoldCloudflareImport(
+    files: TemplateFile[],
+    args: ScaffoldArgs,
+    framework: 'vite-react' | 'tanstack-start' = 'vite-react',
+): ScaffoldResult {
     const map = new Map<string, string>();
     for (const f of files) {
         map.set(f.filePath, f.fileContents);
     }
 
     const added: string[] = [];
+    const isTanStack = framework === 'tanstack-start';
 
-    if (!map.has('wrangler.jsonc') && !map.has('wrangler.toml')) {
-        map.set('wrangler.jsonc', buildWranglerJsonc(args.projectName));
-        added.push('wrangler.jsonc');
+    // The SPA scaffold (static-asset worker + cloudflare vite config) is only correct
+    // for a classic Vite + React SPA. TanStack Start is SSR and runs its own server via
+    // its Vite plugins, so we skip these — the sandbox preview below runs `vite dev` with
+    // the project's own config, and TanStack deploys via wrangler's auto-detection.
+    if (!isTanStack) {
+        if (!map.has('wrangler.jsonc') && !map.has('wrangler.toml')) {
+            map.set('wrangler.jsonc', buildWranglerJsonc(args.projectName));
+            added.push('wrangler.jsonc');
+        }
+
+        if (!map.has('worker/index.ts') && !map.has('worker/index.js')) {
+            map.set('worker/index.ts', buildWorkerIndex());
+            added.push('worker/index.ts');
+        }
+
+        if (!map.has('vite.config.cloudflare.ts') && !map.has('vite.config.cloudflare.js')) {
+            map.set('vite.config.cloudflare.ts', buildCloudflareViteConfig(map));
+            added.push('vite.config.cloudflare.ts');
+        }
     }
 
-    if (!map.has('worker/index.ts') && !map.has('worker/index.js')) {
-        map.set('worker/index.ts', buildWorkerIndex());
-        added.push('worker/index.ts');
-    }
-
-    if (!map.has('vite.config.cloudflare.ts') && !map.has('vite.config.cloudflare.js')) {
-        map.set('vite.config.cloudflare.ts', buildCloudflareViteConfig(map));
-        added.push('vite.config.cloudflare.ts');
-    }
-
+    // Sandbox preview config — applies to both frameworks. Wraps the project's own
+    // vite config (inheriting its plugins, incl. TanStack Start) and only overrides
+    // host/port + disables HMR for the proxied preview.
     if (!map.has('vite.config.sandbox.ts') && !map.has('vite.config.sandbox.js')) {
         map.set('vite.config.sandbox.ts', buildSandboxViteConfig(map));
         added.push('vite.config.sandbox.ts');
     }
 
     if (map.has('package.json')) {
-        const patched = patchPackageJson(map.get('package.json')!);
+        const patched = patchPackageJson(map.get('package.json')!, isTanStack);
         if (patched) {
             map.set('package.json', patched);
             added.push('package.json');
@@ -222,7 +236,7 @@ ${hasAtAlias ? `\tresolve: {
  *
  * Returns null if package.json couldn't be parsed.
  */
-function patchPackageJson(raw: string): string | null {
+function patchPackageJson(raw: string, isTanStack: boolean = false): string | null {
     let pkg: Record<string, unknown>;
     try {
         pkg = JSON.parse(raw) as Record<string, unknown>;
@@ -231,6 +245,18 @@ function patchPackageJson(raw: string): string | null {
     }
 
     const scripts = (pkg.scripts as Record<string, string> | undefined) ?? {};
+
+    // TanStack Start: only override `dev` to run the sandbox-wrapped vite config (which
+    // inherits the project's TanStack plugins). No cloudflare SPA scripts/deps — deploy
+    // is handled later via wrangler's TanStack auto-detection.
+    if (isTanStack) {
+        if (scripts.dev && !scripts['dev:original']) {
+            scripts['dev:original'] = scripts.dev;
+        }
+        scripts.dev = `vite --config vite.config.sandbox.ts --host 0.0.0.0 --port ${PORT_PLACEHOLDER}`;
+        pkg.scripts = scripts;
+        return JSON.stringify(pkg, null, 2) + '\n';
+    }
     // Sandbox dev uses a tiny wrapper config (vite.config.sandbox.ts) that
     // imports the user's own vite.config.ts and layers HMR settings pointing
     // at the rankbuilder.app proxy. Vite's default HMR config tries to talk
