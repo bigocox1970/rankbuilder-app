@@ -9,7 +9,6 @@ import {
 import { CodeIssue, ExecuteCommandsResponse, PreviewType, RuntimeError, StaticAnalysisResponse, TemplateDetails, TemplateFile } from '../../../services/sandbox/sandboxTypes';
 import { BaseProjectState, AgenticState, FileState } from '../state';
 import { AllIssues, AgentSummary, AgentInitArgs, AgentImportInitArgs, BehaviorType, DeploymentTarget, ProjectType } from '../types';
-import { fetchImportedBinaries } from '../../../services/github/importedBinaries';
 import { WebSocketMessageResponses } from '../../constants';
 import { ProjectSetupAssistant } from '../../assistants/projectsetup';
 import { UserConversationProcessor, RenderToolCall } from '../../operations/UserConversationProcessor';
@@ -181,23 +180,12 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             filesMap[file.filePath] = file.fileContents;
         }
 
-        // Fetch binary assets (images, fonts) back from R2 and merge them
-        // into the template's allFiles map. They live alongside text files
-        // in the sandbox at deploy time but stay out of DO state.
-        if (importedBinaryPaths.length > 0) {
-            try {
-                const binaries = await fetchImportedBinaries({
-                    env: this.env,
-                    agentId: inferenceContext.metadata.agentId,
-                    paths: importedBinaryPaths,
-                });
-                for (const b of binaries) {
-                    filesMap[b.filePath] = b.fileContents;
-                }
-                this.logger.info('Merged R2-hosted binaries into template allFiles', { count: binaries.length });
-            } catch (err) {
-                this.logger.warn('Failed to fetch imported binaries from R2', { err });
-            }
+        // Binary assets (images, fonts) live in R2 and are re-injected into the sandbox at
+        // deploy time. Keep their bytes OUT of DO state — loading tens of MB of images here
+        // OOMs the Durable Object (crash loop on cold-start). Record path-only placeholders
+        // so the file list stays complete without the memory cost.
+        for (const p of importedBinaryPaths) {
+            if (!(p in filesMap)) filesMap[p] = '';
         }
 
         const dontTouchSet = new Set<string>([
@@ -446,21 +434,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 for (const file of this.fileManager.getGeneratedFiles()) {
                     allFiles[file.filePath] = file.fileContents;
                 }
-                const binaryPaths = this.state.importedBinaryPaths ?? [];
-                if (binaryPaths.length > 0) {
-                    try {
-                        const binaries = await fetchImportedBinaries({
-                            env: this.env,
-                            agentId: this.state.metadata.agentId,
-                            paths: binaryPaths,
-                        });
-                        for (const b of binaries) {
-                            allFiles[b.filePath] = b.fileContents;
-                        }
-                        this.logger.info('Cold-start: refilled imported binaries from R2', { count: binaries.length });
-                    } catch (err) {
-                        this.logger.warn('Cold-start: failed to fetch imported binaries', { err });
-                    }
+                // Binary assets live in R2 and are re-injected into the sandbox at deploy
+                // time (DeploymentManager). Do NOT load their bytes into the DO here — for an
+                // image-heavy import that is tens of MB and OOMs the Durable Object on every
+                // cold-start (crash loop → the WebSocket never holds). Record path-only
+                // placeholders so the file list stays complete without the memory cost.
+                for (const p of this.state.importedBinaryPaths ?? []) {
+                    if (!(p in allFiles)) allFiles[p] = '';
                 }
                 this.templateDetailsCache = {
                     name: this.state.templateName,
