@@ -513,6 +513,10 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         if (!this.fileManager.fileExists('package.json')) return false;
         // Expo apps use their own dev server — no wrangler config needed
         if (isExpoTemplate(this.getTemplateDetails()?.name)) return true;
+        // Imported projects preview via their own dev server on the sandbox port (the
+        // import scaffold always sets a working `dev` script). TanStack Start in particular
+        // runs `vite dev` with no wrangler config, so don't require one here.
+        if (this.state.importSource) return true;
         return this.fileManager.fileExists('wrangler.jsonc') || this.fileManager.fileExists('wrangler.toml');
     }
 
