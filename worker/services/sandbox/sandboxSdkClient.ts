@@ -24,6 +24,7 @@ import {
     StoredError,
     TemplateFile,
     InstanceCreationRequest,
+    SANDBOX_SESSION_WEDGED,
 } from './sandboxTypes';
 
 import { createObjectLogger } from '../../logger';
@@ -146,42 +147,61 @@ export class SandboxSdkClient extends BaseSandboxService {
         return this.sandbox;
     }
 
+    // Every sandbox session call is time-boxed to this so a wedged container fails fast
+    // (and triggers a fresh-sandbox respin) instead of hanging the agent for minutes.
+    private static readonly SESSION_OP_TIMEOUT_MS = 10_000;
+
+    /** Race a promise against a timeout. The underlying op can't be cancelled, but we stop
+     *  waiting on it so a hung sandbox surfaces as an error rather than a freeze. */
+    private async withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+                () => reject(new Error(`Sandbox ${label} timed out after ${SandboxSdkClient.SESSION_OP_TIMEOUT_MS}ms`)),
+                SandboxSdkClient.SESSION_OP_TIMEOUT_MS,
+            );
+        });
+        try {
+            return await Promise.race([p, timeout]);
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    }
+
     /**
-     * Generic session getter with caching and automatic recovery
-     * Properly handles existing sessions and ensures correct cwd
+     * Generic session getter with caching and automatic recovery.
+     * Every step is time-boxed: after a DO restart the container often still holds the
+     * session ("already exists") while our in-memory cache is gone — the common case is a
+     * healthy reconnect. But if the container is wedged, the reconnect/verify would hang the
+     * agent indefinitely, so on timeout/failure we throw a SANDBOX_SESSION_WEDGED error and
+     * let the deployment manager respin a fresh sandbox (a new id can't collide).
      */
     private async getOrCreateSession(sessionId: string, cwd: string): Promise<ExecutionSession> {
         try {
-            // Try to create a new session with the specified cwd
             this.logger.info('Creating new session', { sessionId, cwd });
-            const session = await this.getSandbox().createSession({ id: sessionId, cwd });
-            return session;
+            return await this.withTimeout(this.getSandbox().createSession({ id: sessionId, cwd }), 'createSession');
         } catch (error) {
-            // If session already exists, get it
-            this.logger.info('Session already exists, retrieving it', { sessionId, cwd });
-            const existingSession = await this.getSandbox().getSession(sessionId);
-            
-            // Verify the cwd matches what we expect
-            const pwdResult = await existingSession.exec('pwd');
-            const actualCwd = pwdResult.stdout.trim();
-            
-            if (actualCwd !== cwd) {
-                this.logger.warn('Existing session has wrong cwd, attempting to change directory', { 
-                    sessionId, 
-                    expectedCwd: cwd, 
-                    actualCwd 
-                });
-                // Try to cd to the correct directory
-                await existingSession.exec(`cd ${cwd}`);
-                const verifyResult = await existingSession.exec('pwd');
-                if (verifyResult.stdout.trim() !== cwd) {
-                    // throw new Error(`Failed to set working directory to ${cwd}, currently at ${verifyResult.stdout.trim()}`);
-                    this.logger.error(`Failed to set working directory to ${cwd}, currently at ${verifyResult.stdout.trim()}`);
-                }
-                this.logger.info('Successfully changed directory for existing session', { sessionId, cwd });
+            const message = error instanceof Error ? error.message : String(error);
+            // Only "already exists" is a recoverable reconnect; anything else (timeout, 500,
+            // disconnect) means the create itself failed — surface it for a respin.
+            if (!/already exists/i.test(message)) {
+                throw new Error(`${SANDBOX_SESSION_WEDGED}: createSession failed for ${sessionId} (${message})`);
             }
-            
-            return existingSession;
+            this.logger.info('Session already exists, reconnecting', { sessionId, cwd });
+            try {
+                const existingSession = await this.withTimeout(this.getSandbox().getSession(sessionId), 'getSession');
+                // A wedged container hangs on this exec — the time-box is what prevents the freeze.
+                const pwdResult = await this.withTimeout(existingSession.exec('pwd'), 'session verify');
+                if (pwdResult.stdout.trim() !== cwd) {
+                    this.logger.warn('Existing session has wrong cwd, changing directory', { sessionId, expectedCwd: cwd, actualCwd: pwdResult.stdout.trim() });
+                    await this.withTimeout(existingSession.exec(`cd ${cwd}`), 'session cd');
+                }
+                return existingSession;
+            } catch (recoverError) {
+                const recoverMessage = recoverError instanceof Error ? recoverError.message : String(recoverError);
+                this.logger.error('Sandbox session is wedged (reconnect/verify failed)', { sessionId, error: recoverMessage });
+                throw new Error(`${SANDBOX_SESSION_WEDGED}: ${sessionId} unresponsive (${recoverMessage})`);
+            }
         }
     }
 

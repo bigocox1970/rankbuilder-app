@@ -5,7 +5,7 @@ import {
     SandboxDeploymentCallbacks,
     CloudflareDeploymentCallbacks
 } from '../interfaces/IDeploymentManager';
-import { BootstrapResponse, StaticAnalysisResponse, RuntimeError, PreviewType } from '../../../services/sandbox/sandboxTypes';
+import { BootstrapResponse, StaticAnalysisResponse, RuntimeError, PreviewType, SANDBOX_SESSION_WEDGED } from '../../../services/sandbox/sandboxTypes';
 import { FileOutputType } from '../../schemas';
 import { generateId } from '../../../utils/idGenerator';
 import { generateAppProxyToken, generateAppProxyUrl } from '../../../services/aigateway-proxy/controller';
@@ -479,9 +479,12 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 const errorMsg = error instanceof Error ? error.message : String(error);
 
                 // Handle specific errors that require session reset
-                if (errorMsg.includes('Network connection lost') || 
-                    errorMsg.includes('Container service disconnected') || 
-                    errorMsg.includes('Internal error in Durable Object storage')) {
+                if (errorMsg.includes('Network connection lost') ||
+                    errorMsg.includes('Container service disconnected') ||
+                    errorMsg.includes('Internal error in Durable Object storage') ||
+                    // A wedged sandbox session ("already exists" / unresponsive) can't be reused —
+                    // a fresh sessionId yields a new sandbox whose session ids can't collide.
+                    errorMsg.includes(SANDBOX_SESSION_WEDGED)) {
                     logger.warn('Session-level error detected, resetting sessionId');
                     this.resetSessionId();
                 }

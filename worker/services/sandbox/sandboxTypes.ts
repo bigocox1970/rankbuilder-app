@@ -1,5 +1,13 @@
 import * as z from 'zod'
 
+/**
+ * Error marker thrown when a sandbox session can't be (re)created or is unresponsive
+ * (e.g. "Session already exists" but the container is wedged). Callers detect this in the
+ * error message and respin a fresh sandbox instead of hanging. Shared so the sandbox client
+ * and the deployment manager agree on the signal.
+ */
+export const SANDBOX_SESSION_WEDGED = 'SANDBOX_SESSION_WEDGED';
+
 // --- Core File/Template Types ---
 
 // Define the interface explicitly to break circular reference
