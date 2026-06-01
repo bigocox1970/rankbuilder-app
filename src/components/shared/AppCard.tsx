@@ -28,6 +28,8 @@ import type {
 import { AppActionsDropdown } from './AppActionsDropdown';
 import type { LucideIcon } from 'lucide-react';
 import { APP_TYPE_LABEL, type AppType } from 'shared/constants/templates';
+import { ExpoPhoneFrame } from '@/components/expo/ExpoPhoneFrame';
+import { QRCodeSVG } from 'qrcode.react';
 
 // App-type badge shown on each card (mobile / website / web app)
 const APP_TYPE_BADGE: Record<AppType, { icon: LucideIcon }> = {
@@ -111,6 +113,54 @@ const STATS_ICONS = {
 	starCount: Star,
 	forkCount: Shuffle,
 } as const;
+
+/**
+ * Mobile apps render in their card as a portrait iPhone mockup (matching the builder
+ * preview) with a QR to the right. The QR opens the app's deployed web build on a phone,
+ * and only appears when there's a stable deploymentUrl — there's no live Expo tunnel on
+ * the dashboard to point an exp:// link at.
+ */
+function MobileCardPreview({
+	screenshotUrl,
+	title,
+	deploymentUrl,
+}: {
+	screenshotUrl?: string | null;
+	title: string;
+	deploymentUrl?: string;
+}) {
+	return (
+		<div className="absolute inset-0 flex items-center justify-center gap-4 px-4 bg-gradient-to-br from-bg-2 to-bg-3">
+			<div className="h-[92%] py-1">
+				<ExpoPhoneFrame>
+					{screenshotUrl ? (
+						<img
+							src={screenshotUrl}
+							alt={`${title} preview`}
+							className="w-full h-full object-cover object-top"
+							loading="lazy"
+							decoding="async"
+						/>
+					) : (
+						<div className="flex h-full w-full items-center justify-center bg-bg-2">
+							<Smartphone className="h-7 w-7 text-text-tertiary/50" />
+						</div>
+					)}
+				</ExpoPhoneFrame>
+			</div>
+			{deploymentUrl && (
+				<div className="hidden flex-col items-center gap-1.5 sm:flex">
+					<div className="rounded-md bg-white p-1.5 shadow-sm">
+						<QRCodeSVG value={deploymentUrl} size={68} level="M" />
+					</div>
+					<span className="max-w-[84px] text-center text-[10px] leading-tight text-text-tertiary">
+						Scan to open on your phone
+					</span>
+				</div>
+			)}
+		</div>
+	);
+}
 
 // Type-safe utility functions
 function hasDeploymentFields(
@@ -440,7 +490,13 @@ export const AppCard = React.memo<AppCardProps>(
 					>
 					{/* Enhanced Preview Section with High-Quality Rendering */}
 					<div className="relative aspect-[16/9] rounded-lg overflow-hidden bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/20 dark:to-orange-900/20">
-						{app.screenshotUrl ? (
+						{app.appType === 'mobile' ? (
+							<MobileCardPreview
+								screenshotUrl={app.screenshotUrl}
+								title={app.title}
+								deploymentUrl={(app as AppWithDeployment).deploymentUrl}
+							/>
+						) : app.screenshotUrl ? (
 							<img
 								src={app.screenshotUrl}
 								alt={`${app.title} preview`}
@@ -515,7 +571,7 @@ export const AppCard = React.memo<AppCardProps>(
 						<div
 							className={cn(
 								'screenshot-placeholder w-full h-full flex flex-col items-center justify-center absolute inset-0 transition-all duration-300',
-								app.screenshotUrl
+								app.screenshotUrl || app.appType === 'mobile'
 									? 'hidden opacity-0'
 									: 'opacity-100',
 								// Enhanced placeholder design
