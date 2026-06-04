@@ -383,7 +383,7 @@ export class RateLimitService {
 		config: RateLimitSettings,
 		userId: string,
         model: AIModels | string,
-        suffix: string = "",
+        _suffix: string = "", // retained for positional caller compatibility; no longer used (throttle removed)
 		isUsingBYOK: boolean = false,
 		hasCloudflareConfigured: boolean = false
 	): Promise<void> {
@@ -405,19 +405,13 @@ export class RateLimitService {
 			return;
 		}
 
-		const identifier = `user:${userId}`;
-		
-		const key = this.buildRateLimitKey(RateLimitType.LLM_CALLS, `${identifier}${suffix}`);
-		
 		try {
-            // Increment by model's credit cost (for the daily-limit DO counter — coarse safety net)
-            const modelConfig = getEffectiveModelConfig(model);
-            const incrementBy = modelConfig?.creditCost ?? 1;
-
-            // ── Credit pool pre-flight gate ──
-            // Just verify the user has > 0 credits. Actual deduction happens after the call
-            // in recordActualUsage() based on real token usage. This way "hello" doesn't cost
-            // the same as a 50-page prompt.
+            // ── Credit balance is the ONLY gate ──
+            // Verify the user holds credits, then let them spend at any rate. Actual deduction
+            // happens after the call in recordActualUsage() based on real token usage. There is
+            // NO daily/throttle cap: a paying user can build as much as they like, and can never
+            // spend credits they don't hold, so we never lose money. (A future opt-in, user-set
+            // daily/monthly spend cap would live here — chosen by the user, never imposed by us.)
             const creditKey = `user_credits:${userId}`;
             const rawBalance = await env.VibecoderStore.get(creditKey);
             const currentBalance = rawBalance === null ? 0 : parseFloat(rawBalance);
@@ -431,46 +425,6 @@ export class RateLimitService {
                     ['Go to Settings → Add credits, or upgrade to Pro for 1,500 credits/month.'],
                 );
             }
-
-			const result = await this.enforce(env, key, config, RateLimitType.LLM_CALLS, incrementBy);
-			// Note: usage logging for the cost dashboard now happens in recordActualUsage()
-			// with the real token-weighted cost — not here (this path is skipped for BYOK/
-			// excluded users and only ran a flat per-call estimate).
-
-			if (!result.success) {
-				this.logger.warn('LLM calls rate limit exceeded', {
-					identifier,
-					key,
-					exceededLimit: result.exceededLimit,
-					limitValue: result.limitValue,
-                    model,
-                    incrementBy
-				});
-				captureSecurityEvent('rate_limit_exceeded', {
-					limitType: RateLimitType.LLM_CALLS,
-					identifier,
-					key,
-					exceededLimit: result.exceededLimit,
-                    model,
-                    incrementBy
-				});
-
-				// Build error message based on which limit was exceeded
-				const limitValue = result.limitValue ?? config.llmCalls.limit;
-				const periodSeconds = result.periodSeconds ?? config.llmCalls.period;
-				const periodHours = periodSeconds / 3600;
-				const periodLabel = result.exceededLimit === 'daily'
-					? 'day'
-					: `${periodHours} hour${periodHours >= 2 ? 's' : ''}`;
-
-				throw new RateLimitExceededError(
-					`AI inference rate limit exceeded. Consider using lighter models. Maximum ${limitValue} credits per ${periodLabel}.`,
-					RateLimitType.LLM_CALLS,
-					limitValue,
-					periodSeconds,
-                    [`Please try again later when the limit resets for you. The current model costs ${incrementBy} credits per call. Please go to settings to change your default model.`]
-				);
-			}
 		} catch (error) {
 			if (error instanceof RateLimitExceededError || error instanceof SecurityError) {
 				throw error;

@@ -93,11 +93,12 @@ export class AppService extends BaseService {
             period = 'all',
             framework,
             search,
+            appType,
             userId
         } = options;
 
         try {
-            const whereConditions = this.buildPublicAppConditions(framework, search);
+            const whereConditions = this.buildPublicAppConditions(framework, search, appType);
             const whereClause = this.buildWhereConditions(whereConditions);
             const readDb = this.getReadDb('fast');
             
@@ -197,13 +198,24 @@ export class AppService extends BaseService {
      * Helper to build common app filters (framework and search)
      * Used by both user apps and public apps to avoid duplication
      */
-    private buildCommonAppFilters(framework?: string, search?: string): WhereCondition[] {
+    private buildCommonAppFilters(framework?: string, search?: string, appType?: string): WhereCondition[] {
         const conditions: WhereCondition[] = [];
-        
+
         if (framework) {
             conditions.push(eq(schema.apps.framework, framework));
         }
-        
+
+        // appType is a comma-separated list of categories (mobile,website,webapp). Filter to the
+        // selected ones; an empty/all-selected list is passed as undefined so no filter applies.
+        if (appType) {
+            const categories = appType.split(',')
+                .map(t => t.trim())
+                .filter((t): t is 'mobile' | 'website' | 'webapp' => t === 'mobile' || t === 'website' || t === 'webapp');
+            if (categories.length > 0) {
+                conditions.push(inArray(schema.apps.appType, categories));
+            }
+        }
+
         if (search) {
             const searchTerm = `%${search.toLowerCase()}%`;
             conditions.push(
@@ -221,8 +233,9 @@ export class AppService extends BaseService {
      * Helper to build public app query conditions
      */
     private buildPublicAppConditions(
-        framework?: string, 
-        search?: string
+        framework?: string,
+        search?: string,
+        appType?: string
     ): WhereCondition[] {
         const whereConditions: WhereCondition[] = [
             // Only show public apps or apps from anonymous users
@@ -235,7 +248,7 @@ export class AppService extends BaseService {
                 eq(schema.apps.status, 'generating')
             ),
             // Use shared helper for common filters
-            ...this.buildCommonAppFilters(framework, search),
+            ...this.buildCommonAppFilters(framework, search, appType),
         ];
 
         return whereConditions.filter(Boolean);
@@ -1002,8 +1015,11 @@ export class AppService extends BaseService {
         } else {
             // Simple query for recent/starred sorts
             const direction = order === 'asc' ? asc : desc;
-            const orderByExpression = sort === 'starred' 
-                ? sql`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id}) DESC`
+            // Starred: most-starred first, then newest as a tiebreak so the unstarred tail
+            // is ordered by recency rather than arbitrarily. Keeps the curated (starred)
+            // apps pinned at the top of each section.
+            const orderByExpression = sort === 'starred'
+                ? sql`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id}) DESC, ${schema.apps.updatedAt} DESC`
                 : direction(schema.apps.updatedAt);
                 
             return db

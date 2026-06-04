@@ -725,19 +725,23 @@ export default function AppView() {
 									{isStarred ? 'Starred' : 'Star'}
 								</Button>
 
-								{/* Git Clone Button */}
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setIsGitCloneModalOpen(true)}
-									className="gap-2 text-text-primary"
-								>
-									<GitBranch className="h-4 w-4" />
-									Git Clone
-								</Button>
+								{/* Git Clone Button — owner only; a non-owner/remixer should Remix,
+								    not clone the original's source. */}
+								{isOwner && (
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => setIsGitCloneModalOpen(true)}
+										className="gap-2 text-text-primary"
+									>
+										<GitBranch className="h-4 w-4" />
+										Git Clone
+									</Button>
+								)}
 
-								{/* GitHub Repository Button */}
-								{app.githubRepositoryUrl && (
+								{/* GitHub Repository Button — owner only; a non-owner/remixer has no
+								    business seeing the owner's external repo link. */}
+								{isOwner && app.githubRepositoryUrl && (
 									<Button
 										variant="outline"
 										size="sm"

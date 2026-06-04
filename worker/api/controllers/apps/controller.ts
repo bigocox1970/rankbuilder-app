@@ -125,10 +125,11 @@ export class AppController extends BaseController {
             const period = (url.searchParams.get('period') || 'all') as TimePeriod;
             const framework = url.searchParams.get('framework') || undefined;
             const search = url.searchParams.get('search') || undefined;
-            
+            const appType = url.searchParams.get('appType') || undefined;
+
             const user = await AppController.getOptionalUser(request, env);
             const userId = user?.id;
-            
+
             // Get apps
             const appService = new AppService(env);
             const result = await appService.getPublicApps({
@@ -139,6 +140,7 @@ export class AppController extends BaseController {
                 period,
                 framework,
                 search,
+                appType,
                 userId
             });
             

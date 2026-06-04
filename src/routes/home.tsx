@@ -14,6 +14,7 @@ import { usePaginatedApps } from '@/hooks/use-paginated-apps';
 import { useRecentApps } from '@/hooks/use-apps';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { AppCard } from '@/components/shared/AppCard';
+import { AppTypeInfoModal } from '@/components/shared/AppTypeInfoModal';
 import clsx from 'clsx';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
@@ -47,6 +48,8 @@ export default function Home() {
 	const { requireAuth } = useAuthGuard();
 	const [projectMode, setProjectMode] = useState<ProjectType>('app');
 	const [stack, setStack] = useState<StackType>('website');
+	// App-type explainer modal: holds which type's info to show (null = closed).
+	const [infoType, setInfoType] = useState<AppType | null>(null);
 	const [query, setQuery] = useState('');
 	// SEO keyword capture was removed from the home input (it caused a layout jump when
 	// switching tabs); keywords stays empty so the site planner / nav URL still work.
@@ -301,7 +304,7 @@ export default function Home() {
 							<button
 								type="button"
 								onClick={() => setStack('website')}
-								className={`flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+								className={`relative flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
 									stack === 'website'
 										? 'border-accent bg-accent/10 text-text-primary'
 										: 'border-text-primary/10 bg-bg-2/50 text-text-primary/50 hover:border-text-primary/20 hover:text-text-primary/70'
@@ -309,11 +312,22 @@ export default function Home() {
 							>
 								<span className="text-sm font-medium">Website</span>
 								<span className="text-xs mt-0.5 opacity-70">Pre-rendered HTML · Google-ready</span>
+								<span
+									role="button"
+									tabIndex={0}
+									aria-label="What is a Website (HTML) app?"
+									title="What does this mean?"
+									onClick={(e) => { e.stopPropagation(); e.preventDefault(); setInfoType('website'); }}
+									onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setInfoType('website'); } }}
+									className="absolute top-1.5 right-1.5 rounded-full p-0.5 text-text-primary/40 hover:text-accent transition-colors"
+								>
+									<Info size={14} />
+								</span>
 							</button>
 							<button
 								type="button"
 								onClick={() => setStack('app')}
-								className={`flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+								className={`relative flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
 									stack === 'app'
 										? 'border-accent bg-accent/10 text-text-primary'
 										: 'border-text-primary/10 bg-bg-2/50 text-text-primary/50 hover:border-text-primary/20 hover:text-text-primary/70'
@@ -321,11 +335,22 @@ export default function Home() {
 							>
 								<span className="text-sm font-medium">App</span>
 								<span className="text-xs mt-0.5 opacity-70">React · Interactive tools &amp; dashboards</span>
+								<span
+									role="button"
+									tabIndex={0}
+									aria-label="What is a React Web app (PWA)?"
+									title="What does this mean?"
+									onClick={(e) => { e.stopPropagation(); e.preventDefault(); setInfoType('webapp'); }}
+									onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setInfoType('webapp'); } }}
+									className="absolute top-1.5 right-1.5 rounded-full p-0.5 text-text-primary/40 hover:text-accent transition-colors"
+								>
+									<Info size={14} />
+								</span>
 							</button>
 							<button
 								type="button"
 								onClick={() => setStack('expo')}
-								className={`flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+								className={`relative flex-1 flex flex-col items-start px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
 									stack === 'expo'
 										? 'border-accent bg-accent/10 text-text-primary'
 										: 'border-text-primary/10 bg-bg-2/50 text-text-primary/50 hover:border-text-primary/20 hover:text-text-primary/70'
@@ -333,8 +358,25 @@ export default function Home() {
 							>
 								<span className="text-sm font-medium">Mobile</span>
 								<span className="text-xs mt-0.5 opacity-70">Expo · iOS &amp; Android</span>
+								<span
+									role="button"
+									tabIndex={0}
+									aria-label="What is a Mobile (Expo) app?"
+									title="What does this mean?"
+									onClick={(e) => { e.stopPropagation(); e.preventDefault(); setInfoType('mobile'); }}
+									onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setInfoType('mobile'); } }}
+									className="absolute top-1.5 right-1.5 rounded-full p-0.5 text-text-primary/40 hover:text-accent transition-colors"
+								>
+									<Info size={14} />
+								</span>
 							</button>
 						</div>
+
+						<AppTypeInfoModal
+							open={infoType !== null}
+							onOpenChange={(o) => { if (!o) setInfoType(null); }}
+							highlightType={infoType}
+						/>
 
 						<PromptBox
 							value={query}

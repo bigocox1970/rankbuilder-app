@@ -14,15 +14,18 @@ export default function DiscoverPage() {
 	const allowedSorts: AppSortOption[] = ['recent', 'popular', 'trending', 'starred'];
 	const sortParam = searchParams.get('sort') as AppSortOption | null;
 	const savedSort = (typeof localStorage !== 'undefined' ? localStorage.getItem('discover.sort') : null) as AppSortOption | null;
+	// Default to 'starred' so the most-starred apps lead every section (curated keepers on
+	// top); a URL ?sort= or a previously chosen sort still wins.
 	const initialSort: AppSortOption = (sortParam && allowedSorts.includes(sortParam))
 		? sortParam
-		: (savedSort && allowedSorts.includes(savedSort) ? savedSort : 'popular');
+		: (savedSort && allowedSorts.includes(savedSort) ? savedSort : 'starred');
 
 	const {
 		// Filter state
 		searchQuery,
 		setSearchQuery,
 		filterFramework,
+		appTypeFilter,
 		sortBy,
 		period,
 
@@ -38,6 +41,7 @@ export default function DiscoverPage() {
 		handleSearchSubmit,
 		handlePeriodChange,
 		handleFrameworkChange,
+		handleAppTypeChange,
 
 		handleSortChange,
 
@@ -83,6 +87,9 @@ export default function DiscoverPage() {
 							onFrameworkChange={handleFrameworkChange}
 							onPeriodChange={handlePeriodChange}
 							sortBy={sortBy}
+							showAppTypeFilter={true}
+							appTypeFilter={appTypeFilter}
+							onAppTypeChange={handleAppTypeChange}
 					/>
 
 						{/* Sort Tabs */}

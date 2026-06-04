@@ -92,6 +92,8 @@ export type SortOrder = 'asc' | 'desc';
 export interface BaseAppQueryOptions extends PaginationParams {
     framework?: string;
     search?: string;
+    /** Comma-separated app categories to include (mobile,website,webapp). Empty/absent = all. */
+    appType?: string;
     sort?: AppSortOption;
     order?: SortOrder;
     period?: TimePeriod;

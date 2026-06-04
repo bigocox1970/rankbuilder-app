@@ -6,11 +6,16 @@ import { appEvents } from '@/lib/app-events';
 export type AppType = 'user' | 'public';
 export type AppListData = EnhancedAppData | AppWithUserAndStats;
 
+/** App categories used by the Discover type-filter. 'all' = no filter. */
+export type AppCategory = 'mobile' | 'website' | 'webapp';
+export type AppTypeFilter = 'all' | AppCategory;
+
 interface UsePaginatedAppsOptions {
   type: AppType;
   defaultSort?: AppSortOption;
   defaultPeriod?: TimePeriod;
   defaultFramework?: string;
+  defaultAppType?: AppTypeFilter;
   defaultVisibility?: string;
   includeVisibility?: boolean;
   limit?: number;
@@ -20,6 +25,7 @@ interface UsePaginatedAppsOptions {
 interface FilterState {
   searchQuery: string;
   filterFramework: string;
+  appTypeFilter: AppTypeFilter;
   filterVisibility: string;
   sortBy: AppSortOption;
   period: TimePeriod;
@@ -45,6 +51,7 @@ interface UsePaginatedAppsResult extends FilterState {
   handleSortChange: (sort: string) => void;
   handlePeriodChange: (period: TimePeriod) => void;
   handleFrameworkChange: (framework: string) => void;
+  handleAppTypeChange: (value: AppTypeFilter) => void;
   handleVisibilityChange: (visibility: string) => void;
   
   refetch: () => Promise<void>;
@@ -60,6 +67,7 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
   const [filterState, setFilterState] = useState<FilterState>({
     searchQuery: '',
     filterFramework: options.defaultFramework || 'all',
+    appTypeFilter: options.defaultAppType || 'all',
     filterVisibility: options.defaultVisibility || 'all',
     sortBy: options.defaultSort || 'recent',
     period: options.defaultPeriod || 'all'
@@ -93,6 +101,7 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
       sortBy: AppSortOption;
       period: TimePeriod;
       filterFramework: string;
+      appTypeFilter: AppTypeFilter;
       filterVisibility: string;
       searchQuery: string;
     }
@@ -113,6 +122,7 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
         sort: filters.sortBy,
         period: filters.period,
         framework: filters.filterFramework === 'all' ? undefined : filters.filterFramework,
+        appType: filters.appTypeFilter === 'all' ? undefined : filters.appTypeFilter,
         search: filters.searchQuery || undefined,
         visibility: (options.includeVisibility && filters.filterVisibility !== 'all') ? filters.filterVisibility : undefined,
       };
@@ -211,6 +221,10 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
     setFilterState(prev => ({ ...prev, filterFramework: framework }));
   }, []);
 
+  const handleAppTypeChange = useCallback((value: AppTypeFilter) => {
+    setFilterState(prev => ({ ...prev, appTypeFilter: value }));
+  }, []);
+
   const handleVisibilityChange = useCallback((visibility: string) => {
     setFilterState(prev => ({ ...prev, filterVisibility: visibility }));
   }, []);
@@ -236,6 +250,7 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
         sortBy: filterState.sortBy,
         period: filterState.period,
         filterFramework: filterState.filterFramework,
+        appTypeFilter: filterState.appTypeFilter,
         filterVisibility: filterState.filterVisibility,
         searchQuery: debouncedSearchQuery
       });
@@ -248,6 +263,7 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
     filterState.sortBy,
     filterState.period,
     filterState.filterFramework,
+    filterState.appTypeFilter,
     filterState.filterVisibility,
     debouncedSearchQuery,
     fetchAppsInternal,
@@ -271,6 +287,7 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
   return {
     searchQuery: filterState.searchQuery,
     filterFramework: filterState.filterFramework,
+    appTypeFilter: filterState.appTypeFilter,
     filterVisibility: options.includeVisibility ? filterState.filterVisibility : 'all',
     sortBy: filterState.sortBy,
     period: filterState.period,
@@ -288,8 +305,9 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
     handleSortChange,
     handlePeriodChange,
     handleFrameworkChange,
+    handleAppTypeChange,
     handleVisibilityChange,
-    
+
     refetch,
     loadMore,
     removeApp,

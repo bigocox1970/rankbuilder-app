@@ -155,6 +155,8 @@ interface PublicAppsParams extends PaginationParams {
 	period?: 'today' | 'week' | 'month' | 'all';
 	framework?: string;
 	search?: string;
+	/** Comma-separated app categories to include (mobile,website,webapp). Absent = all. */
+	appType?: string;
 	boardId?: string;
 }
 
@@ -489,6 +491,7 @@ class ApiClient {
 		if (params?.period) queryParams.set('period', params.period);
 		if (params?.framework) queryParams.set('framework', params.framework);
 		if (params?.search) queryParams.set('search', params.search);
+		if (params?.appType) queryParams.set('appType', params.appType);
 		if (params?.boardId) queryParams.set('boardId', params.boardId);
 
 		const endpoint = `/api/apps/public${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
