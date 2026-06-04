@@ -6,7 +6,7 @@ import { jwtVerify, SignJWT } from 'jose';
 import { isDev } from 'worker/utils/envs';
 import { RateLimitService } from '../rate-limit/rateLimits';
 import { getUserConfigurableSettings } from 'worker/config';
-import { AI_MODEL_CONFIG, AIModels } from 'worker/agents/inferutils/config.types';
+import { getEffectiveModelConfig } from 'worker/agents/inferutils/config.types';
 
 export async function proxyToAiGateway(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     console.log(`[AI Proxy] Received request: ${request.method} ${request.url}`);
@@ -149,8 +149,12 @@ export async function proxyToAiGateway(request: Request, env: Env, _ctx: Executi
         const userConfig = await getUserConfigurableSettings(env, app.userId)
         await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, app.userId, modelName, "apps")
 
+        const proxyModelConfig = getEffectiveModelConfig(modelName);
+        if (!proxyModelConfig) {
+            return new Response(`Unknown model: ${modelName}`, { status: 400 });
+        }
         const { baseURL, apiKey, defaultHeaders } = await getConfigurationForModel(
-            AI_MODEL_CONFIG[modelName as AIModels],
+            proxyModelConfig,
             env,
             app.userId,
             undefined, // User app proxy doesn't use BYOK

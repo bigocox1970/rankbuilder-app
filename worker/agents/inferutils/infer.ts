@@ -10,7 +10,7 @@ import { createLogger } from '../../logger';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import { ToolDefinition } from '../tools/types';
 import { validateAgentConstraints } from 'worker/api/controllers/modelConfig/constraintHelper';
-import { isValidAIModel } from './config.types';
+import { isUsableModel } from './config.types';
 
 const logger = createLogger('InferenceUtils');
 
@@ -45,7 +45,7 @@ function resolveModelConfig(
 
     let validModelName: AIModels | string | undefined;
     for (const candidate of modelCandidates) {
-        if (!isValidAIModel(candidate)) {
+        if (!isUsableModel(candidate)) {
             logger.warn(`Model ${candidate} not valid, trying next`);
             continue;
         }

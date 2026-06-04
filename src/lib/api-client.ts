@@ -43,6 +43,7 @@ import type{
 	ModelConfigDefaultsData,
 	ModelConfigDeleteData,
 	ByokProvidersData,
+	OpenRouterCatalogData,
 	ModelConfigUpdate,
 	ModelProvidersListData,
 	ModelProviderCreateData,
@@ -753,6 +754,13 @@ class ApiClient {
 			: '/api/model-configs/byok-providers';
 
 		return this.request<ByokProvidersData>(endpoint);
+	}
+
+	/**
+	 * Get the full live OpenRouter model catalogue (cached server-side) for the model dropdown
+	 */
+	async getOpenRouterCatalog(): Promise<ApiResponse<OpenRouterCatalogData>> {
+		return this.request<OpenRouterCatalogData>('/api/model-configs/openrouter-catalog');
 	}
 
 	/**

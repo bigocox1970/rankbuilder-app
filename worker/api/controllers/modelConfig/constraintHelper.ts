@@ -1,6 +1,6 @@
 import { AGENT_CONSTRAINTS } from '../../../agents/inferutils/config';
 import { AgentActionKey, AIModels } from '../../../agents/inferutils/config.types';
-import { isValidAIModel } from '../../../agents/inferutils/config.types';
+import { isValidAIModel, isDynamicOpenRouterModel } from '../../../agents/inferutils/config.types';
 
 export interface ConstraintValidationResult {
 	valid: boolean;
@@ -25,6 +25,12 @@ export function validateAgentConstraints(
 	// Graceful: No constraint or disabled = always valid
 	if (!constraint || !constraint.enabled) {
 		return { valid: true, constraintEnabled: false };
+	}
+
+	// Dynamic openrouter/* models (the live catalogue, admin-picked) bypass tier
+	// constraints — they aren't in the static allow-sets but are deliberate choices.
+	if (isDynamicOpenRouterModel(modelName)) {
+		return { valid: true, constraintEnabled: true };
 	}
 
 	// Validate model name is a valid AIModels enum value

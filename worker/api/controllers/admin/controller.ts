@@ -6,7 +6,7 @@
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
-import { AI_MODEL_CONFIG, AIModels } from 'worker/agents/inferutils/config.types';
+import { getEffectiveModelConfig } from 'worker/agents/inferutils/config.types';
 import { AiGatewayAnalyticsService } from 'worker/services/analytics/AiGatewayAnalyticsService';
 import { grantCredits, readCreditBalance } from '../credits/controller';
 import { getAdminBillingSummary } from '../stripe/controller';
@@ -136,7 +136,7 @@ export class AdminController extends BaseController {
             const rows = result.results ?? [];
 
             const byModel: AdminCostEntry[] = rows.map((row) => {
-                const modelConfig = AI_MODEL_CONFIG[row.model as AIModels];
+                const modelConfig = getEffectiveModelConfig(row.model);
                 return {
                     model: row.model,
                     modelName: modelConfig?.name ?? row.model,

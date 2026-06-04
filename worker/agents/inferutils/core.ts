@@ -15,7 +15,7 @@ import {
 } from 'openai/resources.mjs';
 import { CompletionSignal, Message, MessageContent, MessageRole } from './common';
 import { ToolCallResult, ToolDefinition, toOpenAITool } from '../tools/types';
-import { AgentActionKey, AI_MODEL_CONFIG, AIModelConfig, AIModels, InferenceMetadata, type InferenceRuntimeOverrides } from './config.types';
+import { AgentActionKey, AIModelConfig, AIModels, getEffectiveModelConfig, InferenceMetadata, type InferenceRuntimeOverrides } from './config.types';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import { getUserConfigurableSettings } from '../../config';
@@ -626,7 +626,10 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         // Notify that usage was consumed
         onUsageConsumed?.();
         
-        const modelConfig = AI_MODEL_CONFIG[modelName as AIModels];
+        const modelConfig = getEffectiveModelConfig(modelName);
+        if (!modelConfig) {
+            throw new Error(`Unknown model '${modelName}' — not in the registry and not a dynamic openrouter/* model`);
+        }
 
         const { apiKey, baseURL, defaultHeaders } = await getConfigurationForModel(
             modelConfig,

@@ -81,3 +81,15 @@ export interface ByokProvidersData {
     modelsByProvider: ModelsByProvider;
     platformModels: AIModels[];
 }
+
+export interface OpenRouterCatalogModel {
+    value: string;          // `openrouter/<id>` — directly usable as a model name
+    label: string;          // human-readable label from OpenRouter
+    contextLength: number;
+    promptPrice: number;    // USD per token (input)
+    completionPrice: number; // USD per token (output)
+}
+
+export interface OpenRouterCatalogData {
+    models: OpenRouterCatalogModel[];
+}

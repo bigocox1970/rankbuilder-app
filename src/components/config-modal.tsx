@@ -29,8 +29,52 @@ import type {
   UserModelConfigWithMetadata,
   ModelConfigUpdate,
   ByokProvidersData,
+  OpenRouterCatalogModel,
   AgentDisplayConfig
 } from '@/api-types';
+
+// Session-level cache for the OpenRouter catalogue so we fetch it once, not per modal open.
+let openRouterCatalogCache: OpenRouterCatalogModel[] | null = null;
+
+// Which kind of model suits each step, and the recommended picks for that tier. The full
+// catalogue is always selectable; these just pin sensible defaults to the top of the list.
+const AGENT_TIER: Record<string, 'heavy' | 'fast' | 'vision'> = {
+  blueprint: 'heavy',
+  firstPhaseImplementation: 'heavy',
+  phaseImplementation: 'heavy',
+  agenticProjectBuilder: 'heavy',
+  fileRegeneration: 'heavy',
+  deepDebugger: 'heavy',
+  projectSetup: 'fast',
+  phaseGeneration: 'fast',
+  conversationalResponse: 'fast',
+  realtimeCodeFixer: 'fast',
+  fastCodeFixer: 'fast',
+  templateSelection: 'fast',
+  screenshotAnalysis: 'vision',
+};
+
+const TIER_RECOMMENDED: Record<'heavy' | 'fast' | 'vision', string[]> = {
+  heavy: [
+    'openrouter/anthropic/claude-sonnet-4.5',
+    'openrouter/deepseek/deepseek-v4-pro',
+    'openrouter/openai/gpt-5.1',
+    'openrouter/google/gemini-2.5-pro',
+  ],
+  fast: [
+    'openrouter/anthropic/claude-haiku-4.5',
+    'openrouter/deepseek/deepseek-v4-flash',
+    'openrouter/google/gemini-2.5-flash',
+    'openrouter/google/gemini-2.5-flash-lite',
+  ],
+  vision: ['openrouter/google/gemini-2.5-pro', 'openrouter/openai/gpt-5.1'],
+};
+
+const TIER_LABEL: Record<'heavy' | 'fast' | 'vision', string> = {
+  heavy: 'Heavy — reasoning / code generation. Use a strong model.',
+  fast: 'Fast — light, high-frequency step. A cheap/fast model is fine.',
+  vision: 'Vision — needs an image-capable model.',
+};
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -108,6 +152,27 @@ export function ConfigModal({
   // BYOK data state
   const [byokData, setByokData] = useState<ByokProvidersData | null>(null);
   const [loadingByok, setLoadingByok] = useState(false);
+
+  // Full live OpenRouter catalogue (cached at session + server level)
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterCatalogModel[]>(
+    openRouterCatalogCache ?? [],
+  );
+
+  useEffect(() => {
+    if (!isOpen || openRouterCatalogCache) return;
+    let cancelled = false;
+    apiClient
+      .getOpenRouterCatalog()
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return;
+        openRouterCatalogCache = res.data.models;
+        setOpenRouterModels(res.data.models);
+      })
+      .catch((err) => console.error('Failed to load OpenRouter catalogue:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   // Load BYOK data (filtered by agent constraints)
   const loadByokData = useCallback(async () => {
@@ -205,9 +270,31 @@ export function ConfigModal({
         processedModels.add(modelStr);
       }
     });
-    
+
+    // Finally, merge the full live OpenRouter catalogue (admin can pick any of these;
+    // they run via the platform OpenRouter key — no per-user key needed).
+    openRouterModels.forEach((m) => {
+      if (!processedModels.has(m.value)) {
+        models.push({
+          value: m.value,
+          label: m.label,
+          provider: 'openrouter',
+          hasUserKey: false,
+          byokAvailable: false,
+        });
+        processedModels.add(m.value);
+      }
+    });
+
     return models.sort((a, b) => a.label.localeCompare(b.label));
-  }, [byokData]);
+  }, [byokData, openRouterModels]);
+
+  // Recommended models for this step (pinned to the top of the selector).
+  const tier = AGENT_TIER[agentConfig.key] ?? 'fast';
+  const recommendedValues = useMemo(
+    () => TIER_RECOMMENDED[tier].filter((v) => availableModels.some((m) => m.value === v)),
+    [tier, availableModels],
+  );
 
   // Get current model's BYOK status
   const selectedModelInfo = useMemo(() => {
@@ -340,6 +427,11 @@ export function ConfigModal({
               </Button>
             </div>
             
+            {/* Tier hint for this step */}
+            <div className="text-xs text-text-tertiary">
+              <span className="font-medium text-text-secondary">{TIER_LABEL[tier]}</span>
+            </div>
+
             {/* Two-Column Model Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Primary AI Model */}
@@ -348,6 +440,7 @@ export function ConfigModal({
                   value={formData.modelName}
                   onValueChange={(value) => setFormData({...formData, modelName: value})}
                   availableModels={availableModels}
+                  recommendedValues={recommendedValues}
                   placeholder="Select model..."
                   label="AI Model"
                   systemDefault={defaultConfig?.name}
@@ -388,6 +481,7 @@ export function ConfigModal({
                   value={formData.fallbackModel}
                   onValueChange={(value) => setFormData({...formData, fallbackModel: value})}
                   availableModels={availableModels}
+                  recommendedValues={recommendedValues}
                   placeholder="Select fallback model..."
                   label="Fallback Model"
                   systemDefault={defaultConfig?.fallbackModel}

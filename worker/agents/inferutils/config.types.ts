@@ -580,3 +580,40 @@ export function toAIModel(value: string | null | undefined): AIModels | undefine
   if (!value) return undefined;
   return isValidAIModel(value) ? value : undefined;
 }
+
+// Any `openrouter/<vendor>/<slug>` id is runnable even when it isn't in the static
+// registry: the inference path strips the `openrouter/` prefix and sends the bare slug
+// to OpenRouter. This lets the model dropdown offer OpenRouter's full live catalogue.
+export function isDynamicOpenRouterModel(value: string): boolean {
+  return typeof value === 'string' && value.startsWith('openrouter/') && !isValidAIModel(value);
+}
+
+// True for both registry models and any dynamic openrouter/* model. Use at points that
+// gate whether a model is usable (e.g. inference candidate selection) so dynamic picks
+// aren't silently dropped in favour of the default.
+export function isUsableModel(value: string): boolean {
+  return isValidAIModel(value) || isDynamicOpenRouterModel(value);
+}
+
+// Flat credit cost for non-registry OpenRouter models (real per-model pricing isn't
+// known synchronously here). Conservative middle rate; only ever hit by admin testing.
+const DYNAMIC_OPENROUTER_CREDIT_COST = 3;
+
+// Resolve the effective config for a model id. Returns the registry entry when known,
+// otherwise synthesises a config for any dynamic openrouter/* model so routing and
+// billing work without a static entry. Returns undefined for genuinely unknown models.
+export function getEffectiveModelConfig(modelName: string): AIModelConfig | undefined {
+  const known = AI_MODEL_CONFIG[modelName as AIModels];
+  if (known) return known;
+  if (isDynamicOpenRouterModel(modelName)) {
+    return {
+      name: modelName,
+      size: ModelSize.REGULAR,
+      provider: 'openrouter',
+      creditCost: DYNAMIC_OPENROUTER_CREDIT_COST,
+      contextSize: 128000,
+      directOverride: true,
+    };
+  }
+  return undefined;
+}

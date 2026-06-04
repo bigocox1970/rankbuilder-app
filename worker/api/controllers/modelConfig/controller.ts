@@ -22,7 +22,8 @@ import {
     ModelConfigResetData,
     ModelConfigDefaultsData,
     ModelConfigDeleteData,
-    ByokProvidersData
+    ByokProvidersData,
+    OpenRouterCatalogData
 } from './types';
 import { 
     getUserProviderStatus, 
@@ -440,6 +441,57 @@ export class ModelConfigController extends BaseController {
         } catch (error) {
             this.logger.error('Error getting BYOK providers:', error);
             return ModelConfigController.createErrorResponse<ByokProvidersData>('Failed to get BYOK providers', 500);
+        }
+    }
+
+    /**
+     * Get the full live OpenRouter model catalogue (cached) so the model dropdown can
+     * offer every openrouter/* model, not just the static registry.
+     * GET /api/model-configs/openrouter-catalog
+     */
+    static async getOpenRouterCatalog(_request: Request, env: Env): Promise<ControllerResponse<ApiResponse<OpenRouterCatalogData>>> {
+        try {
+            const cacheKey = 'openrouter_catalog_v1';
+            const cached = await env.VibecoderStore.get(cacheKey);
+            if (cached) {
+                return ModelConfigController.createSuccessResponse<OpenRouterCatalogData>({
+                    models: JSON.parse(cached) as OpenRouterCatalogData['models'],
+                });
+            }
+
+            const resp = await fetch('https://openrouter.ai/api/v1/models', {
+                headers: { Accept: 'application/json' },
+            });
+            if (!resp.ok) {
+                return ModelConfigController.createErrorResponse<OpenRouterCatalogData>('Failed to fetch OpenRouter catalogue', 502);
+            }
+
+            const data = (await resp.json()) as {
+                data?: Array<{
+                    id: string;
+                    name?: string;
+                    context_length?: number;
+                    pricing?: { prompt?: string; completion?: string };
+                }>;
+            };
+
+            const models: OpenRouterCatalogData['models'] = (data.data ?? [])
+                .map((m) => ({
+                    value: `openrouter/${m.id}`,
+                    label: m.name ?? m.id,
+                    contextLength: m.context_length ?? 0,
+                    promptPrice: Number(m.pricing?.prompt ?? 0),
+                    completionPrice: Number(m.pricing?.completion ?? 0),
+                }))
+                .sort((a, b) => a.label.localeCompare(b.label));
+
+            // Cache for 6h to avoid hammering OpenRouter on every modal open.
+            await env.VibecoderStore.put(cacheKey, JSON.stringify(models), { expirationTtl: 21600 });
+
+            return ModelConfigController.createSuccessResponse<OpenRouterCatalogData>({ models });
+        } catch (error) {
+            this.logger.error('Error fetching OpenRouter catalogue:', error);
+            return ModelConfigController.createErrorResponse<OpenRouterCatalogData>('Failed to fetch OpenRouter catalogue', 500);
         }
     }
 }

@@ -91,7 +91,9 @@ export type {
   ModelConfigDeleteData,
   ByokProvidersData,
   UserProviderStatus,
-  ModelsByProvider
+  ModelsByProvider,
+  OpenRouterCatalogData,
+  OpenRouterCatalogModel
 } from 'worker/api/controllers/modelConfig/types';
 
 // Model Provider API Types

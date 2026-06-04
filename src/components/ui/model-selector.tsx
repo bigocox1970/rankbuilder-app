@@ -30,6 +30,8 @@ interface ModelSelectorProps {
   includeDefaultOption?: boolean;
   disabled?: boolean;
   className?: string;
+  // Model values to pin to the top of the list under a "Recommended" header.
+  recommendedValues?: string[];
 }
 
 // Helper to get clean model display name
@@ -47,6 +49,7 @@ export function ModelSelector({
   includeDefaultOption = false,
   disabled = false,
   className,
+  recommendedValues,
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -55,10 +58,51 @@ export function ModelSelector({
   // Filter models based on search
   const filteredModels = useMemo(() => {
     if (!search) return availableModels;
-    return availableModels.filter(model => 
+    return availableModels.filter(model =>
       model.label.toLowerCase().includes(search.toLowerCase())
     );
   }, [availableModels, search]);
+
+  // Split into a pinned "Recommended" group (in the given order) and the rest.
+  const recommendedSet = useMemo(() => new Set(recommendedValues ?? []), [recommendedValues]);
+  const recommendedModels = useMemo(() => {
+    if (!recommendedValues?.length) return [];
+    return recommendedValues
+      .map((v) => filteredModels.find((m) => m.value === v))
+      .filter((m): m is ModelOption => !!m);
+  }, [recommendedValues, filteredModels]);
+  const otherModels = useMemo(
+    () => filteredModels.filter((m) => !recommendedSet.has(m.value)),
+    [filteredModels, recommendedSet],
+  );
+
+  const renderRow = (model: ModelOption) => (
+    <div
+      key={model.value}
+      onClick={() => {
+        onValueChange(model.value);
+        setOpen(false);
+        setSearch('');
+      }}
+      className={cn(
+        "relative flex cursor-pointer select-none items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-text-secondary focus:bg-accent focus:text-text-secondary",
+        value === model.value && "bg-accent text-text-secondary"
+      )}
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <Check
+          className={cn(
+            "h-4 w-4 text-text-primary shrink-0",
+            value === model.value ? "opacity-100" : "opacity-0"
+          )}
+        />
+        <span className="truncate">{model.label}</span>
+      </div>
+      <div className="flex items-center gap-1 ml-2 shrink-0">
+        {getModelBadge(model)}
+      </div>
+    </div>
+  );
 
   // Get display name for selected value
   const getSelectedDisplay = () => {
@@ -169,34 +213,19 @@ export function ModelSelector({
               </div>
             )}
             
-            {/* Available models */}
-            {filteredModels.map((model) => (
-              <div
-                key={model.value}
-                onClick={() => {
-                  onValueChange(model.value);
-                  setOpen(false);
-                  setSearch('');
-                }}
-                className={cn(
-                  "relative flex cursor-pointer select-none items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-text-secondary focus:bg-accent focus:text-text-secondary",
-                  value === model.value && "bg-accent text-text-secondary"
+            {/* Recommended group (pinned) */}
+            {recommendedModels.length > 0 && (
+              <>
+                <div className="px-2 py-1 text-xs font-medium text-text-tertiary">★ Recommended for this step</div>
+                {recommendedModels.map((model) => renderRow(model))}
+                {otherModels.length > 0 && (
+                  <div className="px-2 py-1 mt-1 text-xs font-medium text-text-tertiary border-t border-border-primary">All models</div>
                 )}
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <Check
-                    className={cn(
-                      "h-4 w-4 text-text-primary shrink-0",
-                      value === model.value ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  <span className="truncate">{model.label}</span>
-                </div>
-                <div className="flex items-center gap-1 ml-2 shrink-0">
-                  {getModelBadge(model)}
-                </div>
-              </div>
-            ))}
+              </>
+            )}
+
+            {/* Everything else (alphabetical) */}
+            {otherModels.map((model) => renderRow(model))}
           </div>
         </PopoverContent>
       </Popover>

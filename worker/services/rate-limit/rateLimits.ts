@@ -7,7 +7,7 @@ import { KVRateLimitStore } from './KVRateLimitStore';
 import { RateLimitResult } from './DORateLimitStore';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import { isDev } from 'worker/utils/envs';
-import { AI_MODEL_CONFIG, AIModels } from 'worker/agents/inferutils/config.types';
+import { AIModels, getEffectiveModelConfig } from 'worker/agents/inferutils/config.types';
 
 export class RateLimitService {
     static logger = createObjectLogger(this, 'RateLimitService');
@@ -319,7 +319,7 @@ export class RateLimitService {
 		outputTokens: number,
 	): Promise<void> {
 		try {
-			const modelConfig = AI_MODEL_CONFIG[model as AIModels];
+			const modelConfig = getEffectiveModelConfig(model);
 			if (!modelConfig) {
 				this.logger.warn('Unknown model in recordActualUsage', { model });
 				return;
@@ -404,8 +404,8 @@ export class RateLimitService {
 		
 		try {
             // Increment by model's credit cost (for the daily-limit DO counter — coarse safety net)
-            const modelConfig = AI_MODEL_CONFIG[model as AIModels];
-            const incrementBy = modelConfig.creditCost;
+            const modelConfig = getEffectiveModelConfig(model);
+            const incrementBy = modelConfig?.creditCost ?? 1;
 
             // ── Credit pool pre-flight gate ──
             // Just verify the user has > 0 credits. Actual deduction happens after the call

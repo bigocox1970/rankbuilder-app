@@ -20,6 +20,7 @@ export function setupModelConfigRoutes(app: Hono<AppEnv>): void {
     modelConfigRouter.get('/', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getModelConfigs));
     modelConfigRouter.get('/defaults', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getDefaults));
     modelConfigRouter.get('/byok-providers', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getByokProviders));
+    modelConfigRouter.get('/openrouter-catalog', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getOpenRouterCatalog));
     modelConfigRouter.get('/:agentAction', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getModelConfig));
     modelConfigRouter.put('/:agentAction', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.updateModelConfig));
     modelConfigRouter.delete('/:agentAction', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.deleteModelConfig));
