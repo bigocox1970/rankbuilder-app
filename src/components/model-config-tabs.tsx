@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Search, RotateCcw, Play, Settings, Zap } from 'lucide-react';
+import { Search, RotateCcw, Play, Settings, Zap, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -130,6 +130,47 @@ export function ModelConfigTabs({
     else toast.error(`Applied to ${ok}, failed on ${fail}`);
   };
 
+  // Premium Claude (via OpenRouter) preset — personal A/B test profile. Sonnet 4.5 for the
+  // heavy generation steps, Haiku 4.5 for the lighter ones. Routes through the existing
+  // OpenRouter key so spend still tracks in one place. Only includes agents that actually
+  // honour the override (templateSelection/realtime fixers are tier-locked, so they're skipped).
+  // Overrides are per-account; "Reset All" clears them back to the DeepSeek defaults.
+  const CLAUDE_PRESET: Record<string, string> = {
+    blueprint:                'openrouter/anthropic/claude-sonnet-4.5',
+    firstPhaseImplementation: 'openrouter/anthropic/claude-sonnet-4.5',
+    phaseImplementation:      'openrouter/anthropic/claude-sonnet-4.5',
+    agenticProjectBuilder:    'openrouter/anthropic/claude-sonnet-4.5',
+    fileRegeneration:         'openrouter/anthropic/claude-sonnet-4.5',
+    deepDebugger:             'openrouter/anthropic/claude-sonnet-4.5',
+    projectSetup:             'openrouter/anthropic/claude-haiku-4.5',
+    phaseGeneration:          'openrouter/anthropic/claude-haiku-4.5',
+    conversationalResponse:   'openrouter/anthropic/claude-haiku-4.5',
+  };
+
+  const handleApplyClaudePreset = async () => {
+    const targets = agentConfigs.filter(c => CLAUDE_PRESET[c.key]);
+    if (targets.length === 0) {
+      toast.info('No applicable agents found');
+      return;
+    }
+    let ok = 0;
+    let fail = 0;
+    for (const config of targets) {
+      try {
+        await onSaveConfig(config.key, {
+          modelName: CLAUDE_PRESET[config.key],
+          fallbackModel: 'openrouter/anthropic/claude-haiku-4.5',
+          isUserOverride: true,
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    if (fail === 0) toast.success(`Claude profile applied to ${ok} agents — build something to speed-test, then "Reset All" to return to DeepSeek`);
+    else toast.error(`Applied to ${ok}, failed on ${fail}`);
+  };
+
   // Handle bulk test all configured agents
   const handleTestAllConfigured = async () => {
     const customizedConfigs = agentConfigs.filter(config => 
@@ -200,6 +241,18 @@ export function ModelConfigTabs({
             >
               <Zap className="h-4 w-4" />
               Use Lite Models
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleApplyClaudePreset}
+              disabled={savingConfigs}
+              className="gap-2 border-violet-400/50 text-violet-400 hover:bg-violet-400/10"
+              title="Personal test profile: route all generation through Claude Sonnet/Haiku 4.5 (via OpenRouter). Use 'Reset All' to return to DeepSeek."
+            >
+              <Sparkles className="h-4 w-4" />
+              Use Claude (test)
             </Button>
 
             <Button
