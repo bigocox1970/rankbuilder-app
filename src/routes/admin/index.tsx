@@ -138,13 +138,20 @@ export default function AdminPage() {
 		try {
 			const response = await apiClient.updateModelConfig(agentAction, config);
 
-			if (response.success) {
-				toast.success('Configuration saved successfully');
-				await loadModelConfigs();
+			if (!response.success) {
+				throw new Error(
+					(response as { error?: { message?: string } }).error?.message ??
+						'Failed to save configuration',
+				);
 			}
+			toast.success('Configuration saved successfully');
+			await loadModelConfigs();
 		} catch (error) {
 			console.error('Error saving model configuration:', error);
-			toast.error('Failed to save configuration');
+			toast.error(error instanceof Error ? error.message : 'Failed to save configuration');
+			// Re-throw so programmatic callers (e.g. the preset buttons) can detect
+			// failures instead of reporting a false success.
+			throw error;
 		}
 	};
 

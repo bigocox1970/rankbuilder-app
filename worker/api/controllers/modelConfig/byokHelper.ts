@@ -48,6 +48,7 @@ export function getPlatformEnabledProviders(env: Env): string[] {
 	const enabledProviders: string[] = [];
 
 	const providerList = [
+		'openrouter',
 		'anthropic',
 		'openai',
 		'google-ai-studio',
