@@ -334,6 +334,13 @@ export class RateLimitService {
 			const newBalance = Math.max(0, currentBalance - actualCredits);
 			await env.VibecoderStore.put(creditKey, String(newBalance));
 
+			// Log the real, token-weighted cost for the admin cost dashboard. This runs on
+			// every completed call (independent of rate limiting), so the dashboard reflects
+			// actual usage rather than a flat per-call estimate. Fire-and-forget.
+			env.DB.prepare(
+				'INSERT INTO ai_usage_logs (id, user_id, model, credit_cost, created_at) VALUES (?, ?, ?, ?, ?)'
+			).bind(crypto.randomUUID(), userId, model, actualCredits, Math.floor(Date.now() / 1000)).run().catch(() => {});
+
 			this.logger.debug('Recorded actual usage', {
 				userId, model, inputTokens, outputTokens,
 				actualCredits: actualCredits.toFixed(2),
@@ -426,13 +433,9 @@ export class RateLimitService {
             }
 
 			const result = await this.enforce(env, key, config, RateLimitType.LLM_CALLS, incrementBy);
-
-			if (result.success) {
-				// Fire and forget — don't await, never throw
-				env.DB.prepare(
-					'INSERT INTO ai_usage_logs (id, user_id, model, credit_cost, created_at) VALUES (?, ?, ?, ?, ?)'
-				).bind(crypto.randomUUID(), userId, model, incrementBy, Math.floor(Date.now() / 1000)).run().catch(() => {});
-			}
+			// Note: usage logging for the cost dashboard now happens in recordActualUsage()
+			// with the real token-weighted cost — not here (this path is skipped for BYOK/
+			// excluded users and only ran a flat per-call estimate).
 
 			if (!result.success) {
 				this.logger.warn('LLM calls rate limit exceeded', {
