@@ -204,6 +204,20 @@ const MODELS_MASTER = {
             directOverride: true,
         }
     },
+    OPENROUTER_DEEPSEEK_V4_FLASH: {
+        id: 'openrouter/deepseek/deepseek-v4-flash',
+        config: {
+            // Fast, cheap DeepSeek for the light/high-frequency tier (template pick, setup,
+            // phase planning, chat, realtime fixer). ~$0.10/M in, $0.20/M out — cheaper than
+            // Gemini Flash-Lite, same family, and on OpenRouter so all spend tracks in one place.
+            name: 'DeepSeek V4 Flash (OpenRouter)',
+            size: ModelSize.LITE,
+            provider: 'openrouter',
+            creditCost: 0.5,
+            contextSize: 128000,
+            directOverride: true,
+        }
+    },
 
     // --- OpenAI Models ---
     OPENAI_5: {

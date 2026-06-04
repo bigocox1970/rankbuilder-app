@@ -16,26 +16,27 @@ const COMMON_AGENT_CONFIGS = {
         reasoning_effort: 'medium' as const,
         max_tokens: 8000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
     },
     realtimeCodeFixer: {
-        name: AIModels.GROK_4_1_FAST_NON_REASONING,
+        // DeepSeek V4 Flash — fast, cheap, non-thinking, on OpenRouter (tracked).
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         reasoning_effort: 'low' as const,
         max_tokens: 32000,
         temperature: 0.2,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
     },
     fastCodeFixer: {
         name: AIModels.DISABLED,
         reasoning_effort: undefined,
         max_tokens: 64000,
         temperature: 0.0,
-        fallbackModel: AIModels.GEMINI_2_5_PRO,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
     },
     templateSelection: {
-        name: AIModels.GEMINI_2_5_FLASH_LITE,
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         max_tokens: 2000,
-        fallbackModel: AIModels.GROK_4_1_FAST_NON_REASONING,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         temperature: 1,
     },
 } as const;
@@ -44,7 +45,7 @@ const SHARED_IMPLEMENTATION_CONFIG = {
     reasoning_effort: 'low' as const,
     max_tokens: 48000,
     temperature: 1,
-    fallbackModel: AIModels.GEMINI_2_5_PRO,
+    fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
 };
 
 //======================================================================================
@@ -120,39 +121,40 @@ const PLATFORM_AGENT_CONFIG: AgentConfig = {
 // Default Gemini-only config (most likely used in your deployment)
 //======================================================================================
 /* These are the default out-of-the box gemini-only models used when PLATFORM_MODEL_PROVIDERS is not set */
+// All-DeepSeek, all-OpenRouter so every call is billed and tracked in one place
+// (the OpenRouter dashboard). Light/high-frequency steps → V4 Flash (fast, ~$0.10/$0.20).
+// Heavy generation/debug/edit steps → V4 Pro (strong, ~$0.44/$0.87). No GPT, no Gemini.
 const DEFAULT_AGENT_CONFIG: AgentConfig = {
     ...COMMON_AGENT_CONFIGS,
     templateSelection: {
-        name: AIModels.GEMINI_2_5_FLASH_LITE,
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         max_tokens: 2000,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         temperature: 0.6,
     },
     blueprint: {
-        // DeepSeek V4 Pro via OpenRouter — near-Claude code quality at ~1/10th the cost.
         name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         reasoning_effort: 'medium',
         max_tokens: 20000,
-        fallbackModel: AIModels.GEMINI_2_5_PRO,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         temperature: 1,
     },
     projectSetup: {
-        name: AIModels.GEMINI_2_5_FLASH_LITE,
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
     },
     phaseGeneration: {
-        name: AIModels.GEMINI_2_5_FLASH_LITE,
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         reasoning_effort: 'low',
         max_tokens: 8000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
     },
     firstPhaseImplementation: {
-        // Website/React build + edit step → DeepSeek V4 Pro (was Gemini Flash). Better
-        // instruction-following so edits actually execute, ~1/10th Claude cost.
+        // Website/React build + edit step → DeepSeek V4 Pro for instruction-following.
         name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         ...SHARED_IMPLEMENTATION_CONFIG,
     },
@@ -161,18 +163,19 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         ...SHARED_IMPLEMENTATION_CONFIG,
     },
     conversationalResponse: {
-        name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
+        // Chat replies — fast DeepSeek V4 Flash, no thinking model needed for conversation.
+        name: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
         reasoning_effort: 'low',
         max_tokens: 4000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
     },
     deepDebugger: {
         name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         reasoning_effort: 'high',
         max_tokens: 8000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_PRO,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
     },
     fileRegeneration: {
         // Surgical file edits → DeepSeek V4 Pro. Low temp for deterministic diffs.
@@ -180,16 +183,15 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
         reasoning_effort: 'low',
         max_tokens: 32000,
         temperature: 0.2,
-        fallbackModel: AIModels.GEMINI_2_5_FLASH,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
     },
     agenticProjectBuilder: {
-        // Drives the whole Expo build-and-edit tool loop → DeepSeek V4 Pro
-        // (near-Claude code quality, ~1/10th the cost). Gemini Flash fallback.
+        // Drives the whole Expo build-and-edit tool loop → DeepSeek V4 Pro.
         name: AIModels.OPENROUTER_DEEPSEEK_V4_PRO,
         reasoning_effort: 'medium',
         max_tokens: 8000,
         temperature: 1,
-        fallbackModel: AIModels.GEMINI_2_5_PRO,
+        fallbackModel: AIModels.OPENROUTER_DEEPSEEK_V4_FLASH,
     },
 };
 
