@@ -71,6 +71,9 @@ export interface AgentImportInitArgs {
     branchFallback: boolean;
     description: string | null;
     isPrivate: boolean;
+    /** App category for the imported project. 'mobile' = Expo/React Native (drives the
+     * synthetic Expo template name so the agent applies the mobile/Metro treatment). */
+    appType?: 'mobile' | 'website' | 'webapp';
     frameworks: string[];
     extraDontTouch: string[];
     /** Sandbox session ID. Optional from the caller — the agent always

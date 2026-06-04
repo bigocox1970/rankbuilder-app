@@ -389,7 +389,7 @@ export function detectViteReactProject(files: TemplateFile[]): ParsedPackageJson
     return pkg;
 }
 
-export type ImportedFramework = 'vite-react' | 'tanstack-start';
+export type ImportedFramework = 'vite-react' | 'tanstack-start' | 'expo';
 
 export interface DetectedProject {
     packageJson: ParsedPackageJson;
@@ -429,6 +429,16 @@ export function detectImportableProject(files: TemplateFile[]): DetectedProject 
     const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
     const hasVite = 'vite' in allDeps;
     const hasTanStackStart = '@tanstack/react-start' in allDeps || '@tanstack/start' in allDeps;
+
+    // Expo / React Native. Detected by the `expo` dependency, which only an Expo app
+    // carries. These run via Metro in the sandbox (not Vite/Workers) and get the mobile
+    // treatment — iPhone preview frame, Expo Go QR, native bundle warm. The `expo`
+    // package + the canonical `expo-router/entry` main is the strongest signal; checking
+    // `expo` alone is enough since no web project depends on it.
+    const hasExpo = 'expo' in allDeps;
+    if (hasExpo) {
+        return { packageJson: pkg, framework: 'expo' };
+    }
 
     // TanStack Start: Vite-based SSR. No index.html / src/main entry to require.
     if (hasTanStackStart && hasVite) {

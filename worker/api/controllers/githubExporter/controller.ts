@@ -8,7 +8,8 @@ import { AppService } from '../../../database/services/AppService';
 import { ExportResult } from 'worker/agents/core/types';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { validateRedirectUrl } from '../../../utils/authUtils';
-import { generateId } from '../../../utils/idGenerator';
+import { generateId, generateNanoId } from '../../../utils/idGenerator';
+import { generateProjectName } from '../../../agents/utils/templateCustomizer';
 import { importRepositoryStreaming, parseGitHubRepoUrl } from '../../../services/github/GitHubImporter';
 import { scaffoldCloudflareImport } from '../../../services/github/CloudflareScaffold';
 
@@ -394,6 +395,8 @@ export class GitHubExporterController extends BaseController {
             );
         }
 
+        const isExpo = importResult.framework === 'expo';
+
         try {
             const appService = new AppService(env);
             await appService.createApp({
@@ -403,21 +406,35 @@ export class GitHubExporterController extends BaseController {
                 originalPrompt: `Imported from GitHub: ${importResult.repoInfo.fullName}@${importResult.effectiveBranch}`,
                 visibility: 'private',
                 status: 'generating',
-                // Imported Vite/React + TanStack Start projects are web apps — set the type
-                // so the card shows the "Web app" badge (and the right preview treatment).
-                appType: 'webapp',
+                // App category drives the card badge and the preview treatment. Expo/React
+                // Native imports are mobile apps (iPhone frame + Expo Go QR); Vite/React and
+                // TanStack Start imports are web apps.
+                appType: isExpo ? 'mobile' : 'webapp',
                 sessionToken: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
 
-            const projectName = importResult.packageJson.name
-                || importResult.repoInfo.fullName.split('/').pop()!.replace(/[^a-z0-9-_]/gi, '-').toLowerCase();
+            // Name imported apps the SAME way generated apps are named: a readable prefix +
+            // a unique nano suffix (generateProjectName), matching phasic/agentic init. Using
+            // the bare packageJson.name (e.g. Lovable's hardcoded "tanstack_start_ts") gave a
+            // meaningless deploy URL AND risked a COLLISION with another app's worker in the
+            // dispatch namespace — one app's worker name overwriting/serving another's domain
+            // (the cause of the jgresorations/perimeter mixup and the "worker script not found"
+            // import publishes). The repo name is the meaningful prefix; the nano suffix makes
+            // the worker name — and therefore the deployed subdomain — unique and stable per app.
+            const importNamePrefix = importResult.repoInfo.fullName.split('/').pop()
+                || importResult.packageJson.name
+                || 'app';
+            const projectName = generateProjectName(importNamePrefix, generateNanoId());
 
+            const knownFrameworks = isExpo
+                ? ['expo', 'expo-router', 'react-native', 'react-native-web', 'react']
+                : ['react', 'vite', 'react-dom', 'react-router', 'react-router-dom', 'tailwindcss'];
             const frameworksList = Object.keys({
                 ...importResult.packageJson.dependencies,
                 ...importResult.packageJson.devDependencies,
-            }).filter(name => ['react', 'vite', 'react-dom', 'react-router', 'react-router-dom', 'tailwindcss'].includes(name));
+            }).filter(name => knownFrameworks.includes(name));
 
             const scaffolded = scaffoldCloudflareImport(importResult.files, {
                 projectName,
@@ -467,10 +484,15 @@ export class GitHubExporterController extends BaseController {
                         branchFallback: importResult.branchFallback,
                         description: importResult.repoInfo.description ?? importResult.packageJson.description ?? null,
                         isPrivate: importResult.repoInfo.isPrivate,
-                        frameworks: frameworksList.length > 0 ? frameworksList : ['react', 'vite'],
+                        appType: isExpo ? 'mobile' : 'webapp',
+                        frameworks: frameworksList.length > 0
+                            ? frameworksList
+                            : (isExpo ? ['expo', 'expo-router', 'react-native'] : ['react', 'vite']),
                         extraDontTouch: [
                             ...scaffolded.addedPaths.filter(p => p !== 'package.json'),
                             ...importedBinaryPaths,
+                            // Expo build config the agent must never edit (white-screen risk).
+                            ...(isExpo ? ['metro.config.js', 'babel.config.js', 'app.json', 'tsconfig.json'] : []),
                         ],
                         importedBinaryPaths,
                     });

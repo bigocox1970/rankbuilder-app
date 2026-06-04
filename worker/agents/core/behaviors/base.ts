@@ -17,7 +17,7 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
 import { createScratchTemplateDetails } from '../../utils/templates';
-import { isExpoTemplate } from 'shared/constants/templates';
+import { isExpoTemplate, EXPO_IMPORT_TEMPLATE_PREFIX } from 'shared/constants/templates';
 import { WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
 import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfig } from '../../inferutils/config.types';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
@@ -208,39 +208,52 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         const dontTouchFiles = Array.from(dontTouchSet).filter(path => files.some(f => f.filePath === path) || ['index.html', 'src/main.tsx', 'src/main.jsx', 'vite.config.ts', 'vite.config.js', 'package.json'].includes(path));
 
+        // Expo/React Native imports get a synthetic template name with the expo-imported-
+        // prefix so isExpoTemplate() recognises them and the agent applies the mobile/Metro
+        // treatment (iPhone preview frame, Expo Go QR, new-dir Metro restart, native warm).
+        const isExpo = args.appType === 'mobile';
+        const repoSlug = repoFullName.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+
         const syntheticTemplate: TemplateDetails = {
-            name: `imported-${repoFullName.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}`,
+            name: isExpo ? `${EXPO_IMPORT_TEMPLATE_PREFIX}${repoSlug}` : `imported-${repoSlug}`,
             language: 'typescript',
             frameworks,
             projectType: 'app',
             description: {
                 selection: `GitHub import: ${repoFullName}`,
-                usage: `Imported from ${repoUrl}. Edit components in src/ to iterate; build configs are protected.`,
+                usage: isExpo
+                    ? `Imported Expo (React Native) project from ${repoUrl}. Edit screens in app/ and shared code in components/hooks/lib to iterate; build configs are protected.`
+                    : `Imported from ${repoUrl}. Edit components in src/ to iterate; build configs are protected.`,
             },
             renderMode: 'sandbox',
             disabled: false,
             fileTree: { path: '/', type: 'directory', children: [] },
             allFiles: filesMap,
             deps: {},
-            importantFiles: ['src/App.tsx', 'src/App.jsx', 'package.json'].filter(p => p in filesMap),
+            importantFiles: (isExpo
+                ? ['app/index.tsx', 'app/_layout.tsx', 'package.json']
+                : ['src/App.tsx', 'src/App.jsx', 'package.json']).filter(p => p in filesMap),
             dontTouchFiles,
             redactedFiles: [],
         };
 
         this.templateDetailsCache = syntheticTemplate;
 
+        const stackLabel = isExpo ? 'Expo (React Native)' : 'React + Vite';
         const fileSummary = summariseImportedFiles(files);
         const detailedDescription = [
-            `This is an EXISTING React + Vite project the user has imported from GitHub (${repoUrl}, branch: ${branch}).`,
+            `This is an EXISTING ${stackLabel} project the user has imported from GitHub (${repoUrl}, branch: ${branch}).`,
             `It is NOT a project you should rebuild from scratch — the user wants to iterate on what they already have.`,
             ``,
-            `Detected frameworks: ${frameworks.join(', ') || 'react, vite'}.`,
+            `Detected frameworks: ${frameworks.join(', ') || (isExpo ? 'expo, expo-router, react-native' : 'react, vite')}.`,
             `Total files: ${files.length}.`,
             ``,
             `Key files visible to you:`,
             fileSummary,
             ``,
-            `Cloudflare deploy scaffolding was added automatically on import (wrangler.jsonc, worker/index.ts, vite.config.cloudflare.ts, plus dev/deploy scripts). Do NOT remove these — they are required for the live preview.`,
+            isExpo
+                ? `This is an Expo Router app rendered via Metro (react-native-web in the preview). Screens live in app/ (file-based routing — each file is a route with a default export); shared code lives in components/, hooks/, lib/, constants/. Use React Native primitives (View, Text, TouchableOpacity), NOT HTML elements, and StyleSheet for styling, NOT Tailwind/CSS. metro.config.js, babel.config.js, app.json, tsconfig.json and package.json are protected — do NOT edit them (a broken config = a blank white preview). Install new deps with \`bun add\`, never hand-edit package.json, and keep \`main\` as expo-router/entry.`
+                : `Cloudflare deploy scaffolding was added automatically on import (wrangler.jsonc, worker/index.ts, vite.config.cloudflare.ts, plus dev/deploy scripts). Do NOT remove these — they are required for the live preview.`,
             ``,
             `This is the user's OWN project. NEVER claim it was built with, generated by, or based on a Rank Builder starter/template, never add "built with Rank Builder" credits or branding, and never invent URLs. Leave README, LICENSE, and author/credit content alone unless the user explicitly asks you to change it.`,
             ``,
@@ -250,13 +263,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const blueprint = {
             title: repoFullName,
             projectName,
-            description: description || `Imported React + Vite project from ${repoFullName}`,
+            description: description || `Imported ${stackLabel} project from ${repoFullName}`,
             colorPalette: [],
             frameworks,
             detailedDescription,
             views: [],
             userFlow: {
-                uiLayout: 'Existing user-provided React + Vite UI — preserve current layout.',
+                uiLayout: `Existing user-provided ${stackLabel} UI — preserve current layout.`,
                 uiDesign: 'Existing user-provided design — preserve current styling unless the user asks otherwise.',
                 userJourney: 'The user has imported their project to iterate on it. Wait for their instructions.',
             },
@@ -264,7 +277,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             architecture: { dataFlow: 'Inherited from the imported project.' },
             pitfalls: [
                 'Do NOT regenerate or rewrite files the user did not explicitly ask you to change.',
-                'Do NOT touch wrangler.jsonc, worker/index.ts, vite.config.cloudflare.ts, package.json, or vite.config.* — they are protected.',
+                isExpo
+                    ? 'Do NOT touch metro.config.js, babel.config.js, app.json, tsconfig.json, or package.json — they are protected. Use React Native primitives, not HTML; StyleSheet, not Tailwind.'
+                    : 'Do NOT touch wrangler.jsonc, worker/index.ts, vite.config.cloudflare.ts, package.json, or vite.config.* — they are protected.',
                 'Read existing files with read_files before editing them.',
             ],
             implementationRoadmap: [],
@@ -274,7 +289,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const nextState = {
             ...this.state,
             projectName,
-            query: `Imported from GitHub: ${repoFullName}@${branch}. The user wants to iterate on this existing React + Vite project — do not rebuild it.`,
+            query: `Imported from GitHub: ${repoFullName}@${branch}. The user wants to iterate on this existing ${stackLabel} project — do not rebuild it.`,
             blueprint,
             templateName: syntheticTemplate.name,
             sandboxInstanceId: undefined,

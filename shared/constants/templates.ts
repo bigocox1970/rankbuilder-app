@@ -6,8 +6,19 @@
  */
 export const EXPO_TEMPLATE_NAMES = ['expo-app', 'tube-trainer', 'inr-tracker'] as const;
 
+/**
+ * Synthetic template-name prefix for GitHub imports detected as Expo/React Native.
+ * Imported projects get a generated `expo-imported-<repo>` template name (see
+ * behaviors/base.ts) so they receive the same mobile treatment as the built-in
+ * Expo templates without needing a code-level allow-list entry per repo.
+ */
+export const EXPO_IMPORT_TEMPLATE_PREFIX = 'expo-imported-';
+
 export function isExpoTemplate(name?: string | null): boolean {
-	return !!name && (EXPO_TEMPLATE_NAMES as readonly string[]).includes(name);
+	return !!name && (
+		(EXPO_TEMPLATE_NAMES as readonly string[]).includes(name) ||
+		name.startsWith(EXPO_IMPORT_TEMPLATE_PREFIX)
+	);
 }
 
 /**
