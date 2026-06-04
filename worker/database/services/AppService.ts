@@ -568,6 +568,92 @@ export class AppService extends BaseService {
         return { success: true, app: updatedApps[0] };
     }
 
+    /**
+     * Rename an app (display title only — does NOT change the deployed worker/subdomain).
+     */
+    async updateAppTitle(
+        appId: string,
+        userId: string,
+        title: string,
+    ): Promise<AppVisibilityUpdateResult> {
+        const existingApp = await this.database
+            .select({ id: schema.apps.id, userId: schema.apps.userId })
+            .from(schema.apps)
+            .where(eq(schema.apps.id, appId))
+            .limit(1);
+
+        if (existingApp.length === 0) {
+            return { success: false, error: 'App not found' };
+        }
+
+        if (existingApp[0].userId !== userId) {
+            return { success: false, error: 'You can only rename your own apps' };
+        }
+
+        const updatedApps = await this.database
+            .update(schema.apps)
+            .set({ title, updatedAt: new Date() })
+            .where(eq(schema.apps.id, appId))
+            .returning({
+                id: schema.apps.id,
+                title: schema.apps.title,
+                visibility: schema.apps.visibility,
+                updatedAt: schema.apps.updatedAt,
+            });
+
+        if (updatedApps.length === 0) {
+            return { success: false, error: 'Failed to rename app' };
+        }
+
+        return { success: true, app: updatedApps[0] };
+    }
+
+    /**
+     * Fetch an app for forking and whether the requesting user may fork it
+     * (allowed when the app is public, or owned by the user).
+     */
+    async getAppForFork(
+        appId: string,
+        userId: string,
+    ): Promise<{ app: schema.App | null; canFork: boolean }> {
+        const rows = await this.database
+            .select()
+            .from(schema.apps)
+            .where(eq(schema.apps.id, appId))
+            .limit(1);
+        const app = rows[0] ?? null;
+        if (!app) return { app: null, canFork: false };
+        const canFork = app.visibility === 'public' || app.userId === userId;
+        return { app, canFork };
+    }
+
+    /**
+     * Create a forked app row pointing at a freshly-cloned agent. Forks start private
+     * and record their lineage via parentAppId.
+     */
+    async createForkedApp(
+        originalApp: schema.App,
+        newAgentId: string,
+        userId: string,
+    ): Promise<schema.App> {
+        const [app] = await this.database
+            .insert(schema.apps)
+            .values({
+                id: newAgentId,
+                title: originalApp.title,
+                description: originalApp.description,
+                originalPrompt: originalApp.originalPrompt,
+                framework: originalApp.framework,
+                appType: originalApp.appType,
+                userId,
+                visibility: 'private',
+                status: 'completed',
+                parentAppId: originalApp.id,
+            })
+            .returning();
+        return app;
+    }
+
     // ========================================
     // APP VIEW CONTROLLER OPERATIONS
     // ========================================

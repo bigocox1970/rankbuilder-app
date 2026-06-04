@@ -53,6 +53,8 @@ export async function cloneAgent(env: Env, agentId: string) : Promise<{newAgentI
         sessionId: newAgentId,
         sandboxInstanceId: undefined,
         pendingUserInputs: [],
+        // Note: the conversation history is NOT part of AgentState (stored separately),
+        // so a fork naturally starts without the original owner's chat.
         shouldBeGenerating: false,
         projectUpdatesAccumulator: [],
         reviewingInitiated: false,

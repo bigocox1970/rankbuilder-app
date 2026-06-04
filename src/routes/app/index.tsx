@@ -24,6 +24,9 @@ import {
 	Trash2,
 	Github,
 	GitBranch,
+	Pencil,
+	X,
+	Shuffle,
 } from 'lucide-react';
 import { MonacoEditor } from '@/components/monaco-editor/monaco-editor';
 import { getFileType } from '@/utils/string';
@@ -97,6 +100,10 @@ export default function AppView() {
 	const [isDeploying, setIsDeploying] = useState(false);
 	const [deploymentProgress, setDeploymentProgress] = useState<string>('');
 	const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
+	const [isEditingName, setIsEditingName] = useState(false);
+	const [nameInput, setNameInput] = useState('');
+	const [isSavingName, setIsSavingName] = useState(false);
+	const [isForking, setIsForking] = useState(false);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
@@ -461,6 +468,60 @@ export default function AppView() {
 		}
 	};
 
+	const startEditingName = () => {
+		if (!app) return;
+		setNameInput(app.title);
+		setIsEditingName(true);
+	};
+
+	const handleSaveName = async () => {
+		if (!app || !user || !isOwner) return;
+		const newName = nameInput.trim();
+		if (!newName || newName === app.title) {
+			setIsEditingName(false);
+			return;
+		}
+		try {
+			setIsSavingName(true);
+			const response = await apiClient.updateAppName(app.id, newName);
+			if (response.success && response.data) {
+				setApp((prev) => (prev ? { ...prev, title: newName } : null));
+				setIsEditingName(false);
+				toast.success('App renamed');
+			} else {
+				throw new Error(response.error?.message || 'Failed to rename app');
+			}
+		} catch (error) {
+			console.error('Error renaming app:', error);
+			toast.error(
+				error instanceof ApiError ? error.message : 'Failed to rename app',
+			);
+		} finally {
+			setIsSavingName(false);
+		}
+	};
+
+	const handleFork = async () => {
+		if (!app) return;
+		try {
+			setIsForking(true);
+			const response = await apiClient.forkApp(app.id);
+			if (response.success && response.data) {
+				toast.success('App remixed — opening your copy…');
+				navigate(`/chat/${response.data.forkedAppId}`);
+			} else {
+				throw new Error(response.error?.message || 'Failed to remix app');
+			}
+		} catch (error) {
+			console.error('Error remixing app:', error);
+			toast.error(
+				error instanceof ApiError ? error.message : 'Failed to remix app',
+			);
+		} finally {
+			setIsForking(false);
+		}
+	};
+
 	const handleDeleteApp = async () => {
 		if (!app) return;
 
@@ -549,9 +610,62 @@ export default function AppView() {
 					<div className="flex-1">
 						<div className="flex rounded w-fit pb-3 pt-2 flex-col mb-6">
 							<div className="flex items-center gap-3 mb-2">
-								<h1 className="text-4xl font-semibold tracking-tight text-text-primary">
-									{app.title}
-								</h1>
+								{isEditingName ? (
+									<div className="flex items-center gap-2">
+										<input
+											autoFocus
+											value={nameInput}
+											maxLength={100}
+											onChange={(e) => setNameInput(e.target.value)}
+											onKeyDown={(e) => {
+												if (e.key === 'Enter') handleSaveName();
+												if (e.key === 'Escape') setIsEditingName(false);
+											}}
+											className="text-4xl font-semibold tracking-tight text-text-primary bg-transparent border-b border-text-primary/30 focus:outline-none focus:border-text-primary"
+										/>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={handleSaveName}
+											disabled={isSavingName}
+											className="h-7 w-7 p-0"
+											title="Save"
+										>
+											{isSavingName ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<Check className="h-4 w-4" />
+											)}
+										</Button>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => setIsEditingName(false)}
+											disabled={isSavingName}
+											className="h-7 w-7 p-0"
+											title="Cancel"
+										>
+											<X className="h-4 w-4" />
+										</Button>
+									</div>
+								) : (
+									<>
+										<h1 className="text-4xl font-semibold tracking-tight text-text-primary">
+											{app.title}
+										</h1>
+										{isOwner && (
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={startEditingName}
+												className="h-7 w-7 p-0 text-text-primary/60 hover:text-text-primary"
+												title="Rename app"
+											>
+												<Pencil className="h-4 w-4" />
+											</Button>
+										)}
+									</>
+								)}
 
 								<div className="flex items-center gap-2 border rounded-xl">
 									<Badge variant={'default'}>
@@ -675,17 +789,20 @@ export default function AppView() {
 								) 
                                 : (
 									<>
-										{/*
 										<Button
 											size="sm"
 											variant="secondary"
 											onClick={handleFork}
+											disabled={isForking}
 											className="gap-2 bg-text-primary text-bg-1"
 										>
-											<Shuffle className="h-4 w-4" />
+											{isForking ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<Shuffle className="h-4 w-4" />
+											)}
 											Remix
 										</Button>
-										*/}
 									</>
 								)
                                 }

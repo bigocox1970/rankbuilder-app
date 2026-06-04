@@ -30,6 +30,7 @@ export type {
   FavoriteToggleData,
   CreateAppData,
   UpdateAppVisibilityData,
+  UpdateAppNameData,
   AppDeleteData,
   AppWithUserAndStats
 } from 'worker/api/controllers/apps/types';
@@ -38,7 +39,8 @@ export type {
   AppDetailsData,
   AppStarToggleData,
   GeneratedCodeFile,
-  GitCloneTokenData
+  GitCloneTokenData,
+  ForkAppData
 } from 'worker/api/controllers/appView/types';
 
 // Checkpoint / restore-point type (one per user prompt)

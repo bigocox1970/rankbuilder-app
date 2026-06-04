@@ -41,8 +41,8 @@ export function setupAppRoutes(app: Hono<AppEnv>): void {
     appRouter.post('/:id/star', setAuthLevel(AuthConfig.authenticated), adaptController(AppViewController, AppViewController.toggleAppStar));
     
     // // Fork ANY public app - requires authentication (can fork others' public apps)
-    // DISABLED: Has been disabled for initial alpha release, for security reasons
-    // appRouter.post('/:id/fork', setAuthLevel(AuthConfig.authenticated), adaptController(AppViewController, AppViewController.forkApp));
+    // Fork (remix) an app — any authenticated user can fork a public app
+    appRouter.post('/:id/fork', setAuthLevel(AuthConfig.authenticated), adaptController(AppViewController, AppViewController.forkApp));
 
     // Toggle favorite status - requires authentication  
     appRouter.post('/:id/favorite', setAuthLevel(AuthConfig.authenticated), adaptController(AppController, AppController.toggleFavorite));
@@ -61,6 +61,9 @@ export function setupAppRoutes(app: Hono<AppEnv>): void {
     
     // Update app visibility - OWNER ONLY
     appRouter.put('/:id/visibility', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppController, AppController.updateAppVisibility));
+
+    // Rename app (display title) - OWNER ONLY
+    appRouter.put('/:id/name', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppController, AppController.updateAppName));
 
     // Delete app - OWNER ONLY
     appRouter.delete('/:id', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppController, AppController.deleteApp));

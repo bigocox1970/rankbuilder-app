@@ -10,6 +10,7 @@ import {
     SingleAppData,
     FavoriteToggleData,
     UpdateAppVisibilityData,
+    UpdateAppNameData,
     AppDeleteData
 } from './types';
 // import { withCache } from '../../../services/cache/wrapper';
@@ -229,6 +230,55 @@ export class AppController extends BaseController {
         } catch (error) {
             this.logger.error('Error updating app visibility:', error);
             return AppController.createErrorResponse<UpdateAppVisibilityData>('Failed to update app visibility', 500);
+        }
+    }
+
+    // Rename an app (display title only)
+    static async updateAppName(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<UpdateAppNameData>>> {
+        try {
+            const user = context.user!;
+
+            const appId = context.pathParams.id;
+            if (!appId) {
+                return AppController.createErrorResponse<UpdateAppNameData>('App ID is required', 400);
+            }
+
+            const bodyResult = await AppController.parseJsonBody(request);
+            if (!bodyResult.success) {
+                return bodyResult.response! as ControllerResponse<ApiResponse<UpdateAppNameData>>;
+            }
+
+            const rawName = (bodyResult.data as { name?: string })?.name;
+            const name = typeof rawName === 'string' ? rawName.trim() : '';
+
+            if (!name) {
+                return AppController.createErrorResponse<UpdateAppNameData>('Name is required', 400);
+            }
+            if (name.length > 100) {
+                return AppController.createErrorResponse<UpdateAppNameData>('Name must be 100 characters or fewer', 400);
+            }
+
+            const appService = new AppService(env);
+            const result = await appService.updateAppTitle(appId, user.id, name);
+
+            if (!result.success) {
+                const statusCode = result.error === 'App not found' ? 404 :
+                                 result.error?.includes('only rename your own apps') ? 403 : 500;
+                return AppController.createErrorResponse<UpdateAppNameData>(result.error || 'Failed to rename app', statusCode);
+            }
+
+            const responseData: UpdateAppNameData = {
+                app: {
+                    id: result.app!.id,
+                    title: result.app!.title,
+                    updatedAt: result.app!.updatedAt,
+                },
+                message: 'App renamed successfully',
+            };
+            return AppController.createSuccessResponse(responseData);
+        } catch (error) {
+            this.logger.error('Error renaming app:', error);
+            return AppController.createErrorResponse<UpdateAppNameData>('Failed to rename app', 500);
         }
     }
 

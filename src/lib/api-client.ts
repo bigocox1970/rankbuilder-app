@@ -25,10 +25,12 @@ import type{
 	FavoriteToggleData,
 	CreateAppData,
 	UpdateAppVisibilityData,
+	UpdateAppNameData,
 	AppDeleteData,
 	AppDetailsData,
 	AppStarToggleData,
 	GitCloneTokenData,
+	ForkAppData,
 	UserAppsData,
 	ProfileUpdateData,
 	UserStatsData,
@@ -534,6 +536,19 @@ class ApiClient {
 	}
 
 	/**
+	 * Rename an app (display title only — does not change the deployed URL)
+	 */
+	async updateAppName(
+		appId: string,
+		name: string,
+	): Promise<ApiResponse<UpdateAppNameData>> {
+		return this.request<UpdateAppNameData>(`/api/apps/${appId}/name`, {
+			method: 'PUT',
+			body: { name },
+		});
+	}
+
+	/**
 	 * Delete an app
 	 */
 	async deleteApp(appId: string): Promise<ApiResponse<AppDeleteData>> {
@@ -575,15 +590,14 @@ class ApiClient {
 		});
 	}
 
-	// /**
-	//  * Fork an app
-	//  */
-    // DISABLED: Has been disabled for initial alpha release, for security reasons
-	// async forkApp(appId: string): Promise<ApiResponse<ForkAppData>> {
-	// 	return this.request<ForkAppData>(`/api/apps/${appId}/fork`, {
-	// 		method: 'POST',
-	// 	});
-	// }
+	/**
+	 * Fork (remix) an app into a new app the current user owns
+	 */
+	async forkApp(appId: string): Promise<ApiResponse<ForkAppData>> {
+		return this.request<ForkAppData>(`/api/apps/${appId}/fork`, {
+			method: 'POST',
+		});
+	}
 
 	// ===============================
 	// User API Methods
