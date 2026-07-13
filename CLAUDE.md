@@ -8,6 +8,38 @@ This file provides guidance to Claude Code when working with code in this reposi
 - Focus on substance over style
 - Use clear technical language
 
+## Strategic Direction (RankBuilder / Diamond Internet)
+
+This fork is deployed as **RankBuilder** (live at app.rankbuilder.app) and is being repurposed as **Diamond Internet's internal website factory for UK tradespeople**. Intended pipeline: Checkatrade prospect → brand pack → generated static HTML site.
+
+- **Website mode (`tradesperson-sp`, static HTML) is now the primary/only product path.** Every trades build should go through Website mode — the static-HTML flow already enforces a sticky header, real server-rendered HTML, JSON-LD, and SEO outputs, which fixes the failures seen when a trades site was accidentally built via the App/React flow (empty client-rendered shell with a default "Vite + R + TS" title, no sticky header, broken images, fabricated reviews).
+- **App and Expo modes stay in the codebase** (upstream fork hygiene with `cloudflare/vibesdk`) but will be **hidden in the UI** in upcoming work.
+
+**Planned next steps (for future sessions):**
+1. Lock the home-screen stack toggle to Website mode (hide App/Expo in the UI).
+2. Extend the planner wizard (`SiteContentPlan`) to accept a **brand pack JSON** — a structured Checkatrade harvest (business facts, curated services, verbatim reviews, image URLs with dimensions, logo palette hex values) that flows into the blueprint instead of manually typed keywords.
+
+## Template Changes (`tradesperson-sp`)
+
+The `tradesperson-sp` template now ships the **design-freedom** variant (12 colour themes + 12 font pairings, model writes its own CSS, multi-page supported) and carries three prompt fixes (`templates/definitions/tradesperson-sp/prompts/`):
+
+- **`usage.md` — "REAL BUSINESS DATA — VERBATIM ONLY"**: reviews/testimonials may only come from the prompt/blueprint and must be reproduced faithfully; if none supplied, omit the testimonials section entirely; never invent names, quotes, ratings, or business facts. Added because a live build fabricated named 5-star reviews ("Sarah T.") for a real business — a UK consumer-law liability.
+- **`usage.md` — image rules**: use supplied/CDN image URLs verbatim (exact characters), give every `<img>` meaningful `alt` + a `var(--surface)` fallback container; enforce aspect-ratio discipline (16:9 hero, 4:3 cards, `object-fit:cover`; logos height-constrained only). Added because the model cannot see images and was distorting them.
+- **`selection.md`**: multi-page enabled (per-service / per-project SEO landing pages with real URLs and their own title/meta/JSON-LD) and scope broadened to any business/service website.
+
+**Deploying template changes:** templates live in `templates/definitions/` (source; `templates/build/` is a **gitignored generated artifact** — never edit it, it is rebuilt from `definitions/`). The catalog (`template_catalog.json`) **embeds** each template's `selection` and `usage` prompt text, so a prompt change requires re-uploading the catalog, not just the zip. Targeted single-template deploy to R2 (no worker release needed — the worker reads the catalog + zips from R2 at build time):
+
+```bash
+cd templates && export R2_BUCKET_NAME=vibesdk-templates
+python3 tools/generate_templates.py --template tradesperson-sp --no-bun   # regen only this template into build/
+python3 generate_template_catalog.py --output template_catalog.json --pretty
+python3 create_zip.py build/tradesperson-sp zips/tradesperson-sp.zip
+wrangler r2 object put "$R2_BUCKET_NAME/tradesperson-sp.zip" --file=zips/tradesperson-sp.zip --remote
+wrangler r2 object put "$R2_BUCKET_NAME/template_catalog.json" --file=template_catalog.json --remote
+```
+
+The full `./deploy_templates.sh` rebuilds and uploads **all** templates; use the targeted flow above when only one template changed to avoid shipping unrelated in-progress template edits. Note: the `templates/` directory is its own git repo (`origin = cloudflare/vibesdk-templates` — do not push there; no personal remote is configured yet).
+
 ## Project Overview
 vibesdk is an AI-powered full-stack application generation platform built on Cloudflare infrastructure.
 
