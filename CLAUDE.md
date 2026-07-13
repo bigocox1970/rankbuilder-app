@@ -17,7 +17,17 @@ This fork is deployed as **RankBuilder** (live at app.rankbuilder.app) and is be
 
 **Planned next steps (for future sessions):**
 1. Lock the home-screen stack toggle to Website mode (hide App/Expo in the UI).
-2. Extend the planner wizard (`SiteContentPlan`) to accept a **brand pack JSON** — a structured Checkatrade harvest (business facts, curated services, verbatim reviews, image URLs with dimensions, logo palette hex values) that flows into the blueprint instead of manually typed keywords.
+2. Brand-pack JSON input in the planner UI — currently the pipeline harvests via free-text prompt; upcoming work adds a structured JSON field to `SiteContentPlan` (business facts, curated services, verbatim reviews, image URLs with dimensions, logo palette hex values) that flows into the blueprint directly.
+
+## Real-Data / Brand-Pack Pipeline (`realData`)
+
+The planner now extracts and threads real business assets verbatim from the user's brief. Relevant files:
+
+- **`worker/api/controllers/agent/types.ts`** — `RealBusinessData`, `RealImage`, `RealReview`, `RealFacts` types on `SiteContentPlan.realData`. Also carries `wireframe` and `pageStructure` ('single'|'multi') for the planner.
+- **`worker/api/controllers/plan/controller.ts`** — plan LLM is instructed to extract `realData` verbatim; image URLs are sanitised (must be https + substring-matched against the original description to block hallucinated URLs); `max_tokens` raised 2048→6144 to fit verbatim review text; new 12-theme/12-font/12-wireframe enumerations replace the old 8-theme/5-font sets; fallback defaults now `ledger` / `courthouse`.
+- **`worker/agents/core/behaviors/phasic.ts`** — if `realData.images` is non-empty, AI image generation is skipped entirely (real photos win); the `[REAL BUSINESS DATA]` block (images, reviews, verified facts) is appended to `storedQuery` so the LLM sees it at build time; a `DESIGN.md` file (colour swatches + font preview using inline HTML, wireframe section list) is injected into every website template build.
+- **`src/components/SitePlanner.tsx`** — review step shows colour swatch picker (`ColorPicker`), live font preview picker (`FontPicker`), page-structure toggle (single/multi), and a real-data summary line ("Using your real data: N photos · N verified reviews · rated 9.9/10"). All picks are hoisted to the final `SiteContentPlan` passed to `onApprove`.
+- **`templates/definitions/tradesperson-sp/prompts/usage.md`** — image priority: `[REAL BUSINESS DATA]` photos > `[GENERATED IMAGES]`; never leave `<img src>` empty; no opacity-0 scroll-triggered animations (invisible to crawlers + users without JS events).
 
 ## Template Changes (`tradesperson-sp`)
 

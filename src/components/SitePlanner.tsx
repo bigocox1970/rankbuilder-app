@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, ArrowLeft, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle, Loader2, AlertCircle, Check } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import type { SiteContentPlan } from '@/api-types';
+import { COLOR_PACKS, FONT_PACKS } from '../../shared/constants/designPacks';
 
 type PlannerStep = 'loading' | 'review' | 'error';
 
@@ -23,24 +24,185 @@ const LOADING_MESSAGES = [
     'Finalising your plan...',
 ];
 
-const THEME_LABELS: Record<string, string> = {
-    craftsman: 'Craftsman',
-    industrial: 'Industrial',
-    'luxury-green': 'Luxury Green',
-    security: 'Security',
-    agency: 'Agency',
-    parchment: 'Parchment',
-    editorial: 'Editorial',
-    ivory: 'Ivory',
-};
+// ---------------------------------------------------------------------------
+// Color swatch icon — 2×2 rounded square matching the reference design
+// ---------------------------------------------------------------------------
 
-const FONT_LABELS: Record<string, string> = {
-    inter: 'Inter',
-    playfair: 'Playfair',
-    lora: 'Lora',
-    montserrat: 'Montserrat',
-    cormorant: 'Cormorant',
-};
+function SwatchIcon({ pack }: { pack: typeof COLOR_PACKS[number] }) {
+    const { light: l, dark: d } = pack;
+    return (
+        <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 flex flex-wrap">
+            <div style={{ width: 24, height: 24, background: l.primary }} />
+            <div style={{ width: 24, height: 24, background: l.background }} />
+            <div style={{ width: 24, height: 24, background: d.background }} />
+            <div style={{ width: 24, height: 24, background: d.primary }} />
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Color picker
+// ---------------------------------------------------------------------------
+
+interface ColorPickerProps {
+    selected: string;
+    onChange: (id: string) => void;
+}
+
+function ColorPicker({ selected, onChange }: ColorPickerProps) {
+    return (
+        <div className="flex flex-col gap-0.5">
+            {COLOR_PACKS.map((pack) => {
+                const isSelected = selected === pack.id;
+                return (
+                    <button
+                        key={pack.id}
+                        type="button"
+                        onClick={() => onChange(pack.id)}
+                        className={[
+                            'flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors w-full',
+                            isSelected
+                                ? 'bg-blue-50 border border-blue-300'
+                                : 'hover:bg-bg-2/60 border border-transparent',
+                        ].join(' ')}
+                    >
+                        <SwatchIcon pack={pack} />
+                        <div className="flex-1 min-w-0">
+                            <p className={['text-sm font-semibold', isSelected ? 'text-blue-900' : 'text-text-primary'].join(' ')}>
+                                {pack.name}
+                            </p>
+                            <p className={['text-[10px] font-medium uppercase tracking-widest mt-0.5', isSelected ? 'text-blue-500' : 'text-text-tertiary'].join(' ')}>
+                                Inspired by {pack.brand}
+                            </p>
+                        </div>
+                        <div className={[
+                            'w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center border-2 transition-colors',
+                            isSelected ? 'bg-blue-500 border-blue-500' : 'border-border',
+                        ].join(' ')}>
+                            {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </div>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Font picker — live preview of the heading font
+// ---------------------------------------------------------------------------
+
+interface FontPickerProps {
+    selected: string;
+    onChange: (id: string) => void;
+}
+
+function FontPicker({ selected, onChange }: FontPickerProps) {
+    return (
+        <div className="flex flex-col gap-0.5">
+            {/* Load all heading fonts upfront so inline fontFamily previews render */}
+            {FONT_PACKS.map((pack) => (
+                <link
+                    key={`gf-${pack.id}`}
+                    rel="stylesheet"
+                    href={`https://fonts.googleapis.com/css2?family=${pack.heading.family.replace(/ /g, '+')}:wght@${pack.heading.weights.join(';')}&family=${pack.body.family.replace(/ /g, '+')}:wght@${pack.body.weights.join(';')}&display=swap`}
+                />
+            ))}
+            {FONT_PACKS.map((pack) => {
+                const isSelected = selected === pack.id;
+                return (
+                    <button
+                        key={pack.id}
+                        type="button"
+                        onClick={() => onChange(pack.id)}
+                        className={[
+                            'flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors w-full',
+                            isSelected
+                                ? 'bg-blue-50 border border-blue-300'
+                                : 'hover:bg-bg-2/60 border border-transparent',
+                        ].join(' ')}
+                    >
+                        {/* Live heading + body preview */}
+                        <div className="flex-1 min-w-0 py-0.5">
+                            <p
+                                style={{ fontFamily: `'${pack.heading.family}', Georgia, serif`, fontWeight: pack.heading.weights[pack.heading.weights.length - 1] ?? 700 }}
+                                className={['text-base leading-tight truncate', isSelected ? 'text-blue-900' : 'text-text-primary'].join(' ')}
+                            >
+                                {pack.name}
+                            </p>
+                            <p
+                                style={{ fontFamily: `'${pack.body.family}', system-ui, sans-serif`, fontWeight: 400 }}
+                                className={['text-xs leading-snug mt-0.5 line-clamp-2', isSelected ? 'text-blue-600' : 'text-text-secondary'].join(' ')}
+                            >
+                                Clean, modern body text for your site content — readable at any size.
+                            </p>
+                            <p className={['text-[10px] font-medium uppercase tracking-widest mt-1', isSelected ? 'text-blue-400' : 'text-text-tertiary'].join(' ')}>
+                                {pack.heading.family} · {pack.body.family}
+                            </p>
+                        </div>
+                        <div className={[
+                            'w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center border-2 transition-colors',
+                            isSelected ? 'bg-blue-500 border-blue-500' : 'border-border',
+                        ].join(' ')}>
+                            {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </div>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Picker section wrapper with collapsible toggle
+// ---------------------------------------------------------------------------
+
+type PickerSection = 'color' | 'font' | null;
+
+interface PickerRowProps {
+    label: string;
+    preview: React.ReactNode;
+    isOpen: boolean;
+    onToggle: () => void;
+    children: React.ReactNode;
+}
+
+function PickerRow({ label, preview, isOpen, onToggle, children }: PickerRowProps) {
+    return (
+        <div className="rounded-xl border border-border/50 overflow-hidden">
+            <button
+                type="button"
+                onClick={onToggle}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-bg-2/60 hover:bg-bg-2/80 transition-colors text-left"
+            >
+                <span className="text-xs font-medium text-text-tertiary uppercase tracking-widest flex-1">{label}</span>
+                {preview}
+                <svg className={['w-4 h-4 text-text-tertiary transition-transform', isOpen ? 'rotate-180' : ''].join(' ')} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            <AnimatePresence initial={false}>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="px-3 py-2 max-h-72 overflow-y-auto border-t border-border/30">
+                            {children}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Loading step
+// ---------------------------------------------------------------------------
 
 function LoadingStep() {
     const [messageIndex, setMessageIndex] = useState(0);
@@ -79,17 +241,37 @@ function LoadingStep() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Review step
+// ---------------------------------------------------------------------------
+
 interface ReviewStepProps {
     plan: SiteContentPlan;
     services: string[];
+    selectedTheme: string;
+    selectedFont: string;
+    selectedPageStructure: 'single' | 'multi';
     onServiceChange: (index: number, value: string) => void;
+    onThemeChange: (id: string) => void;
+    onFontChange: (id: string) => void;
+    onPageStructureChange: (v: 'single' | 'multi') => void;
     onApprove: () => void;
     onBack: () => void;
 }
 
-function ReviewStep({ plan, services, onServiceChange, onApprove, onBack }: ReviewStepProps) {
+function ReviewStep({
+    plan, services, selectedTheme, selectedFont, selectedPageStructure,
+    onServiceChange, onThemeChange, onFontChange, onPageStructureChange, onApprove, onBack,
+}: ReviewStepProps) {
+    const [openSection, setOpenSection] = useState<PickerSection>(null);
+    const toggleSection = (section: PickerSection) =>
+        setOpenSection(prev => (prev === section ? null : section));
+
+    const colorPack = COLOR_PACKS.find(p => p.id === selectedTheme) ?? COLOR_PACKS[0];
+    const fontPack = FONT_PACKS.find(p => p.id === selectedFont) ?? FONT_PACKS[0];
+
     return (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4">
             {/* Brief card */}
             <div className="rounded-xl border border-accent/20 bg-accent/5 p-4 flex flex-col gap-2">
                 <p className="text-xs font-medium text-accent uppercase tracking-widest">Your website brief</p>
@@ -106,19 +288,96 @@ function ReviewStep({ plan, services, onServiceChange, onApprove, onBack }: Revi
                     {' · '}
                     CTA: <span className="text-text-secondary">"{plan.hero.cta}"</span>
                 </p>
-                {(plan.theme || plan.font) && (
-                    <p className="text-xs text-text-tertiary mt-0.5">
-                        {plan.theme && <>Theme: <span className="text-text-secondary">{THEME_LABELS[plan.theme] ?? plan.theme}</span></>}
-                        {plan.theme && plan.font && ' · '}
-                        {plan.font && <>Font: <span className="text-text-secondary">{FONT_LABELS[plan.font] ?? plan.font}</span></>}
+                {(plan.realData?.images?.length || plan.realData?.reviews?.length || plan.realData?.facts) ? (
+                    <p className="text-xs text-text-tertiary">
+                        Using your real data:
+                        {plan.realData?.images?.length ? <span className="text-text-secondary"> {plan.realData.images.length} photo{plan.realData.images.length === 1 ? '' : 's'}</span> : null}
+                        {plan.realData?.reviews?.length ? <span className="text-text-secondary"> · {plan.realData.reviews.length} verified review{plan.realData.reviews.length === 1 ? '' : 's'}</span> : null}
+                        {plan.realData?.facts?.rating ? <span className="text-text-secondary"> · rated {plan.realData.facts.rating}</span> : null}
+                        {plan.realData?.facts?.phone ? <span className="text-text-secondary"> · {plan.realData.facts.phone}</span> : null}
                     </p>
-                )}
+                ) : null}
+            </div>
+
+            {/* Page structure */}
+            <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-text-tertiary uppercase tracking-widest">Page structure</p>
+                <div className="grid grid-cols-2 gap-2">
+                    {(['single', 'multi'] as const).map((type) => {
+                        const isSelected = selectedPageStructure === type;
+                        return (
+                            <button
+                                key={type}
+                                type="button"
+                                onClick={() => onPageStructureChange(type)}
+                                className={[
+                                    'flex flex-col items-start gap-1 px-3 py-2.5 rounded-xl border text-left transition-colors',
+                                    isSelected ? 'bg-blue-50 border-blue-300' : 'border-border/50 hover:bg-bg-2/60',
+                                ].join(' ')}
+                            >
+                                <span className={['text-sm font-semibold', isSelected ? 'text-blue-900' : 'text-text-primary'].join(' ')}>
+                                    {type === 'single' ? 'Single page' : 'Multi-page'}
+                                </span>
+                                <span className={['text-[10px] leading-snug', isSelected ? 'text-blue-500' : 'text-text-tertiary'].join(' ')}>
+                                    {type === 'single'
+                                        ? 'One page, anchor links — fast to build'
+                                        : 'Separate pages per service — maximum SEO'}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Design pickers */}
+            <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-text-tertiary uppercase tracking-widest">Design</p>
+
+                {/* Color theme */}
+                <PickerRow
+                    label="Colour"
+                    isOpen={openSection === 'color'}
+                    onToggle={() => toggleSection('color')}
+                    preview={
+                        <div className="flex items-center gap-2">
+                            <SwatchIcon pack={colorPack} />
+                            <div className="text-right">
+                                <p className="text-xs font-semibold text-text-primary">{colorPack.name}</p>
+                                <p className="text-[10px] text-text-tertiary uppercase tracking-widest">Inspired by {colorPack.brand}</p>
+                            </div>
+                        </div>
+                    }
+                >
+                    <ColorPicker selected={selectedTheme} onChange={(id) => { onThemeChange(id); setOpenSection(null); }} />
+                </PickerRow>
+
+                {/* Font */}
+                <PickerRow
+                    label="Font"
+                    isOpen={openSection === 'font'}
+                    onToggle={() => toggleSection('font')}
+                    preview={
+                        <div className="flex items-center gap-2">
+                            <div className="text-right">
+                                <p style={{ fontFamily: `'${fontPack.heading.family}', Georgia, serif`, fontWeight: fontPack.heading.weights[fontPack.heading.weights.length - 1] }} className="text-sm text-text-primary leading-tight">
+                                    {fontPack.name}
+                                </p>
+                                <p style={{ fontFamily: `'${fontPack.body.family}', system-ui, sans-serif` }} className="text-[10px] text-text-tertiary">
+                                    {fontPack.heading.family}
+                                </p>
+                            </div>
+                        </div>
+                    }
+                >
+                    <FontPicker selected={selectedFont} onChange={(id) => { onFontChange(id); setOpenSection(null); }} />
+                </PickerRow>
+
             </div>
 
             {/* Services */}
             <div>
                 <p className="text-xs font-medium text-text-tertiary uppercase tracking-widest mb-3">
-                    Your 6 services — edit names if needed
+                    Your 6 services — edit if needed
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {services.map((name, i) => (
@@ -157,11 +416,19 @@ function ReviewStep({ plan, services, onServiceChange, onApprove, onBack }: Revi
     );
 }
 
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function SitePlanner({ description, keywords, onApprove, onBack }: Props) {
     const [step, setStep] = useState<PlannerStep>('loading');
     const [plan, setPlan] = useState<SiteContentPlan | null>(null);
     const [services, setServices] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [selectedTheme, setSelectedTheme] = useState<string>('ledger');
+    const [selectedFont, setSelectedFont] = useState<string>('courthouse');
+    const [selectedWireframe, setSelectedWireframe] = useState<string>('service-local');
+    const [selectedPageStructure, setSelectedPageStructure] = useState<'single' | 'multi'>('single');
 
     const fetchPlan = useCallback(async () => {
         setStep('loading');
@@ -170,6 +437,10 @@ export function SitePlanner({ description, keywords, onApprove, onBack }: Props)
             const fetched = await apiClient.generateSitePlan(description, keywords);
             setPlan(fetched);
             setServices(fetched.services.slice(0, 6).map(s => s.title));
+            setSelectedTheme(fetched.theme ?? 'ledger');
+            setSelectedFont(fetched.font ?? 'courthouse');
+            setSelectedWireframe(fetched.wireframe ?? 'service-local');
+            setSelectedPageStructure(fetched.pageStructure ?? 'single');
             setStep('review');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to generate plan');
@@ -186,13 +457,17 @@ export function SitePlanner({ description, keywords, onApprove, onBack }: Props)
         if (!plan) return;
         const finalPlan: SiteContentPlan = {
             ...plan,
+            theme: selectedTheme as SiteContentPlan['theme'],
+            font: selectedFont as SiteContentPlan['font'],
+            wireframe: selectedWireframe,
+            pageStructure: selectedPageStructure,
             services: services.map((title, i) => ({
                 ...(plan.services[i] ?? { description: '', imagePrompt: '' }),
                 title,
             })),
         };
         onApprove(finalPlan);
-    }, [plan, services, onApprove]);
+    }, [plan, services, selectedTheme, selectedFont, selectedWireframe, selectedPageStructure, onApprove]);
 
     return (
         <motion.div
@@ -246,7 +521,13 @@ export function SitePlanner({ description, keywords, onApprove, onBack }: Props)
                         <ReviewStep
                             plan={plan}
                             services={services}
+                            selectedTheme={selectedTheme}
+                            selectedFont={selectedFont}
+                            selectedPageStructure={selectedPageStructure}
                             onServiceChange={(i, v) => setServices(prev => prev.map((s, idx) => idx === i ? v : s))}
+                            onThemeChange={setSelectedTheme}
+                            onFontChange={setSelectedFont}
+                            onPageStructureChange={setSelectedPageStructure}
                             onApprove={handleApprove}
                             onBack={onBack}
                         />

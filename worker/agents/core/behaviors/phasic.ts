@@ -32,6 +32,7 @@ import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
 import { SimpleCodeGenerationOperation } from '../../operations/SimpleCodeGeneration';
 import { StateMigration } from '../stateMigration';
 import { runPreDeploySafetyGate } from '../../utils/preDeploySafetyGate';
+import { WIREFRAMES_BY_ID, COLOR_PACKS_BY_ID, FONT_PACKS_BY_ID } from 'shared/constants/designPacks';
 
 interface PhasicOperations extends BaseCodingOperations {
     generateNextPhase: PhaseGenerationOperation;
@@ -85,7 +86,15 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         // If the user approved a site plan, generate sequentially with per-image progress.
         // Otherwise fall back to the parallel approach (concurrent with blueprint).
         const sitePlan = initArgs.sitePlan;
-        const willGenerateImages = isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages;
+        // Real supplied images (brand pack / harvested photos) always beat AI generation:
+        // if the plan carries real image URLs, skip image generation entirely.
+        const hasRealImages = !!sitePlan?.realData?.images?.length;
+        const willGenerateImages = isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages && !hasRealImages;
+        if (hasRealImages) {
+            this.logger.info('Real images supplied in plan — skipping AI image generation', {
+                count: sitePlan?.realData?.images?.length,
+            });
+        }
         // Pre-deduct image-gen credits up front so out-of-credits users don't burn API budget.
         // 9 Flux images (2 credits each) + 1 Llama title-gen (1 credit) = 19 credits per build.
         if (willGenerateImages) {
@@ -151,7 +160,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         // Await images. If a site plan was provided, run sequential generation now (after blueprint
         // so WebSocket connections are ready to receive progress events).
         let generatedImages = await imageGenPromise;
-        if (isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages && sitePlan && !generatedImages) {
+        if (isWebsiteTemplate && imageGenerationEnabled && !!agentIdForImages && sitePlan && !generatedImages && !hasRealImages) {
             generatedImages = await generateTradeImagesFromPlan(
                 this.env,
                 agentIdForImages,
@@ -161,9 +170,151 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 },
             );
         }
+        // Inject DESIGN.md so the user can see and reference their chosen design choices.
+        // Uses inline HTML (rendered by the docs panel via rehype-raw) for visual swatches and font preview.
+        if (isWebsiteTemplate && sitePlan?.theme) {
+            const colorPack = COLOR_PACKS_BY_ID[sitePlan.theme];
+            const fontPack = sitePlan.font ? FONT_PACKS_BY_ID[sitePlan.font] : undefined;
+            const wireframePack = sitePlan.wireframe ? WIREFRAMES_BY_ID[sitePlan.wireframe] : undefined;
+            if (colorPack) {
+                const swatchRow = (label: string, colors: { background: string; surface: string; primary: string; foreground: string }) =>
+                    `<tr><td style="padding:6px 10px;font-size:12px;color:#666">${label}</td>` +
+                    [`background:${colors.background}`, `surface:${colors.surface}`, `accent:${colors.primary}`, `text:${colors.foreground}`].map(v => {
+                        const hex = v.split(':')[1];
+                        return `<td style="padding:6px 10px"><span style="display:inline-flex;align-items:center;gap:6px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${hex};border:1px solid rgba(0,0,0,0.12)"></span><code style="font-size:11px">${hex}</code></span></td>`;
+                    }).join('') + '</tr>';
+
+                const fontLink = fontPack
+                    ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${fontPack.heading.family.replace(/ /g, '+')}:wght@${fontPack.heading.weights.join(';')}&family=${fontPack.body.family.replace(/ /g, '+')}:wght@400;500&display=swap">`
+                    : '';
+
+                const lines: string[] = [
+                    fontLink,
+                    '',
+                    '# Design',
+                    '',
+                    `## Colour — ${colorPack.name}`,
+                    `*Inspired by ${colorPack.brand} — ${colorPack.rationale}*`,
+                    '',
+                    '<table style="border-collapse:collapse;margin:8px 0">',
+                    '<thead><tr style="background:#f5f5f5"><th style="padding:6px 10px;text-align:left;font-size:12px">Mode</th><th style="padding:6px 10px;text-align:left;font-size:12px">Background</th><th style="padding:6px 10px;text-align:left;font-size:12px">Surface</th><th style="padding:6px 10px;text-align:left;font-size:12px">Accent</th><th style="padding:6px 10px;text-align:left;font-size:12px">Text</th></tr></thead>',
+                    '<tbody>',
+                    swatchRow('Light', colorPack.light),
+                    swatchRow('Dark', colorPack.dark),
+                    '</tbody></table>',
+                    '',
+                    `*To change: ask "switch to [name]" — ledger · espresso · atelier · neon-terminal · cobalt-civic · sandstone · orchard · velvet · slate-brut · bloom · harbor · midnight-gold*`,
+                ];
+
+                if (fontPack) {
+                    const headingStyle = `font-family:'${fontPack.heading.family}',Georgia,serif;font-size:26px;font-weight:${fontPack.heading.weights[fontPack.heading.weights.length - 1] ?? 700};margin:0 0 6px`;
+                    const bodyStyle = `font-family:'${fontPack.body.family}',system-ui,sans-serif;font-size:14px;line-height:1.6;color:#444;margin:0`;
+                    lines.push(
+                        '',
+                        `## Font — ${fontPack.name}`,
+                        '',
+                        `<div style="border:1px solid #e5e5e5;border-radius:8px;padding:16px 20px;margin:8px 0">`,
+                        `<p style="${headingStyle}">The quick brown fox — ${fontPack.heading.family}</p>`,
+                        `<p style="${bodyStyle}">Body copy set in ${fontPack.body.family}. Clear, readable, and designed to complement the heading typeface across all screen sizes.</p>`,
+                        `</div>`,
+                        '',
+                        `*Heading: **${fontPack.heading.family}** · Body: **${fontPack.body.family}***`,
+                        '',
+                        `*To change: ask "switch to [name]" — courthouse · roast · gallery · console · civic · loam · market · boudoir · concrete · petal · tide · regalia*`,
+                    );
+                }
+
+                if (wireframePack) {
+                    const pageStructure = sitePlan.pageStructure ?? 'single';
+                    lines.push(
+                        '',
+                        `## Layout — ${wireframePack.name}`,
+                        `*${wireframePack.rationale}*`,
+                        '',
+                        `**Page structure:** ${pageStructure === 'multi' ? 'Multi-page (separate HTML files per section — maximum SEO)' : 'Single page (anchor-link navigation)'}`,
+                        '',
+                        `**Sections:** ${wireframePack.blocks.join(' → ')}`,
+                    );
+                }
+
+                templateInfo.templateDetails.allFiles['DESIGN.md'] = lines.join('\n');
+            }
+        }
+
+        const wireframeContext = (() => {
+            const wf = sitePlan?.wireframe ? WIREFRAMES_BY_ID[sitePlan.wireframe] : undefined;
+            const colorPack = sitePlan?.theme ? COLOR_PACKS_BY_ID[sitePlan.theme] : undefined;
+            const fontPack = sitePlan?.font ? FONT_PACKS_BY_ID[sitePlan.font] : undefined;
+
+            const themeBlock = colorPack ? [
+                `THEME — ${colorPack.name} (inspired by ${colorPack.brand}). The theme CSS is already loaded via <link> in the <head> — do NOT import or redefine it.`,
+                `Use ONLY these CSS variables for every colour. Never write a hex value anywhere in your CSS or inline styles:`,
+                `  var(--bg)           page and section backgrounds`,
+                `  var(--surface)      cards, modals, nav backgrounds, elevated panels`,
+                `  var(--accent)       buttons, links, brand highlights, CTA backgrounds; text on accent = white or var(--bg)`,
+                `  var(--text)         primary body text`,
+                `  var(--text-muted)   secondary text, captions, placeholders`,
+                `  var(--border)       dividers, input borders, card outlines`,
+                `Both light and dark values are defined in the CSS — they switch automatically. Trust the file; never hardcode any colour.`,
+            ].join('\n') : 'Use CSS variables from the theme file — var(--bg), var(--accent), var(--text), var(--border) etc. Never hardcode hex values.';
+
+            const fontBlock = fontPack
+                ? `FONTS — Heading: '${fontPack.heading.family}' (var(--font-heading)). Body: '${fontPack.body.family}' (var(--font-body)). These are already loaded via <link> — use font-family: var(--font-heading) / var(--font-body).`
+                : 'Use var(--font-heading) and var(--font-body) for all typography.';
+
+            const pageStructure = sitePlan?.pageStructure ?? 'single';
+            const structureNote = pageStructure === 'multi'
+                ? `Build as MULTI-PAGE: generate index.html (home — hero, brief about, 3 featured services, CTA), plus a separate HTML file for each major section (about.html, services.html, one file per service, contact.html). Each page gets its own <title>, <meta description>, and JSON-LD. Nav links use real URLs not anchors.`
+                : `Build as a SINGLE PAGE with anchor-link navigation (#section-id).`;
+
+            const sectionBlock = wf ? `Sections in order: ${wf.blocks.join(', ')}.` : '';
+
+            return `\n\n${themeBlock}\n\n${fontBlock}\n\n${structureNote} ${sectionBlock}`;
+        })();
+        // [REAL BUSINESS DATA] block — verbatim images/reviews/facts from the plan.
+        // This is the brand-pack channel: supplied data MUST appear on the site exactly
+        // as given, and real photos take absolute priority over AI-generated ones.
+        const realDataContext = (() => {
+            const rd = sitePlan?.realData;
+            if (!rd || (!rd.images?.length && !rd.reviews?.length && !rd.facts)) return '';
+            const lines: string[] = ['', '', '[REAL BUSINESS DATA — MANDATORY, USE VERBATIM]'];
+            if (rd.images?.length) {
+                lines.push(
+                    '',
+                    `REAL PHOTOS (${rd.images.length}) — these are the business's actual photos. Use ALL of them in the site (hero, project/work cards, gallery, logo as indicated). Copy each URL exactly, character-for-character. Put photos in fixed-aspect containers with object-fit:cover; give each a descriptive alt from its title. Do NOT leave any src empty, and do NOT use any other image source:`,
+                );
+                for (const img of rd.images) {
+                    lines.push(`- [${img.role ?? 'photo'}] ${img.title ?? ''}: ${img.url}`);
+                }
+            }
+            if (rd.reviews?.length) {
+                lines.push(
+                    '',
+                    `REAL CUSTOMER REVIEWS (${rd.reviews.length}) — include a reviews/testimonials section using EXACTLY these, text verbatim, attribution as given. Never invent, merge, or reword reviews:`,
+                );
+                for (const r of rd.reviews) {
+                    lines.push(`- ${r.score ? `${r.score} — ` : ''}${r.title ? `"${r.title}": ` : ''}${r.text}${r.attribution ? ` — ${r.attribution}` : ''}`);
+                }
+            }
+            if (rd.facts) {
+                const f = rd.facts;
+                lines.push('', 'VERIFIED FACTS — use these exact values wherever ratings/contact/trust info appears. Anything NOT listed here is unknown: never invent an email address, rating, award, or any other fact:');
+                if (f.rating) lines.push(`- Rating: ${f.rating}${f.reviewCount ? ` from ${f.reviewCount} reviews` : ''}${f.reviewSourceUrl ? ` (link to ${f.reviewSourceUrl})` : ''}`);
+                if (f.phone) lines.push(`- Phone: ${f.phone}`);
+                if (f.email) lines.push(`- Email: ${f.email}`);
+                if (!f.email) lines.push('- Email: NOT KNOWN — do not show an email address anywhere.');
+                if (f.serviceAreas?.length) lines.push(`- Service areas: ${f.serviceAreas.join(', ')} (do not add towns beyond these)`);
+                if (f.guarantee) lines.push(`- Guarantee: ${f.guarantee}`);
+                if (f.memberSince) lines.push(`- Member since: ${f.memberSince}`);
+                for (const o of f.other ?? []) lines.push(`- ${o}`);
+            }
+            lines.push('', `Copyright year: ${new Date().getFullYear()}.`);
+            return lines.join('\n');
+        })();
+
         const storedQuery = generatedImages
-            ? query + buildImageContext(generatedImages)
-            : query;
+            ? query + buildImageContext(generatedImages) + wireframeContext + realDataContext
+            : query + wireframeContext + realDataContext;
 
         // Pre-fill theme and font from plan before the LLM sees the template.
         // This guarantees a consistent, appropriate design regardless of what the LLM decides.

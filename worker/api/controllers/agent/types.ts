@@ -12,14 +12,58 @@ export interface SiteServicePlan {
     imagePrompt: string;
 }
 
-export type SiteTheme = 'craftsman' | 'industrial' | 'luxury-green' | 'security' | 'agency' | 'parchment' | 'editorial' | 'ivory';
-export type SiteFont = 'inter' | 'playfair' | 'lora' | 'montserrat' | 'cormorant';
+export type SiteTheme = 'ledger' | 'espresso' | 'atelier' | 'neon-terminal' | 'cobalt-civic' | 'sandstone' | 'orchard' | 'velvet' | 'slate-brut' | 'bloom' | 'harbor' | 'midnight-gold';
+export type SiteFont = 'courthouse' | 'roast' | 'gallery' | 'console' | 'civic' | 'loam' | 'market' | 'boudoir' | 'concrete' | 'petal' | 'tide' | 'regalia';
+
+/** A real photo/logo supplied by the user (e.g. harvested from Checkatrade / socials). */
+export interface RealImage {
+    url: string;
+    /** What the image shows — used for placement and alt text. */
+    title?: string;
+    role?: 'logo' | 'hero' | 'project' | 'gallery';
+}
+
+/** A real customer review supplied by the user. Must be reproduced verbatim on the site. */
+export interface RealReview {
+    /** e.g. "10/10" or "9.3/10" */
+    score?: string;
+    title?: string;
+    text: string;
+    /** e.g. "Verified Checkatrade review · Maidenhead (SL6)" */
+    attribution?: string;
+}
+
+/** Verified business facts supplied by the user. Never invented, never embellished. */
+export interface RealFacts {
+    rating?: string;            // e.g. "9.92/10"
+    reviewCount?: number;       // e.g. 40
+    reviewSourceUrl?: string;   // e.g. Checkatrade profile URL
+    phone?: string;
+    email?: string;             // only if explicitly supplied — never invented
+    serviceAreas?: string[];
+    guarantee?: string;
+    memberSince?: string;
+    other?: string[];           // any other verbatim facts (accreditations, company number, ...)
+}
+
+/**
+ * Structured real-world data extracted VERBATIM from the user's brief.
+ * This is the "brand pack" channel: anything here must appear on the site
+ * exactly as given, and takes priority over AI-generated equivalents.
+ */
+export interface RealBusinessData {
+    images?: RealImage[];
+    reviews?: RealReview[];
+    facts?: RealFacts;
+}
 
 export interface SiteContentPlan {
     tagline: string;
     tone: string;
     theme: SiteTheme;
     font: SiteFont;
+    wireframe?: string;
+    pageStructure?: 'single' | 'multi';
     hero: {
         headline: string;
         subheadline: string;
@@ -32,6 +76,8 @@ export interface SiteContentPlan {
         imagePrompt: string;
     };
     services: SiteServicePlan[];
+    /** Verbatim real-world data extracted from the brief — images, reviews, facts. */
+    realData?: RealBusinessData;
 }
 
 export interface CodeGenArgs {
