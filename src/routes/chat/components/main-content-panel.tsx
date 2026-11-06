@@ -40,6 +40,9 @@ interface MainContentPanelProps {
 	projectType: ProjectType;
 	previewUrl?: string;
 	expoTunnelUrl?: string;
+	// Staged boot status shown in the preview pane before a previewUrl exists (cold
+	// sandbox installing deps / starting the dev server). undefined = no boot in progress.
+	previewBootStatus?: string;
 	previewAvailable: boolean;
 	showTooltip: boolean;
 	shouldRefreshPreview: boolean;
@@ -100,6 +103,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		projectType,
 		previewUrl,
 		expoTunnelUrl,
+		previewBootStatus,
 		previewAvailable,
 		showTooltip,
 		shouldRefreshPreview,
@@ -254,6 +258,27 @@ export function MainContentPanel(props: MainContentPanelProps) {
 
 	const renderPreviewView = () => {
 		if (!previewUrl) {
+			// A cold sandbox is installing deps / starting the dev server but no preview
+			// URL exists yet. Show the staged boot status instead of a blank pane so the
+			// wait is never silent. Falls back to null when nothing is booting.
+			if (previewBootStatus) {
+				return (
+					<div className="flex-1 w-full h-full flex flex-col items-center justify-center bg-bg-3 border border-text/10 rounded-lg">
+						<div className="text-center p-8 max-w-md">
+							<RefreshCw className="size-8 text-accent animate-spin mx-auto mb-4" />
+							<h3 className="text-lg font-medium text-text-primary mb-2">
+								Preparing your preview
+							</h3>
+							<p className="text-text-primary/70 text-sm">
+								{previewBootStatus}
+							</p>
+							<div className="text-xs text-text-primary/50 mt-3">
+								First boot installs dependencies — this is fastest on a warm sandbox.
+							</div>
+						</div>
+					</div>
+				);
+			}
 			return null;
 		}
 
@@ -310,7 +335,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		const viewportContent = isExpo ? (
 			<div className="flex-1 flex items-center justify-center bg-bg-2 overflow-hidden p-6 gap-2">
 				<ExpoPhoneFrame>{previewContent}</ExpoPhoneFrame>
-				<ExpoTestPanel previewUrl={previewUrl} expoTunnelUrl={expoTunnelUrl} />
+				<ExpoTestPanel previewUrl={previewUrl} expoTunnelUrl={expoTunnelUrl} websocket={websocket} previewAvailable={previewAvailable} />
 			</div>
 		) : viewportMode === 'desktop' ? previewContent : (
 			<div className="flex-1 flex justify-center bg-bg-2 overflow-hidden">

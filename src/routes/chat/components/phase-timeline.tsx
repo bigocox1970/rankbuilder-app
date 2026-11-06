@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Loader, Check, AlertCircle, ChevronDown, ChevronRight, ArrowUp, Zap, XCircle, X } from 'lucide-react';
+import { Loader, Check, AlertCircle, ChevronDown, ChevronRight, ArrowUp, Zap, XCircle, X, Copy } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { RefObject } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -179,6 +179,9 @@ interface PhaseTimelineProps {
 	onFileClick: (file: FileType) => void;
 	isThinkingNext?: boolean;
 	isPreviewDeploying?: boolean;
+	// Live staged boot status (deps installing / dev server starting). Used as the
+	// deploy card subtitle so a cold boot narrates real progress instead of static text.
+	previewBootStatus?: string;
 	progress: number;
 	total: number;
 	parentScrollRef?: RefObject<HTMLDivElement | null>;
@@ -186,6 +189,7 @@ interface PhaseTimelineProps {
 	// Deployment functionality
 	chatId?: string;
 	isDeploying?: boolean;
+	deploymentUrl?: string;
 	handleDeployToCloudflare?: (instanceId: string) => void;
 	// Issue tracking and debugging
 	runtimeErrorCount?: number;
@@ -194,6 +198,8 @@ interface PhaseTimelineProps {
 	// Activity state
 	isGenerating?: boolean;
 	isThinking?: boolean;
+	// App type — hides Cloudflare deploy button for mobile (Expo) apps
+	appType?: string;
 }
 
 // Helper function to truncate long file paths
@@ -269,18 +275,21 @@ export function PhaseTimeline({
 	onFileClick,
 	isThinkingNext,
 	isPreviewDeploying,
+	previewBootStatus,
 	progress,
 	total,
 	parentScrollRef,
 	onViewChange,
 	chatId,
 	isDeploying,
+	deploymentUrl,
 	handleDeployToCloudflare,
 	runtimeErrorCount = 0,
 	staticIssueCount = 0,
 	isDebugging = false,
 	isGenerating = false,
-	isThinking = false
+	isThinking = false,
+	appType,
 }: PhaseTimelineProps) {
 	const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
 	const [showCollapsedBar, setShowCollapsedBar] = useState(false);
@@ -364,7 +373,7 @@ export function PhaseTimeline({
 		if (isPreviewDeploying) {
 			return {
 				text: 'Deploying preview',
-				subtitle: 'Updating preview environment...',
+				subtitle: previewBootStatus ?? 'Updating preview environment...',
 				icon: <StatusLoader color="orange" />,
 				badge: phaseBadge
 			};
@@ -396,7 +405,7 @@ export function PhaseTimeline({
 			icon: <div className="w-4 h-4 bg-gradient-to-br from-zinc-300/30 to-zinc-400/20 dark:from-zinc-600/30 dark:to-zinc-700/20 rounded-full" />,
 			badge: undefined
 		};
-	}, [phaseTimeline, isThinkingNext, isPreviewDeploying, progress, total, projectStages]);
+	}, [phaseTimeline, isThinkingNext, isPreviewDeploying, previewBootStatus, progress, total, projectStages]);
 
 	const togglePhase = (phaseId: string) => {
 		setExpandedPhases(prev => {
@@ -530,24 +539,46 @@ export function PhaseTimeline({
                                         </span>
                                     </div>
                                 )}
-                                {chatId && handleDeployToCloudflare && (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeployToCloudflare(chatId);
-                                        }}
-                                        disabled={!!isDeploying}
-                                        className="ml-2 flex items-center gap-1.5 px-2.5 py-1 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-white rounded-full text-xs font-medium transition-colors disabled:cursor-not-allowed"
-                                        title={isDeploying ? 'Deploying...' : 'Deploy to Cloudflare'}
-                                        aria-label={isDeploying ? 'Deploying' : 'Deploy to Cloudflare'}
-                                    >
-                                        {isDeploying ? (
-                                            <StatusLoader size="sm" color="accent" />
-                                        ) : (
-                                            <Zap className="w-3 h-3" />
-                                        )}
-                                        <span className="hidden sm:inline">{isDeploying ? 'Deploying...' : 'Deploy'}</span>
-                                    </button>
+                                {chatId && appType !== 'mobile' && (
+                                    deploymentUrl ? (
+                                        <div className="ml-2 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                            <a
+                                                href={deploymentUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500 hover:bg-green-600 text-white rounded-full text-xs font-medium transition-colors"
+                                                title={deploymentUrl}
+                                            >
+                                                <Zap className="w-3 h-3" />
+                                                <span className="hidden sm:inline">View live</span>
+                                            </a>
+                                            <button
+                                                onClick={() => navigator.clipboard.writeText(deploymentUrl)}
+                                                className="flex items-center gap-1 px-2 py-1 border border-border/50 hover:bg-bg-2/80 text-text-secondary hover:text-text-primary rounded-full text-xs transition-colors"
+                                                title="Copy URL"
+                                            >
+                                                <Copy className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ) : handleDeployToCloudflare ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeployToCloudflare(chatId);
+                                            }}
+                                            disabled={!!isDeploying}
+                                            className="ml-2 flex items-center gap-1.5 px-2.5 py-1 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-white rounded-full text-xs font-medium transition-colors disabled:cursor-not-allowed"
+                                            title={isDeploying ? 'Deploying...' : 'Deploy to Cloudflare'}
+                                            aria-label={isDeploying ? 'Deploying' : 'Deploy to Cloudflare'}
+                                        >
+                                            {isDeploying ? (
+                                                <StatusLoader size="sm" color="accent" />
+                                            ) : (
+                                                <Zap className="w-3 h-3" />
+                                            )}
+                                            <span className="hidden sm:inline">{isDeploying ? 'Deploying...' : 'Deploy'}</span>
+                                        </button>
+                                    ) : null
                                 )}
                                 <button
                                     onClick={(e) => {
@@ -632,7 +663,7 @@ export function PhaseTimeline({
 													Scroll to Top
 												</button>
 
-												{chatId && handleDeployToCloudflare && (
+												{chatId && handleDeployToCloudflare && appType !== 'mobile' && (
 													<button
 														onClick={(e) => {
 															e.stopPropagation();
@@ -890,7 +921,7 @@ export function PhaseTimeline({
 														<StatusLoader size="sm" color="accent" />
 														<span className="text-sm font-medium text-accent">Deploying preview...</span>
 													</div>
-													<span className="text-xs text-accent/60 ml-5">Updating your preview environment</span>
+													<span className="text-xs text-accent/60 ml-5">{previewBootStatus ?? 'Updating your preview environment'}</span>
 												</div>
 											);
 										}

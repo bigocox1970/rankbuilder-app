@@ -2051,7 +2051,10 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             this.logger.info('Processing deployment', { instanceId });
             
-            // Step 1: Run build (vite build with @cloudflare/vite-plugin bundles both frontend and Worker)
+            // Step 1: Run the project's build. For @cloudflare/vite-plugin templates this
+            // bundles the frontend + Worker; for TanStack Start imports the project's own
+            // build (via @lovable.dev/vite-tanstack-config) already targets Cloudflare and
+            // emits dist/server/server.js (Worker) + dist/client (assets) — see Step 3.
             this.logger.info('Building project');
             const buildResult = await this.executeCommand(instanceId, 'bun run build');
             if (buildResult.exitCode !== 0) {
@@ -2070,26 +2073,97 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             const config = parseWranglerConfig(wranglerConfigContent);
 
-            this.logger.info('Worker configuration', { scriptName: config.name });
+            // Cloudflare worker names AND the deploy hostname must be [a-z0-9-] only (no
+            // underscores/dots/uppercase), and the dispatcher routes the request hostname →
+            // worker name. So the name the worker uploads under and the URL we hand back MUST be
+            // the identical sanitized string. Previously the URL was built from the raw
+            // projectName (which can contain underscores, e.g. "tanstack_start_ts") while the
+            // worker uploaded under config.name → the hostname never resolved to a worker → the
+            // dispatcher fell back to vibesdk's generic 500 page. Derive ONE CF-safe name here.
+            const sanitizeWorkerName = (value: string): string =>
+                value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 63);
+            const scriptName = sanitizeWorkerName(config.name || projectName) || sanitizeWorkerName(instanceId);
+
+            this.logger.info('Worker configuration', { scriptName, rawConfigName: config.name });
             this.logger.info('Worker compatibility', { compatibilityDate: config.compatibility_date });
 
-            // Step 3: Read worker script from build output
-            // @cloudflare/vite-plugin outputs the Worker bundle to dist/{workerEnvName}/index.js
-            // where workerEnvName is the wrangler name with dashes replaced by underscores
+            // Step 3: Read worker script from build output.
+            // Two supported layouts:
+            //  - @cloudflare/vite-plugin: single bundle at dist/{workerEnvName}/index.js,
+            //    with code-split modules under dist/assets.
+            //  - TanStack Start (imports): SSR Worker at dist/server/server.js, which
+            //    dynamically imports a module graph under dist/server/assets, plus static
+            //    client assets under dist/client.
+            // `workerModuleRoot` is the directory the Worker's module specifiers are relative
+            // to — additional modules (Step 3a) are named relative to it.
             this.logger.info('Reading worker script');
             const session = await this.getInstanceSession(instanceId);
             const workerEnvName = config.name.replaceAll('-', '_');
             const viteWorkerPath = `/workspace/${instanceId}/dist/${workerEnvName}/index.js`;
+            const tanstackWorkerPath = `/workspace/${instanceId}/dist/server/server.js`;
 
             let workerContent: string | undefined;
+            let workerModuleRoot = 'dist'; // module specifiers resolve relative to this dir
+            // Set when we produce a single self-contained bundle (esbuild) so Step 3a skips the
+            // code-split module collection — everything is already inlined into workerContent.
+            let workerIsBundled = false;
+
+            // TanStack Start layout (imported SSR projects): the build emits dist/server/server.js,
+            // but with its node_modules deps EXTERNALISED (bare imports of react / @tanstack/* /
+            // lucide-react / etc.). Uploaded raw, those bare specifiers cannot resolve at the edge
+            // (there is no node_modules at runtime) → the worker throws on load → the dispatched
+            // app 500s. `wrangler deploy` avoids this by bundling; our raw API upload does not. So
+            // bundle it ourselves with esbuild (inlines every dep into one module), exactly as
+            // wrangler would, then upload that. VERIFIED on the real edge: raw server.js = 500,
+            // esbuild-bundled = 200. esbuild runs on bun (no node needed) so it works in-sandbox.
+            // ENTIRE block is defensive: any failure here must fall back to the raw read, never
+            // throw out and fail the whole deploy.
+            let tsExists: ExecResult | undefined;
             try {
-                const workerFile = await session.readFile(viteWorkerPath);
-                if (workerFile.success) {
-                    workerContent = workerFile.content;
-                    this.logger.info('Worker script loaded from vite build', { sizeKB: (workerContent.length / 1024).toFixed(2) });
+                tsExists = await this.executeCommand(instanceId, `test -f dist/server/server.js && echo yes || echo no`, { timeout: 10000 });
+            } catch (e) {
+                this.logger.warn('TanStack layout probe failed', e instanceof Error ? e.message : String(e));
+            }
+            if (tsExists?.stdout.trim() === 'yes') {
+                this.logger.info('TanStack SSR layout detected — bundling worker with esbuild before upload');
+                const bundleCmd = `bunx esbuild dist/server/server.js --bundle --format=esm --target=es2022 '--conditions=workerd,worker,browser,module,import' '--external:node:*' '--external:cloudflare:*' --outfile=dist/__bundled/index.js 2>&1`;
+                try {
+                    const bundleResult = await this.executeCommand(instanceId, bundleCmd, { timeout: 180000 });
+                    this.logger.info('esbuild bundle finished', { exitCode: bundleResult.exitCode, out: (bundleResult.stdout || '').slice(-1200) });
+                    if (bundleResult.exitCode === 0) {
+                        const bundled = await session.readFile(`/workspace/${instanceId}/dist/__bundled/index.js`);
+                        if (bundled.success && bundled.content) {
+                            workerContent = bundled.content;
+                            workerIsBundled = true;
+                            this.logger.info('Worker bundled into a self-contained module', { sizeKB: (workerContent.length / 1024).toFixed(2) });
+                        }
+                    }
+                } catch (e) {
+                    this.logger.warn('esbuild bundling threw — falling back to raw server.js', e instanceof Error ? e.message : String(e));
                 }
-            } catch {
-                this.logger.info('Worker not at vite output path, falling back to wrangler build');
+                // Fallback: raw server.js + its code-split modules (the previous behaviour).
+                if (!workerContent) {
+                    try {
+                        const tsWorker = await session.readFile(tanstackWorkerPath);
+                        if (tsWorker.success && tsWorker.content) {
+                            workerContent = tsWorker.content;
+                            workerModuleRoot = 'dist/server';
+                            this.logger.info('Worker loaded raw from TanStack build (esbuild fallback)', { sizeKB: (workerContent.length / 1024).toFixed(2) });
+                        }
+                    } catch { /* try vite-plugin path below */ }
+                }
+            }
+
+            if (!workerContent) {
+                try {
+                    const workerFile = await session.readFile(viteWorkerPath);
+                    if (workerFile.success) {
+                        workerContent = workerFile.content;
+                        this.logger.info('Worker script loaded from vite build', { sizeKB: (workerContent.length / 1024).toFixed(2) });
+                    }
+                } catch {
+                    this.logger.info('Worker not at vite output path, falling back to wrangler build');
+                }
             }
 
             // Fallback: run wrangler build standalone and find its output in .wrangler/tmp/
@@ -2120,27 +2194,34 @@ export class SandboxSdkClient extends BaseSandboxService {
             this.logger.info('Worker script ready', { sizeKB: (workerContent.length / 1024).toFixed(2) });
             
             // Step 3a: Check for additional worker modules (ESM imports)
-            // Process them the same way as assets but as strings for the Map
+            // Process them the same way as assets but as strings for the Map.
+            // Skipped when the worker was esbuild-bundled above — its modules are all inlined,
+            // and uploading the raw code-split chunks alongside would be redundant/conflicting.
             let additionalModules: Map<string, string> | undefined;
-            try {
-                const workerAssetsPath = `${instanceId}/dist/assets`;
+            if (!workerIsBundled) try {
+                // Module specifiers in the Worker resolve relative to workerModuleRoot
+                // (dist for vite-plugin, dist/server for TanStack), so the code-split
+                // chunks live in <workerModuleRoot>/assets and must be named relative to it
+                // (e.g. "assets/foo.js") to match the Worker's import("./assets/foo.js").
+                const workerAssetsPath = `${instanceId}/${workerModuleRoot}/assets`;
+                const moduleNamePrefix = `${instanceId}/${workerModuleRoot}/`;
                 const workerAssetsResult = await this.safeSandboxExec(`test -d ${workerAssetsPath} && echo "exists" || echo "missing"`);
                 const hasWorkerAssets = workerAssetsResult.exitCode === 0 && workerAssetsResult.stdout.trim() === "exists";
-                
+
                 if (hasWorkerAssets) {
                     this.logger.info('Processing additional worker modules', { workerAssetsPath });
-                    
+
                     // Find all JS files in the worker assets directory
                     const findResult = await this.safeSandboxExec(`find ${workerAssetsPath} -type f -name "*.js"`);
                     if (findResult.exitCode === 0) {
                         const modulePaths = findResult.stdout.trim().split('\n').filter((path: string) => path.trim());
-                        
+
                         if (modulePaths.length > 0) {
                             additionalModules = new Map<string, string>();
-                            
+
                             for (const fullPath of modulePaths) {
-                                const relativePath = fullPath.replace(`${instanceId}/dist/`, '');
-                                
+                                const relativePath = fullPath.replace(moduleNamePrefix, '');
+
                                 try {
                                     const buffer = await this.readFileAsBase64Buffer(fullPath);
                                     const moduleContent = buffer.toString('utf8');
@@ -2182,10 +2263,11 @@ export class SandboxSdkClient extends BaseSandboxService {
                 this.logger.info('No static assets found, deploying worker only');
             }
             
-            // Step 5: Override config for dispatch deployment
+            // Step 5: Override config for dispatch deployment. Upload under the sanitized
+            // scriptName so it matches the hostname the dispatcher will look up (see above).
             const dispatchConfig = {
                 ...config,
-                name: config.name
+                name: scriptName
             };
         
             
@@ -2229,9 +2311,10 @@ export class SandboxSdkClient extends BaseSandboxService {
                 );
             }
             
-            // Step 8: Determine deployment URL
-            const deployedUrl = `${this.getProtocolForHost()}://${projectName}.${getPreviewDomain(env)}`;
-            const deploymentId = projectName;
+            // Step 8: Determine deployment URL — built from the SAME sanitized scriptName the
+            // worker was uploaded under, so the hostname resolves to the deployed worker.
+            const deployedUrl = `${this.getProtocolForHost()}://${scriptName}.${getPreviewDomain(env)}`;
+            const deploymentId = scriptName;
             
             this.logger.info('Deployment successful', { 
                 instanceId,

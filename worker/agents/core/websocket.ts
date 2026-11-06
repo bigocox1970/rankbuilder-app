@@ -256,6 +256,13 @@ export async function handleWebSocketMessage(
                     sendError(connection, `Error fetching model configurations: ${error instanceof Error ? error.message : String(error)}`);
                 });
                 break;
+            case WebSocketMessageRequests.RELOAD_MODEL_CONFIGS:
+                logger.info('Reloading user model configs into live agent');
+                agent.reloadUserModelConfigs().catch((error: unknown) => {
+                    logger.error('Error reloading user model configs:', error);
+                    sendError(connection, `Error reloading model configurations: ${error instanceof Error ? error.message : String(error)}`);
+                });
+                break;
             case WebSocketMessageRequests.CLEAR_CONVERSATION:
                 logger.info('Clearing conversation history');
                 agent.clearConversation();

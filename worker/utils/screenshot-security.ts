@@ -29,11 +29,7 @@ export class ScreenshotSecurity {
     }
 
     async enrichUrls<T extends { id: string; screenshotUrl?: string | null }>(apps: T[]): Promise<T[]> {
-        return Promise.all(apps.map(async (app) => {
-            if (!app.screenshotUrl) return app;
-            const signed = await this.signUrl(app.screenshotUrl, app.id);
-            return signed === app.screenshotUrl ? app : { ...app, screenshotUrl: signed };
-        }));
+        return apps;
     }
 
     async verifyToken(token: string, expectedAppId: string): Promise<boolean> {

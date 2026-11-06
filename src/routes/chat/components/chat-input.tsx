@@ -3,6 +3,7 @@ import { WebSocket } from 'partysocket';
 import { X } from 'lucide-react';
 import { PromptBox } from '@/components/prompt-box';
 import { sendWebSocketMessage } from '../utils/websocket-helpers';
+import { ModelProviderToggle } from './model-provider-toggle';
 import type { ImageAttachment } from '@/api-types';
 import { type UsageSummary } from '@/hooks/use-limits';
 
@@ -95,7 +96,11 @@ export function ChatInput({
 	) : undefined;
 
 	return (
-		<PromptBox
+		<div className="flex flex-col shrink-0">
+			<div className="flex justify-end px-4 pt-2">
+				<ModelProviderToggle websocket={websocket} />
+			</div>
+			<PromptBox
 			value={newMessage}
 			onChange={onMessageChange}
 			onSubmit={() => onSubmit(new Event('submit') as unknown as FormEvent)}
@@ -115,6 +120,7 @@ export function ChatInput({
 			maxWords={4000}
 			formRef={chatFormRef}
 			className="shrink-0 p-4 pb-5 bg-transparent"
-		/>
+			/>
+		</div>
 	);
 }

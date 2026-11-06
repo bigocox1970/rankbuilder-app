@@ -134,6 +134,8 @@ export const WebSocketMessageRequests = {
     
     // Model configuration info request
     GET_MODEL_CONFIGS: 'get_model_configs',
+    // Reload the user's model configs into the live agent (after a chat-pane provider flip)
+    RELOAD_MODEL_CONFIGS: 'reload_model_configs',
     
     // Terminal command request
     TERMINAL_COMMAND: 'terminal_command',
@@ -161,6 +163,8 @@ export const getMaxToolCallingDepth = (agentActionKey: AgentActionKey | 'testMod
             return 40;
         case 'agenticProjectBuilder':
             return 100;
+        case 'conversationalResponse':
+            return 20;
         default:
             return MAX_TOOL_CALLING_DEPTH_DEFAULT;
     }

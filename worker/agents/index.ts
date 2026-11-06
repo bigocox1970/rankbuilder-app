@@ -51,6 +51,7 @@ export async function cloneAgent(env: Env, agentId: string) : Promise<{newAgentI
     const newState: AgentState = {
         ...originalState,
         sessionId: newAgentId,
+        metadata: { ...originalState.metadata, agentId: newAgentId },
         sandboxInstanceId: undefined,
         pendingUserInputs: [],
         // Note: the conversation history is NOT part of AgentState (stored separately),

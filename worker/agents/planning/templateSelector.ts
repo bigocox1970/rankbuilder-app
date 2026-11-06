@@ -189,7 +189,12 @@ export async function selectTemplate({ env, query, projectType, availableTemplat
         ? await predictProjectType(env, query, inferenceContext, images)
         : (projectType || 'app') as ProjectType;
     
-    availableTemplates = availableTemplates.filter(t => !t.disabled);
+    // Exclude the `minimal-*` scaffolding stubs from AI selection (vanilla vibesdk behavior).
+    // They are barebones starters, never meant to back a real app — without this, a simple-sounding
+    // webapp prompt can resolve to minimal-js and deploy the stock template shell instead of a real
+    // React app. The website flow is unaffected: it selects appType:website templates (tradesperson-sp),
+    // which are not named "minimal".
+    availableTemplates = availableTemplates.filter(t => !t.disabled && !t.name.includes('minimal'));
     logger.info(`Using project type: ${actualProjectType}${projectType === 'auto' ? ' (auto-detected)' : ''}`);
 
     // Step 2: Filter templates by project type

@@ -9,7 +9,7 @@ export function createDeployPreviewTool(
 	return tool({
 		name: 'deploy_preview',
 		description:
-			'Uploads and syncs the current application to the preview environment. After deployment, the app is live at the preview URL, but runtime logs (get_logs) will only appear when the user interacts with the app - not automatically after deployment. CRITICAL: After deploying, use wait(20-30) to allow time for user interaction before checking logs. Use force_redeploy=true to force a redeploy (will reset session ID and spawn a new sandbox, is expensive) ',
+			'Uploads and syncs the current application to the preview environment. After deployment, the app is live at the preview URL, but runtime logs (get_logs) will only appear when the user interacts with the app - not automatically after deployment. CRITICAL: After deploying, use wait(20-30) to allow time for user interaction before checking logs. Use force_redeploy=true to force a redeploy (will reset session ID and spawn a new sandbox, is expensive). IMPORTANT: Do NOT call deploy_preview multiple times in rapid succession — each call restarts the dev server and concurrent restarts interfere with each other and cause blank previews. Call it once, wait, then check logs.',
 		args: {
 			force_redeploy: t.deployment.force().describe('Force a full redeploy (resets session ID and spawns new sandbox)'),
 		},

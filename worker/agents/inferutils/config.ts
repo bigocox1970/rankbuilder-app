@@ -4,7 +4,6 @@ import {
     AgentConstraintConfig, 
     AIModels,
     AllModels,
-    LiteModels,
     RegularModels,
 } from "./config.types";
 import { env } from 'cloudflare:workers';
@@ -206,7 +205,9 @@ export const AGENT_CONSTRAINTS: Map<AgentActionKey, AgentConstraintConfig> = new
 		enabled: true,
 	}],
 	['realtimeCodeFixer', {
-		allowedModels: new Set([AIModels.DISABLED]),
+		// Hot-path fixer (runs on nearly every file edit). Allow any model so whole-stack
+		// provider presets can flip it; default stays DeepSeek V4 Flash for speed/cost.
+		allowedModels: new Set(AllModels),
 		enabled: true,
 	}],
 	['fileRegeneration', {
@@ -226,7 +227,9 @@ export const AGENT_CONSTRAINTS: Map<AgentActionKey, AgentConstraintConfig> = new
 		enabled: true,
 	}],
 	['templateSelection', {
-		allowedModels: new Set(LiteModels),
+		// Allow any model so provider presets (incl. Regular-tier M3) can flip it; default
+		// stays a Lite model (DeepSeek V4 Flash) for fast, low-latency template picks.
+		allowedModels: new Set(AllModels),
 		enabled: true,
 	}],
 ]);

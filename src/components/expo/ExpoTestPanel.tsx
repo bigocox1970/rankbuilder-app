@@ -1,9 +1,12 @@
 import { QRCodeSVG } from 'qrcode.react';
-import { Info } from 'lucide-react';
+import { Info, Camera } from 'lucide-react';
+import { WebSocket } from 'partysocket';
 
 interface ExpoTestPanelProps {
     previewUrl?: string;
     expoTunnelUrl?: string;
+    websocket?: WebSocket | null;
+    previewAvailable?: boolean;
 }
 
 /**
@@ -12,9 +15,15 @@ interface ExpoTestPanelProps {
  * When a native Expo Go tunnel URL is available it is preferred; otherwise the
  * QR opens the web preview in the phone's mobile browser.
  */
-export function ExpoTestPanel({ previewUrl, expoTunnelUrl }: ExpoTestPanelProps) {
+export function ExpoTestPanel({ previewUrl, expoTunnelUrl, websocket, previewAvailable }: ExpoTestPanelProps) {
     const qrUrl = expoTunnelUrl ?? previewUrl;
     const isNative = !!expoTunnelUrl;
+
+    const retakeScreenshot = () => {
+        const url = previewUrl;
+        if (!url || !websocket || websocket.readyState !== WebSocket.OPEN) return;
+        websocket.send(JSON.stringify({ type: 'capture_screenshot', data: { url, viewport: { width: 390, height: 844 } } }));
+    };
 
     return (
         <div className="hidden lg:flex flex-col w-72 shrink-0 px-6 py-8 gap-5">
@@ -72,6 +81,17 @@ export function ExpoTestPanel({ previewUrl, expoTunnelUrl }: ExpoTestPanelProps)
                         : 'This QR opens the web build, which lacks native functions and may look different. Native on-device testing isn’t wired up for this preview yet.'}
                 </p>
             </div>
+
+            {previewUrl && previewAvailable && websocket && websocket.readyState === WebSocket.OPEN && (
+                <button
+                    onClick={retakeScreenshot}
+                    className="flex items-center gap-2 text-xs text-text-tertiary hover:text-text-primary transition-colors"
+                    title="Retake screenshot for app card"
+                >
+                    <Camera className="size-3.5" />
+                    Retake screenshot
+                </button>
+            )}
         </div>
     );
 }

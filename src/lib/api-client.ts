@@ -4,6 +4,7 @@
  * Features 401 response interception to trigger authentication modals
  */
 
+import type { ModelProvider } from 'shared/constants/modelProviderPresets';
 import type{
 	ApiResponse,
 	AdminCostData,
@@ -759,6 +760,28 @@ class ApiClient {
 	 */
 	async getModelConfigs(): Promise<ApiResponse<ModelConfigsData>> {
 		return this.request<ModelConfigsData>('/api/model-configs');
+	}
+
+	/**
+	 * Get the current user's whole-stack model provider (chat-pane toggle). Per-user, not admin.
+	 */
+	async getModelProvider(): Promise<ApiResponse<{ provider: ModelProvider }>> {
+		return this.request<{ provider: ModelProvider }>('/api/model-configs/my-provider');
+	}
+
+	/**
+	 * Apply a whole-stack model provider preset to the current user's own account.
+	 */
+	async setModelProvider(
+		provider: ModelProvider,
+	): Promise<ApiResponse<{ provider: ModelProvider; appliedCount: number }>> {
+		return this.request<{ provider: ModelProvider; appliedCount: number }>(
+			'/api/model-configs/my-provider',
+			{
+				method: 'POST',
+				body: JSON.stringify({ provider }),
+			},
+		);
 	}
 
 	/**

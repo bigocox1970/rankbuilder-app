@@ -19,7 +19,9 @@ export interface GeneratedTradeImages {
 
 // Keep NO_TEXT minimal — mentioning "website/screenshot/UI" (even negated) causes
 // Flux Schnell to focus on those concepts and generate them.
-const NO_TEXT = 'no text, no letters, no watermarks';
+// Explicitly exclude signage/shop fronts: Flux will generate shop exteriors with
+// legible branded signs (wrong business name) unless we forbid it.
+const NO_TEXT = 'no text, no letters, no watermarks, no signs, no signage, no storefronts, no shop fronts, no branded facades, no visible business names';
 const PHOTO_PREFIX = 'Real-world photograph of';
 
 const IMAGE_SPECS: Array<{
@@ -30,7 +32,7 @@ const IMAGE_SPECS: Array<{
 }> = [
     {
         key: 'hero',
-        promptSuffix: 'wide angle establishing shot, professional environment, natural daylight, DSLR photography, photorealistic',
+        promptSuffix: 'professional workspace interior, wide angle, natural window light, DSLR photography, photorealistic',
         width: 1280,
         height: 640,
     },
@@ -103,13 +105,13 @@ function gatewayOpts(env: Env, agentId: string, actionKey: string) {
     } as const;
 }
 
-async function runFlux(env: Env, agentId: string, prompt: string, width: number, height: number): Promise<Uint8Array> {
+// Workers AI's flux-1-schnell schema only accepts { prompt, steps } and rejects any
+// other property (error 5006), so width/height are ignored and output is 1024x1024.
+async function runFlux(env: Env, agentId: string, prompt: string, _width: number, _height: number): Promise<Uint8Array> {
     const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
         prompt,
-        num_steps: 4,
-        width,
-        height,
-    }, gatewayOpts(env, agentId, 'imageGeneration.flux'));
+        steps: 4,
+    } as Parameters<typeof env.AI.run>[1], gatewayOpts(env, agentId, 'imageGeneration.flux')) as { image?: string };
 
     if (!response.image) {
         throw new Error('Flux returned no image data');
@@ -342,30 +344,28 @@ export function buildImageContext(images: GeneratedTradeImages): string {
     return `
 
 [GENERATED IMAGES]
-CRITICAL: Exactly 9 real images have been generated for this site. These are the ONLY images you may use. Do NOT use placeholder images, stock photos, or URLs from unsplash.com, picsum.photos, placehold.it, or any other external image source.
+Real photographs have been generated for this site. These are the ONLY image URLs you may use — no placeholders, no unsplash, no invented paths.
 
-Token mapping — use exactly these URLs and titles:
-- {{HERO_IMAGE_URL}} → ${images.hero}
-- {{ABOUT_IMAGE_URL}} → ${images.work1}
-- {{PROJECT1_IMAGE_URL}} → ${images.project1}
-  USE THIS EXACT TITLE for {{PROJECT1_TITLE}}: "${titles[0]}"
-- {{PROJECT2_IMAGE_URL}} → ${images.project2}
-  USE THIS EXACT TITLE for {{PROJECT2_TITLE}}: "${titles[1]}"
-- {{PROJECT3_IMAGE_URL}} → ${images.project3}
-  USE THIS EXACT TITLE for {{PROJECT3_TITLE}}: "${titles[2]}"
-- {{PROJECT4_IMAGE_URL}} → ${images.project4}
-  USE THIS EXACT TITLE for {{PROJECT4_TITLE}}: "${titles[3]}"
-- {{PROJECT5_IMAGE_URL}} → ${images.project5}
-  USE THIS EXACT TITLE for {{PROJECT5_TITLE}}: "${titles[4]}"
-- {{PROJECT6_IMAGE_URL}} → ${images.project6}
-  USE THIS EXACT TITLE for {{PROJECT6_TITLE}}: "${titles[5]}"
+Place them wherever they best fit your layout:
 
-The project images were generated specifically to match these titles. You MUST use the exact titles above for the project cards — the images will not make sense with different titles.
+Hero/banner image:
+  ${images.hero}
+
+About/team/profile image (use if your layout has an about section):
+  ${images.work1}
+
+Gallery/work/project images — use as many as fit your layout, in whatever section makes sense:
+  "${titles[0]}": ${images.project1}
+  "${titles[1]}": ${images.project2}
+  "${titles[2]}": ${images.project3}
+  "${titles[3]}": ${images.project4}
+  "${titles[4]}": ${images.project5}
+  "${titles[5]}": ${images.project6}
 
 Rules:
 - Copy every URL character-for-character including any ?v= query string
-- Do NOT use any other image URLs anywhere in the HTML
-- Do NOT write invented paths like images/photo.jpg or any unsplash/placehold URL
+- You do NOT need to use all images — only use those that fit your chosen layout
+- If a section doesn't exist in your layout, skip its image
 [END GENERATED IMAGES]
 `;
 }

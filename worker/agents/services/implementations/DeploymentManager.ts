@@ -805,9 +805,14 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             return { deploymentUrl: null };
         }
 
-        // Ensure sandbox instance exists - return null to trigger agent orchestration
+        // Ensure sandbox instance exists
         if (!state.sandboxInstanceId) {
-            logger.info('No sandbox instance ID available');
+            logger.error('No sandbox instance ID available');
+            callbacks?.onError?.({
+                message: 'Deployment failed: No preview running. Try refreshing the preview first.',
+                instanceId: '',
+                error: 'No sandbox instance'
+            });
             return { deploymentUrl: null };
         }
 
@@ -831,9 +836,14 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             });
 
             // Check for preview expired error
-            if (deploymentResult?.error?.includes('Failed to read instance metadata') || 
+            if (deploymentResult?.error?.includes('Failed to read instance metadata') ||
                 deploymentResult?.error?.includes(`/bin/sh: 1: cd: can't cd to i-`)) {
                 logger.error('Deployment sandbox died - preview expired');
+                callbacks?.onError?.({
+                    message: 'Deployment failed: Preview expired. Reloading your preview — please try again in a moment.',
+                    instanceId: state.sandboxInstanceId ?? '',
+                    error: 'Sandbox expired'
+                });
                 this.deployToSandbox();
             } else {
                 callbacks?.onError?.({

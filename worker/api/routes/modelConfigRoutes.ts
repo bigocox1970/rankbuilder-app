@@ -21,6 +21,10 @@ export function setupModelConfigRoutes(app: Hono<AppEnv>): void {
     modelConfigRouter.get('/defaults', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getDefaults));
     modelConfigRouter.get('/byok-providers', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getByokProviders));
     modelConfigRouter.get('/openrouter-catalog', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getOpenRouterCatalog));
+    // Per-user whole-stack provider toggle (chat pane). Authenticated, NOT admin-only.
+    // Registered before '/:agentAction' so 'my-provider' is not captured as a route param.
+    modelConfigRouter.get('/my-provider', setAuthLevel(AuthConfig.authenticated), adaptController(ModelConfigController, ModelConfigController.getMyProvider));
+    modelConfigRouter.post('/my-provider', setAuthLevel(AuthConfig.authenticated), adaptController(ModelConfigController, ModelConfigController.setMyProvider));
     modelConfigRouter.get('/:agentAction', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.getModelConfig));
     modelConfigRouter.put('/:agentAction', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.updateModelConfig));
     modelConfigRouter.delete('/:agentAction', setAuthLevel(AuthConfig.adminOnly), adaptController(ModelConfigController, ModelConfigController.deleteModelConfig));

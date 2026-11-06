@@ -4,6 +4,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeExternalLinks from 'rehype-external-links';
+import rehypeRaw from 'rehype-raw';
 import { ExportButton } from './export-button';
 import { exportMarkdownAsFile } from '@/utils/markdown-export';
 import clsx from 'clsx';
@@ -158,7 +159,7 @@ export function MarkdownDocsPreview({
 						<article ref={contentRef} className="prose prose-sm prose-invert max-w-none break-words prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-pre:break-words prose-code:break-words prose-table:block prose-table:overflow-x-auto">
 							<ReactMarkdown
 								remarkPlugins={[remarkGfm]}
-								rehypePlugins={[[rehypeExternalLinks, { target: '_blank' }]]}
+								rehypePlugins={[rehypeRaw, [rehypeExternalLinks, { target: '_blank' }]]}
 								components={{
 									h1: ({ node, ...props }) => (
 										<h1 id={createId(props.children)} {...props} />

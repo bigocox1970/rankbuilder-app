@@ -25,7 +25,7 @@ export interface AppCreatedEvent {
 export interface AppUpdatedEvent {
   type: 'app-updated';
   appId: string;
-  data?: AppWithFavoriteStatus
+  data?: Partial<AppWithFavoriteStatus>
 }
 
 export type AppEvent = AppDeletedEvent | AppCreatedEvent | AppUpdatedEvent;

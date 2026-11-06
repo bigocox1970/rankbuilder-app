@@ -41,10 +41,28 @@ RUN bunx tsc --version
 # Create symlinks for easier CLI usage
 RUN ln -sf /workspace/container/cli-tools.ts /usr/local/bin/monitor-cli
 
-# # Setup common templates packages cache
-# WORKDIR /app/container/packages-cache
-# ENV BUN_INSTALL_CACHE_DIR=/app/container/packages-cache
-# RUN bun install
+# Pre-warm the bun package cache with the heaviest common template deps so a cold
+# sandbox links them from cache instead of re-downloading the whole tree on every
+# preview boot (the multi-minute wait on heavy imports). The cache is baked into the
+# image at BUN_INSTALL_CACHE_DIR; because that ENV persists into the running
+# container, the runtime `bun install` (in /workspace/{id}) inherits it and resolves
+# these packages without hitting the network.
+#   - vite seed: container/packages-cache (React 18 SPA + radix + tanstack), the
+#     upstream-intended seed; its committed bun.lock keeps resolution consistent.
+#   - expo seed: container/cache-warm/expo (React 19 + react-native) — a separate
+#     manifest because it pins a conflicting React major.
+# Lockfiles are NOT frozen here on purpose: a drifted lock should still warm the cache
+# with the current resolution, never hard-fail and ship the main stack unwarmed.
+# --ignore-scripts: only the tarballs need to land in the cache, not lifecycle scripts.
+# node_modules is discarded so only the cache (not the throwaway installs) ships in the
+# image. A failed seed must never fail the build — worst case is no speedup.
+ENV BUN_INSTALL_CACHE_DIR=/workspace/.bun-cache
+RUN cd /workspace/container/packages-cache && bun install --ignore-scripts; \
+    cd /workspace/container/cache-warm/expo && bun install --ignore-scripts; \
+    rm -rf /workspace/container/packages-cache/node_modules \
+           /workspace/container/cache-warm/expo/node_modules \
+           /workspace/container/cache-warm/expo/bun.lock; \
+    true
 
 # Set proper permissions for data directory
 RUN chmod 755 /workspace/data

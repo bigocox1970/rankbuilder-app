@@ -277,6 +277,17 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
     return unsubscribe;
   }, [removeApp]);
 
+  useEffect(() => {
+    const unsubscribe = appEvents.on('app-updated', (event) => {
+      if (event.type === 'app-updated' && event.data) {
+        setApps(prev => prev.map(app =>
+          app.id === event.appId ? { ...app, ...event.data } : app
+        ));
+      }
+    });
+    return unsubscribe;
+  }, []);
+
   const pagination: PaginationInfo = {
     limit,
     offset: (paginationState.currentPage - 1) * limit,

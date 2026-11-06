@@ -1999,8 +1999,21 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         // retries) — not just the one post-generation spot that kept getting skipped.
         // Expo-only and only when a brand-new directory appeared; harmless no-op
         // otherwise. Best-effort: restartDevServer swallows its own failures.
-        if (result && files.length > 0 && isExpoTemplate(this.getTemplateDetails()?.name)) {
-            await this.restartMetroIfNewDirectories(files);
+        if (result && isExpoTemplate(this.getTemplateDetails()?.name)) {
+            if (files.length === 0) {
+                // deploy_preview tool call: no specific files were requested so
+                // DeploymentManager wrote the full generatedFilesMap to the sandbox.
+                // Metro may have started on the template before those files landed
+                // (race on fresh sandboxes), so always do a --clear restart here to
+                // guarantee the preview reflects the generated state, not the template.
+                const instanceId = this.state.sandboxInstanceId;
+                if (instanceId) {
+                    this.logger.info('Restarting Expo dev server after deploy_preview (--clear)', { instanceId });
+                    await this.getSandboxServiceClient().restartDevServer(instanceId, 'bun run dev -- --clear').catch(() => {});
+                }
+            } else {
+                await this.restartMetroIfNewDirectories(files);
+            }
         }
         return result;
     }

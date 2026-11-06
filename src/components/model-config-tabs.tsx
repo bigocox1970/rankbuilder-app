@@ -9,6 +9,7 @@ import { ConfigCard } from './config-card';
 import { ConfigModal } from './config-modal';
 import { categorizeAgent } from '@/utils/model-helpers';
 import { WORKFLOW_TABS } from '@/lib/constants/workflow-tabs';
+import { MODEL_PROVIDER_PRESETS } from 'shared/constants/modelProviderPresets';
 import type {
   ModelConfig,
   UserModelConfigWithMetadata,
@@ -171,6 +172,39 @@ export function ModelConfigTabs({
     else toast.error(`Applied to ${ok}, failed on ${fail}`);
   };
 
+  // Whole-stack provider presets live in shared/constants/modelProviderPresets.ts (single
+  // source of truth, shared with the per-user chat-pane toggle). Each maps every overridable
+  // agent onto one provider so the platform can be flipped wholesale for A/B testing; "Reset
+  // All" returns to the curated defaults. The disabled-locked fastCodeFixer and the vision-only
+  // screenshotAnalysis are intentionally omitted — they can't honour a text-model override.
+  const applyProviderPreset = async (
+    mapping: Record<string, string>,
+    fallbackModel: string,
+    label: string,
+  ) => {
+    const targets = agentConfigs.filter(c => mapping[c.key]);
+    if (targets.length === 0) {
+      toast.info('No applicable agents found');
+      return;
+    }
+    let ok = 0;
+    let fail = 0;
+    for (const config of targets) {
+      try {
+        await onSaveConfig(config.key, {
+          modelName: mapping[config.key],
+          fallbackModel,
+          isUserOverride: true,
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    if (fail === 0) toast.success(`${label} applied to ${ok} agents — build to test, then "Reset All" for defaults`);
+    else toast.error(`Applied to ${ok}, failed on ${fail}`);
+  };
+
   // Handle bulk test all configured agents
   const handleTestAllConfigured = async () => {
     const customizedConfigs = agentConfigs.filter(config => 
@@ -253,6 +287,30 @@ export function ModelConfigTabs({
             >
               <Sparkles className="h-4 w-4" />
               Use Claude (test)
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => applyProviderPreset(MODEL_PROVIDER_PRESETS.deepseek.agents, MODEL_PROVIDER_PRESETS.deepseek.fallbackModel, 'DeepSeek (OpenRouter)')}
+              disabled={savingConfigs}
+              className="gap-2 border-sky-400/50 text-sky-400 hover:bg-sky-400/10"
+              title="Flip everything to DeepSeek V4 (Pro/Flash) via OpenRouter — spend tracks in the AI Gateway dashboards. Use 'Reset All' for defaults."
+            >
+              <Zap className="h-4 w-4" />
+              Use OpenRouter
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => applyProviderPreset(MODEL_PROVIDER_PRESETS.minimax.agents, MODEL_PROVIDER_PRESETS.minimax.fallbackModel, 'MiniMax M3')}
+              disabled={savingConfigs}
+              className="gap-2 border-amber-400/50 text-amber-400 hover:bg-amber-400/10"
+              title="Flip everything to the latest MiniMax (M3), called directly via your MINIMAX_API_KEY subscription — does NOT route through OpenRouter/the gateway. Use 'Reset All' for defaults."
+            >
+              <Sparkles className="h-4 w-4" />
+              Use MiniMax M3
             </Button>
 
             <Button

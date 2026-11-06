@@ -50,6 +50,46 @@ wrangler r2 object put "$R2_BUCKET_NAME/template_catalog.json" --file=template_c
 
 The full `./deploy_templates.sh` rebuilds and uploads **all** templates; use the targeted flow above when only one template changed to avoid shipping unrelated in-progress template edits. Note: the `templates/` directory is its own git repo (`origin = cloudflare/vibesdk-templates` — do not push there; no personal remote is configured yet).
 
+## Checkatrade Harvester (`../checkatrade_harvester.py`)
+
+Script lives at `/Users/chriscox/Documents/apps/vibe-sdk/checkatrade_harvester.py` (one level above this repo). **Not committed yet.**
+
+**Subcommands:**
+
+```bash
+# Find prospects — walk Checkatrade search pages, score by reviews+photos-website, DuckDuckGo-verify top 20
+python3 checkatrade_harvester.py prospect "Builder" "Oxfordshire"
+
+# Harvest one approved slug → brand-pack.json + reviews.json + lovable-brief.md + images/
+python3 checkatrade_harvester.py harvest gregsolutions
+
+# Refresh reviews only (run monthly)
+python3 checkatrade_harvester.py refresh-reviews gregsolutions
+
+# Harvest photos from a Facebook page (finds page via DDG, scrapes fbcdn.net images)
+python3 checkatrade_harvester.py facebook "Raven Scaffolding" "Swindon"
+
+# Same but give the page URL directly
+python3 checkatrade_harvester.py facebook-url https://www.facebook.com/profile.php?id=XXX "Name"
+```
+
+**Output:** `harvest/<slug>/brand-pack.json`, `reviews.json`, `lovable-brief.md`, `images/<album>/NNN.jpg`
+
+**Key gotchas:**
+- Playwright + playwright-stealth (visible Chromium on Mac — residential IP passes Cloudflare)
+- Persistent sessions: `~/.checkatrade_session/state.json` and `~/.facebook_session/state.json`
+- `networkidle` never settles on Checkatrade (analytics polling) — all waits are try/except
+- Album URLs: `/trades/{slug}/albums/{albumId}` (NOT `/albums/` — 404s)
+- Tab clicks need JS eval (`btn.evaluate("el => el.click()")`) — sticky header blocks Playwright click
+- Photos: `img[src*="googleusercontent"]` + `=w1600` suffix for full res (no need to visit photo pages)
+- DDG verification: UK TLDs accepted immediately; `.com`/`.net` require location in snippet
+
+**Verified working (2026-07-13):** gregsolutions (208 photos, 40 reviews), Raven Scaffolding FB (82 photos).
+
+**PENDING:** commit file + deploy worker (needs `nvm use 22` — current shell has Node v20) + test `prospect` card parser DOM selectors.
+
+**Ethics:** harvest only profiles you've approved and intend to contact. Photos belong to the tradesperson — don't publish until they've agreed.
+
 ## Project Overview
 vibesdk is an AI-powered full-stack application generation platform built on Cloudflare infrastructure.
 

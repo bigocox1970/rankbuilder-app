@@ -235,10 +235,19 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} onStart processed successfully`);
 
         // Load the latest user configs
+        await this.reloadUserModelConfigs();
+    }
+
+    /**
+     * (Re)load the user's model configs from D1 into the live agent's in-memory behavior so the
+     * next inference uses them. Called at onStart, and on demand after a chat-pane provider flip
+     * (reload_model_configs WS message) so a mid-session model switch takes effect immediately.
+     */
+    public async reloadUserModelConfigs(): Promise<void> {
         const modelConfigService = new ModelConfigService(this.env);
         const userConfigsRecord = await modelConfigService.getUserModelConfigs(this.state.metadata.userId);
         this.behavior.setUserModelConfigs(userConfigsRecord);
-        this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} onStart: User configs loaded successfully`, {userConfigsRecord});
+        this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} user model configs (re)loaded`, {userConfigsRecord});
     }
     
     onConnect(connection: Connection, ctx: ConnectionContext) {

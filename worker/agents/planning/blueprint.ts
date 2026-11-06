@@ -268,9 +268,7 @@ const LITE_PHASIC_SYSTEM_PROMPT = `<ROLE>
     - Build upon the template's existing dependencies
 
     ## Visual Assets
-    The template HTML already contains real image URLs in every \`<img src="...">\` attribute — these are pre-generated photographs. Preserve every existing src URL exactly as written. Do NOT replace them with unsplash.com, placehold.co, or any invented path.
-    For any decorative visuals NOT already in the template: use inline SVG or icon libraries only.
-    Never reference .png/.jpg/.svg/.gif files in the phase file list.
+    Real photographs will be provided via a [GENERATED IMAGES] block appended to the user prompt. Use those exact URLs in your generated HTML — placed wherever they fit best in your chosen layout. Do NOT use unsplash.com, placehold.co, or any invented path. Never reference .png/.jpg/.svg/.gif files in the phase file list.
 </INSTRUCTIONS>
 
 ${STRATEGIES.FRONTEND_FIRST_PLANNING}

@@ -62,6 +62,7 @@ export function useChat({
 	onDebugMessage,
 	onTerminalMessage,
 	onVaultUnlockRequired,
+	onScreenshotCaptured,
 }: {
 	chatId?: string;
 	query: string | null;
@@ -74,6 +75,7 @@ export function useChat({
 	onDebugMessage?: (type: 'error' | 'warning' | 'info' | 'websocket', message: string, details?: string, source?: string, messageType?: string, rawMessage?: unknown) => void;
 	onTerminalMessage?: (log: { id: string; content: string; type: 'command' | 'stdout' | 'stderr' | 'info' | 'error' | 'warn' | 'debug'; timestamp: number; source?: string }) => void;
 	onVaultUnlockRequired?: (reason: string) => void;
+	onScreenshotCaptured?: () => void;
 }) {
 	// Derive initial behavior type from project type using feature system
 	const getInitialBehaviorType = (): BehaviorType => {
@@ -146,7 +148,11 @@ export function useChat({
 	
 	// Preview deployment state
 	const [isPreviewDeploying, setIsPreviewDeploying] = useState(false);
-	
+	// Staged boot status shown in the preview pane while a cold sandbox is installing
+	// deps / starting the dev server (before a previewUrl exists). undefined = no boot
+	// in progress. Driven by deployment lifecycle + github_import_progress events.
+	const [previewBootStatus, setPreviewBootStatus] = useState<string | undefined>(undefined);
+
 	// Redeployment state - tracks when redeploy button should be enabled
 	const [isRedeployReady, setIsRedeployReady] = useState(false);
 	// const [lastDeploymentPhaseCount, setLastDeploymentPhaseCount] = useState(0);
@@ -237,6 +243,7 @@ export function useChat({
 			setTotalFiles,
 			setIsRedeployReady,
 			setIsPreviewDeploying,
+			setPreviewBootStatus,
 			setIsThinking,
 			setIsInitialStateRestored,
 			setShouldRefreshPreview,
@@ -274,6 +281,7 @@ export function useChat({
 			onDebugMessage,
 			onTerminalMessage,
 			onVaultUnlockRequired,
+			onScreenshotCaptured,
 			clearDeploymentTimeout,
 			onPresentationFileEvent: (evt) => {
 				if (!evt.path.includes('/slides/')) return;
@@ -299,6 +307,7 @@ export function useChat({
 			onDebugMessage,
 			onTerminalMessage,
 			onVaultUnlockRequired,
+			onScreenshotCaptured,
 			clearDeploymentTimeout,
 		],
 	);
@@ -841,6 +850,7 @@ export function useChat({
 		shouldRefreshPreview,
 		// Preview deployment state
 		isPreviewDeploying,
+		previewBootStatus,
 		// Phase progress visual indicator
 		isPhaseProgressActive,
 		// Issue tracking and debugging state

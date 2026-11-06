@@ -328,10 +328,10 @@ export class AppService extends BaseService {
         options: PaginationParams = {}
     ): Promise<AppWithFavoriteStatus[]> {
         const { limit = 50, offset = 0 } = options;
-        
-        // Use 'fresh' strategy for user's own data to ensure they see latest changes
-        const readDb = this.getReadDb('fresh');
-        
+
+        // Use primary DB directly to guarantee fresh data (screenshots, etc.)
+        const readDb = this.database;
+
         // Fetch user's apps first
         const apps = await readDb
             .select()
@@ -662,6 +662,11 @@ export class AppService extends BaseService {
                 visibility: 'private',
                 status: 'completed',
                 parentAppId: originalApp.id,
+                // Inherit the parent's screenshot so the fork shows a thumbnail
+                // immediately (the fork is byte-identical at creation). It gets
+                // overwritten by the fork's own capture as soon as it's edited.
+                screenshotUrl: originalApp.screenshotUrl,
+                screenshotCapturedAt: originalApp.screenshotCapturedAt,
             })
             .returning();
         return app;

@@ -435,6 +435,17 @@ const MODELS_MASTER = {
             directOverride: true,
         }
     },
+    MINIMAX_M3: {
+        id: 'minimax/MiniMax-M3',
+        config: {
+            name: 'MiniMax M3',
+            size: ModelSize.REGULAR,
+            provider: 'minimax',
+            creditCost: 1.2,
+            contextSize: 1_000_000,
+            directOverride: true,
+        }
+    },
 } as const;
 
 /**

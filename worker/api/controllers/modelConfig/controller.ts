@@ -34,6 +34,12 @@ import {
 import { z } from 'zod';
 import { createLogger } from '../../../logger';
 import { getFilteredModelsForAgent } from './constraintHelper';
+import {
+    MODEL_PROVIDER_PRESETS,
+    PROVIDER_PROBE_AGENT,
+    providerFromModelName,
+    type ModelProvider,
+} from 'shared/constants/modelProviderPresets';
 
 // Validation schemas
 const modelConfigUpdateSchema = z.object({
@@ -44,6 +50,10 @@ const modelConfigUpdateSchema = z.object({
     providerOverride: z.enum(['cloudflare', 'direct']).nullable().optional(),
     fallbackModel: z.string().min(1).max(100).nullable().optional(),
     isUserOverride: z.boolean().optional()
+});
+
+const setProviderSchema = z.object({
+    provider: z.enum(['deepseek', 'minimax']),
 });
 
 const modelTestSchema = z.object({
@@ -343,6 +353,65 @@ export class ModelConfigController extends BaseController {
         } catch (error) {
             this.logger.error('Error resetting all model configurations:', error);
             return ModelConfigController.createErrorResponse<ModelConfigResetData>('Failed to reset model configurations', 500);
+        }
+    }
+
+    /**
+     * Get the calling user's current whole-stack model provider (derived from their overrides).
+     * Per-user (authenticated), NOT admin-only — this powers the chat-pane provider toggle.
+     * GET /api/model-configs/my-provider
+     */
+    static async getMyProvider(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ provider: ModelProvider }>>> {
+        try {
+            const user = context.user!;
+            const modelConfigService = new ModelConfigService(env);
+            const probe = await modelConfigService.getRawUserModelConfig(user.id, PROVIDER_PROBE_AGENT as AgentActionKey);
+            const provider = providerFromModelName(probe?.name);
+            return ModelConfigController.createSuccessResponse({ provider });
+        } catch (error) {
+            this.logger.error('Error reading user model provider:', error);
+            return ModelConfigController.createErrorResponse<{ provider: ModelProvider }>('Failed to read model provider', 500);
+        }
+    }
+
+    /**
+     * Apply a whole-stack model provider preset to the calling user's own account.
+     * Per-user (authenticated), NOT admin-only — this powers the chat-pane provider toggle.
+     * The live agent picks it up on the next message after a reload_model_configs WS signal.
+     * POST /api/model-configs/my-provider
+     */
+    static async setMyProvider(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ provider: ModelProvider; appliedCount: number }>>> {
+        try {
+            const user = context.user!;
+            const bodyResult = await ModelConfigController.parseJsonBody(request);
+            if (!bodyResult.success) {
+                return bodyResult.response! as ControllerResponse<ApiResponse<{ provider: ModelProvider; appliedCount: number }>>;
+            }
+            const parsed = setProviderSchema.safeParse(bodyResult.data);
+            if (!parsed.success) {
+                return ModelConfigController.createErrorResponse<{ provider: ModelProvider; appliedCount: number }>('Invalid provider', 400);
+            }
+            const provider = parsed.data.provider;
+            const preset = MODEL_PROVIDER_PRESETS[provider];
+
+            const modelConfigService = new ModelConfigService(env);
+            let appliedCount = 0;
+            for (const [agentActionName, modelName] of Object.entries(preset.agents)) {
+                try {
+                    await modelConfigService.upsertUserModelConfig(user.id, agentActionName as AgentActionKey, {
+                        name: modelName,
+                        fallbackModel: preset.fallbackModel,
+                    });
+                    appliedCount++;
+                } catch (err) {
+                    // A single tier-locked agent rejecting the model should not fail the whole flip.
+                    this.logger.warn(`Skipped ${agentActionName} for provider ${provider}:`, err);
+                }
+            }
+            return ModelConfigController.createSuccessResponse({ provider, appliedCount });
+        } catch (error) {
+            this.logger.error('Error setting user model provider:', error);
+            return ModelConfigController.createErrorResponse<{ provider: ModelProvider; appliedCount: number }>('Failed to set model provider', 500);
         }
     }
 

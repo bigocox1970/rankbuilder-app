@@ -17,13 +17,14 @@ import { type DebugMessage } from './components/debug-panel';
 import { DeploymentControls } from './components/deployment-controls';
 import { useChat } from './hooks/use-chat';
 import { type ModelConfigsInfo, type BlueprintType, type PhasicBlueprint, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type FileType, type SiteContentPlan } from '@/api-types';
-import type { AppType } from 'shared/constants/templates';
+import { getAppType, type AppType } from 'shared/constants/templates';
 import type { ProjectCheckpoint } from '@/api-types';
 import { featureRegistry } from '@/features';
 import { useFileContentStream } from './hooks/use-file-content-stream';
 import { logger } from '@/utils/logger';
 import { useApp } from '@/hooks/use-app';
 import { useAuth } from '@/contexts/auth-context';
+import { useAppsData } from '@/contexts/apps-data-context';
 import { useGitHubExport } from '@/hooks/use-github-export';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { useImageUpload } from '@/hooks/use-image-upload';
@@ -162,6 +163,7 @@ export default function Chat() {
 	}, []);
 
 	const { state: vaultState, requestUnlock, clearUnlockRequest } = useVault();
+	const { refetchAllApps } = useAppsData();
 	const handleVaultUnlockRequired = useCallback(
 		(reason: string) => {
 			requestUnlock(reason);
@@ -205,6 +207,7 @@ export default function Chat() {
 		shouldRefreshPreview,
 		// Preview deployment state
 		isPreviewDeploying,
+		previewBootStatus,
 		// Issue tracking and debugging state
 		runtimeErrorCount,
 		staticIssueCount,
@@ -230,6 +233,7 @@ export default function Chat() {
 		sitePlan,
 		onDebugMessage: addDebugMessage,
 		onVaultUnlockRequired: handleVaultUnlockRequired,
+		onScreenshotCaptured: refetchAllApps,
 	});
 
 	// GitHub export functionality - use urlChatId directly from URL params
@@ -258,6 +262,13 @@ export default function Chat() {
 	// Debug panel state
 	const [debugMessages, setDebugMessages] = useState<DebugMessage[]>([]);
 	const deploymentControlsRef = useRef<HTMLDivElement>(null);
+
+	// Scroll deployment card into view when deploy completes
+	useEffect(() => {
+		if (cloudflareDeploymentUrl && deploymentControlsRef.current) {
+			deploymentControlsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		}
+	}, [cloudflareDeploymentUrl]);
 
 	const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
@@ -910,6 +921,7 @@ export default function Chat() {
 									onFileClick={handleFileClick}
 									isThinkingNext={isThinking}
 									isPreviewDeploying={isPreviewDeploying}
+									previewBootStatus={previewBootStatus}
 									progress={progress}
 									total={total}
 									parentScrollRef={messagesContainerRef}
@@ -919,57 +931,15 @@ export default function Chat() {
 									}}
 									chatId={chatId}
 									isDeploying={isDeploying}
+									deploymentUrl={cloudflareDeploymentUrl || app?.cloudflareUrl || undefined}
 									handleDeployToCloudflare={handleDeployToCloudflare}
 									runtimeErrorCount={runtimeErrorCount}
 									staticIssueCount={staticIssueCount}
 									isDebugging={isDebugging}
 									isGenerating={isGenerating}
 									isThinking={isThinking}
+									appType={getAppType(templateDetails)}
 								/>
-							)}
-
-							{/* Deployment / publish card. Phasic builds gate on Phase 1; agentic
-							    builds (incl. GitHub imports) have no Phase 1, so show the card once
-							    there's something deployable (a live preview or generated files) —
-							    otherwise imported projects could never reach the publish control. */}
-							{chatId && (behaviorType !== 'agentic' || !!previewUrl || files.length > 0) && (
-								<motion.div
-									ref={deploymentControlsRef}
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ duration: 0.3, delay: 0.2 }}
-									className="px-4 mb-6"
-								>
-									<DeploymentControls
-										isPhase1Complete={behaviorType === 'agentic' ? (!!previewUrl || files.length > 0) : isPhase1Complete}
-										isDeploying={isDeploying}
-										// Fall back to the persisted deployment URL (app.cloudflareUrl, derived
-										// from the stored deploymentId) so reopening an already-published
-										// project shows the live URL instead of resetting to "Ready to Deploy".
-										deploymentUrl={cloudflareDeploymentUrl || app?.cloudflareUrl || undefined}
-										instanceId={chatId || ''}
-										isRedeployReady={isRedeployReady}
-										deploymentError={deploymentError}
-										appId={app?.id || chatId}
-										appVisibility={app?.visibility}
-										isGenerating={
-											isGenerating ||
-											isGeneratingBlueprint
-										}
-										isPaused={isGenerationPaused}
-										onDeploy={handleDeployToCloudflare}
-										onStopGeneration={handleStopGeneration}
-										onResumeGeneration={
-											handleResumeGeneration
-										}
-										onVisibilityUpdate={(newVisibility) => {
-											// Update app state if needed
-											if (app) {
-												app.visibility = newVisibility;
-											}
-										}}
-									/>
-								</motion.div>
 							)}
 
 							{otherMessages
@@ -995,6 +965,38 @@ export default function Chat() {
 										/>
 									);
 								})}
+
+							{/* Deployment / publish card — rendered after all messages so it sits
+							    at the bottom of the chat where the user already is. Hidden for
+							    mobile (Expo) apps. */}
+							{chatId && getAppType(templateDetails) !== 'mobile' && (behaviorType !== 'agentic' || !!previewUrl || files.length > 0) && (
+								<motion.div
+									ref={deploymentControlsRef}
+									initial={{ opacity: 0, y: 20 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{ duration: 0.3, delay: 0.2 }}
+									className="px-4 mb-6"
+								>
+									<DeploymentControls
+										isPhase1Complete={isPhase1Complete || !!previewUrl || isGitHubImport}
+										isDeploying={isDeploying}
+										deploymentUrl={cloudflareDeploymentUrl || app?.cloudflareUrl || undefined}
+										instanceId={chatId || ''}
+										isRedeployReady={isRedeployReady}
+										deploymentError={deploymentError}
+										appId={app?.id || chatId}
+										appVisibility={app?.visibility}
+										isGenerating={isGenerating || isGeneratingBlueprint}
+										isPaused={isGenerationPaused}
+										onDeploy={handleDeployToCloudflare}
+										onStopGeneration={handleStopGeneration}
+										onResumeGeneration={handleResumeGeneration}
+										onVisibilityUpdate={(newVisibility) => {
+											if (app) { app.visibility = newVisibility; }
+										}}
+									/>
+								</motion.div>
+							)}
 
 						</div>
 					</div>
@@ -1045,6 +1047,7 @@ export default function Chat() {
 								projectType={projectType}
 								previewUrl={previewUrl}
 								expoTunnelUrl={expoTunnelUrl}
+								previewBootStatus={previewBootStatus}
 								previewAvailable={previewAvailable}
 								showTooltip={showTooltip}
 								shouldRefreshPreview={shouldRefreshPreview}

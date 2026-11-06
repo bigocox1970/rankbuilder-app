@@ -2,7 +2,6 @@ import { BaseController } from '../baseController';
 import type { ControllerResponse, ApiResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
-import { ScreenshotSecurity } from '../../../utils/screenshot-security';
 
 // -------------------------
 // Helpers
@@ -52,7 +51,7 @@ function getMimeByExtension(file: string): string | undefined {
 export class ScreenshotsController extends BaseController {
     static logger = createLogger('ScreenshotsController');
     static async serveScreenshot(
-        request: Request,
+        _request: Request,
         env: Env,
         _ctx: ExecutionContext,
         context: RouteContext,
@@ -73,20 +72,6 @@ export class ScreenshotsController extends BaseController {
             const validatedFile = validateFileName(file);
             if (!validatedFile) {
                 return ScreenshotsController.createErrorResponse('Invalid file name', 400);
-            }
-
-            // Verify screenshot access token
-            const url = new URL(request.url);
-            const token = url.searchParams.get('token');
-
-            if (!token) {
-                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
-            }
-
-            const security = new ScreenshotSecurity(env);
-            const isValidToken = await security.verifyToken(token, appId);
-            if (!isValidToken) {
-                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
             }
 
             const key = `screenshots/${appId}/${validatedFile}`;

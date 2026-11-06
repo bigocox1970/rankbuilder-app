@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, forwardRef, useCallback } from 'react';
-import { RefreshCw, AlertCircle } from 'lucide-react';
+import { RefreshCw, AlertCircle, Camera } from 'lucide-react';
 import { WebSocket } from 'partysocket';
 
 interface PreviewIframeProps {
@@ -318,22 +318,34 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 		// Successfully loaded - show iframe
 		if (loadState.status === 'loaded' && loadState.loadedSrc) {
 			return (
-				<iframe
-                    sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-orientation-lock	allow-popups allow-presentation"
-					ref={ref}
-					src={loadState.loadedSrc}
-					className={className}
-					title={title}
-					style={{ border: 'none' }}
-					onError={() => {
-						console.error('Iframe failed to load');
-						setLoadState(prev => ({
-							...prev,
-							status: 'error',
-							errorMessage: 'Preview failed to render',
-						}));
-					}}
-				/>
+				<div className="relative w-full h-full">
+					<iframe
+	                    sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-orientation-lock	allow-popups allow-presentation"
+						ref={ref}
+						src={loadState.loadedSrc}
+						className={className}
+						title={title}
+						style={{ border: 'none' }}
+						onError={() => {
+							console.error('Iframe failed to load');
+							setLoadState(prev => ({
+								...prev,
+								status: 'error',
+								errorMessage: 'Preview failed to render',
+							}));
+						}}
+					/>
+					{webSocket && webSocket.readyState === WebSocket.OPEN && loadState.status === 'loaded' && (
+						<button
+							onClick={() => requestScreenshot(loadState.loadedSrc!)}
+							title="Retake screenshot for app card"
+							className="absolute bottom-3 right-3 p-1.5 rounded-full bg-black/40 hover:bg-black/70 text-white transition-opacity opacity-0 hover:opacity-100 focus:opacity-100"
+							style={{ backdropFilter: 'blur(4px)' }}
+						>
+							<Camera className="w-3.5 h-3.5" />
+						</button>
+					)}
+				</div>
 			);
 		}
 

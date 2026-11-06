@@ -4,6 +4,7 @@ import { deduplicateMessages, isAssistantMessageDuplicate } from './deduplicate-
 import { logger } from '@/utils/logger';
 import { getFileType } from '@/utils/string';
 import { getPreviewUrl } from '@/lib/utils';
+import { appEvents } from '@/lib/app-events';
 import {
     setFileGenerating,
     appendFileChunk,
@@ -56,6 +57,7 @@ export interface HandleMessageDeps {
     setTotalFiles: React.Dispatch<React.SetStateAction<number | undefined>>;
     setIsRedeployReady: React.Dispatch<React.SetStateAction<boolean>>;
     setIsPreviewDeploying: React.Dispatch<React.SetStateAction<boolean>>;
+    setPreviewBootStatus: React.Dispatch<React.SetStateAction<string | undefined>>;
     setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
     setIsInitialStateRestored: React.Dispatch<React.SetStateAction<boolean>>;
     setShouldRefreshPreview: React.Dispatch<React.SetStateAction<boolean>>;
@@ -111,6 +113,7 @@ export interface HandleMessageDeps {
         source?: string
     }) => void;
     onVaultUnlockRequired?: (reason: string) => void;
+    onScreenshotCaptured?: () => void;
 }
 
 export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
@@ -158,6 +161,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setTotalFiles,
             setIsRedeployReady,
             setIsPreviewDeploying,
+            setPreviewBootStatus,
             setIsThinking,
             setIsInitialStateRestored,
             setShouldRefreshPreview,
@@ -191,6 +195,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             onDebugMessage,
             onTerminalMessage,
             clearDeploymentTimeout,
+            onScreenshotCaptured,
         } = deps;
 
         // Log messages except for frequent ones
@@ -628,11 +633,16 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
             case 'deployment_started': {
                 setIsPreviewDeploying(true);
+                // Show a staged boot status in the preview pane so a cold boot (deps
+                // installing, dev server starting) is never a blank screen. Cleared on
+                // completion/failure. github_import_progress refines this copy below.
+                setPreviewBootStatus('Booting your preview — installing dependencies…');
                 break;
             }
 
             case 'deployment_completed': {
                 setIsPreviewDeploying(false);
+                setPreviewBootStatus(undefined);
                 const finalPreviewURL = getPreviewUrl(message.previewURL, message.tunnelURL);
                 setPreviewUrl(finalPreviewURL);
                 // Refresh the iframe after deployment so updated files are shown.
@@ -647,6 +657,8 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'deployment_failed': {
+                setIsPreviewDeploying(false);
+                setPreviewBootStatus(undefined);
                 toast.error(message.error);
                 break;
             }
@@ -943,6 +955,10 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 // One message per step. Use a stable id per step so React renders
                 // them as four distinct chat bubbles, not one mutating bubble.
                 sendMessage(createAIMessage(`github_import_${message.step}`, message.message));
+                // Mirror the live narration into the preview pane's boot status (real
+                // milestones, richer than the generic deploy copy). 'ready' clears it —
+                // deployment_completed sets the previewUrl that replaces the placeholder.
+                setPreviewBootStatus(message.step === 'ready' ? undefined : message.message);
                 break;
             }
 
@@ -1181,10 +1197,20 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
-            // SDK-internal messages and screenshot events the UI doesn't need to act on
-            case 'screenshot_capture_started':
             case 'screenshot_capture_success':
+                toast.success('Screenshot updated', { id: 'screenshot-capture' });
+                if (urlChatId && message.screenshotUrl) {
+                    appEvents.emitAppUpdated(urlChatId, { screenshotUrl: message.screenshotUrl });
+                }
+                onScreenshotCaptured?.();
+                break;
+
             case 'screenshot_capture_error':
+                toast.error('Screenshot failed — try again', { id: 'screenshot-capture' });
+                break;
+
+            // SDK-internal messages the UI doesn't need to act on
+            case 'screenshot_capture_started':
             case 'screenshot_analysis_result':
             case 'static_analysis_results':
             case 'command_executing':

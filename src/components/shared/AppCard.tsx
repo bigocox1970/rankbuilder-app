@@ -518,58 +518,13 @@ export const AppCard = React.memo<AppCardProps>(
 								srcSet={`${app.screenshotUrl} 1x, ${app.screenshotUrl} 1.5x, ${app.screenshotUrl} 2x, ${app.screenshotUrl} 3x`}
 								decoding="async"
 								onError={(e) => {
-									// Smooth fallback to placeholder
 									const target = e.target as HTMLImageElement;
-									target.style.opacity = '0';
-									setTimeout(() => {
-										target.style.display = 'none';
-										const placeholder =
-											target.parentElement?.querySelector(
-												'.screenshot-placeholder',
-											) as HTMLElement;
-										if (placeholder) {
-											placeholder.classList.remove(
-												'hidden',
-											);
-											placeholder.style.opacity = '1';
-										}
-									}, 150);
-								}}
-								onLoad={(e) => {
-									// Ensure smooth appearance with advanced quality enhancement
-									const target = e.target as HTMLImageElement;
-									target.style.opacity = '1';
-									// Apply dynamic quality optimizations after load
-									const devicePixelRatio =
-										window.devicePixelRatio || 1;
-									if (devicePixelRatio >= 2) {
-										target.style.imageRendering =
-											'high-quality';
-										target.style.filter =
-											'contrast(1.05) saturate(1.06) brightness(1.02) unsharp-mask(0.7px 0.7px 0px)';
-									} else {
-										target.style.imageRendering = 'auto';
-										target.style.filter =
-											'contrast(1.04) saturate(1.05) brightness(1.02) unsharp-mask(0.5px 0.5px 0px)';
+									target.style.display = 'none';
+									const placeholder = target.parentElement?.querySelector('.screenshot-placeholder') as HTMLElement;
+									if (placeholder) {
+										placeholder.classList.remove('hidden');
+										placeholder.style.opacity = '1';
 									}
-									target.style.backfaceVisibility = 'hidden';
-									target.style.willChange = 'transform';
-								}}
-								style={{
-									opacity: 0,
-									transition: 'opacity 0.3s ease-out',
-									// Advanced CSS-level quality optimizations
-									imageRendering: 'auto',
-									backfaceVisibility: 'hidden',
-									transform: 'translate3d(0, 0, 0)',
-									willChange: 'transform',
-									contain: 'layout style paint',
-									isolation: 'isolate',
-									// Enhanced quality filters with cross-browser support
-									filter: 'contrast(1.04) saturate(1.05) brightness(1.02)',
-									WebkitFontSmoothing: 'subpixel-antialiased',
-									textRendering: 'optimizeLegibility',
-									fontFeatureSettings: '"kern" 1',
 								}}
 							/>
 						) : null}

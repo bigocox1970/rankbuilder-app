@@ -264,7 +264,11 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
 
             const pageStructure = sitePlan?.pageStructure ?? 'single';
             const structureNote = pageStructure === 'multi'
-                ? `Build as MULTI-PAGE: generate index.html (home — hero, brief about, 3 featured services, CTA), plus a separate HTML file for each major section (about.html, services.html, one file per service, contact.html). Each page gets its own <title>, <meta description>, and JSON-LD. Nav links use real URLs not anchors.`
+                ? `Build as MULTI-PAGE. MANDATORY file list — the build is incomplete without every one of these:
+- index.html (home — hero, brief about, 3 featured services, CTA)
+- about.html, contact.html, work.html
+- services/<slug>.html — ONE SEPARATE FILE PER SERVICE (all 6 services). These per-service pages are the entire SEO purpose of multi-page: each has a unique H1 targeting "<service> <town>", 150-250 words of unique copy (never shared between pages), its own <title>, <meta description>, JSON-LD, and a quote CTA.
+Nav links use real URLs not anchors. Footer lists all service pages.`
                 : `Build as a SINGLE PAGE with anchor-link navigation (#section-id).`;
 
             const sectionBlock = wf ? `Sections in order: ${wf.blocks.join(', ')}.` : '';
