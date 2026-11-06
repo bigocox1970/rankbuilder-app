@@ -8,6 +8,17 @@ This file provides guidance to Claude Code when working with code in this reposi
 - Focus on substance over style
 - Use clear technical language
 
+## STATUS — READ FIRST (2026-11-06)
+
+RankBuilder is **parked**. No paying customers; the owner is considering shutting it down. At the start of the next session, raise these before doing anything else:
+
+1. **Shut down or continue?** If shutting down, take it offline on Cloudflare (review `scripts/undeploy.ts` first).
+2. **If continuing, rebase on upstream.** This fork is months behind `cloudflare/vibesdk` and `cloudflare/vibesdk-templates`. Many of our custom templates went unused (sites "all started to look the same"); upstream's newer templates may be better. Diff upstream vs this fork and decide what custom work to port (realData/brand-pack pipeline, `tradesperson-sp`, design packs, Flux fix).
+
+**Last deploy (2026-11-06, version 7123e8a8):** worker only, `bun run build && ./node_modules/.bin/wrangler deploy` (Node 22 + bun). Fixed Flux image generation (Workers AI now only accepts `{ prompt, steps }`). Do NOT use `bun run deploy` casually: `scripts/deploy.ts` runs `git pull origin main` in `templates/` (that pulls Cloudflare upstream) and re-uploads every template.
+
+**Backups:** app on `bigocox1970/rankbuilder-app` branch `feat/expo-tunnel` (its `main` is stale, from May). Templates on private `bigocox1970/rankbuilder-templates` (remote `personal`, branch `wip/tradesperson-website-factory`).
+
 ## Strategic Direction (RankBuilder / Diamond Internet)
 
 This fork is deployed as **RankBuilder** (live at app.rankbuilder.app) and is being repurposed as **Diamond Internet's internal website factory for UK tradespeople**. Intended pipeline: Checkatrade prospect → brand pack → generated static HTML site.
