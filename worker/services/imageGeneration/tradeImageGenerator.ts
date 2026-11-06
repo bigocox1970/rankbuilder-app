@@ -111,7 +111,7 @@ async function runFlux(env: Env, agentId: string, prompt: string, _width: number
     const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
         prompt,
         steps: 4,
-    } as Parameters<typeof env.AI.run>[1], gatewayOpts(env, agentId, 'imageGeneration.flux')) as { image?: string };
+    }, gatewayOpts(env, agentId, 'imageGeneration.flux'));
 
     if (!response.image) {
         throw new Error('Flux returned no image data');
